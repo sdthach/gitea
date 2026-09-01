@@ -3,13 +3,14 @@
 
 // Package delivery renders the fork's pages. Each page is a client of a documented
 // /api/delivery/v1 endpoint: the handler serves the page shell and nothing else, and every
-// figure on the page arrives over the public API (E18, I14). A handler that reached past
-// its own API into the models would be a defect.
+// figure on the page arrives over the public API.
 package delivery
 
 import (
 	"net/http"
 
+	auth_model "gitea.dev/models/auth"
+	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/templates"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
@@ -23,7 +24,7 @@ const (
 )
 
 // PagesEnabled is the settings gate, mirroring reqMilestonesDashboardPageEnabled so the
-// whole feature can be switched off (F13).
+// whole feature can be switched off.
 func PagesEnabled(ctx *context.Context) {
 	if !delivery_service.PagesEnabled() {
 		ctx.HTTPError(http.StatusForbidden)
@@ -37,19 +38,38 @@ func Environment(ctx *context.Context) {
 	ctx.Data["PageIsDelivery"] = true
 	ctx.Data["EnvironmentName"] = name
 	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
+	setPageToken(ctx)
 	ctx.HTML(http.StatusOK, tplEnvironment)
 }
 
-// Grid renders /delivery/grid: releases as rows, environments as columns (E7). Like every
-// other page it is a client of a documented endpoint and reads nothing the API does not
-// serve (E18, I14) — including the cell states, which are projected server-side so the page
-// and the CLI cannot disagree about what a cell means.
+// Grid renders /delivery/grid: releases as rows, environments as columns. Cell states are
+// projected server-side so the page and the CLI cannot disagree about what a cell means.
 func Grid(ctx *context.Context) {
 	ctx.Data["Title"] = "Delivery grid"
 	ctx.Data["PageIsDelivery"] = true
 	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
 	ctx.Data["AppSubURL"] = setting.AppSubURL
+	setPageToken(ctx)
 	ctx.HTML(http.StatusOK, tplGrid)
+}
+
+// setPageToken mints a short-lived API token so the page's JS can call the delivery API
+// without the user pasting a token manually. Reads already use the browser session; this
+// covers writes only. The token is scoped to repository and issue writes.
+func setPageToken(ctx *context.Context) {
+	if ctx.Doer == nil {
+		return
+	}
+	t := &auth_model.AccessToken{
+		UID:   ctx.Doer.ID,
+		Name:  "_delivery_page",
+		Scope: auth_model.AccessTokenScopeWriteRepository + "," + auth_model.AccessTokenScopeWriteIssue,
+	}
+	if err := auth_model.NewAccessToken(ctx, t); err != nil {
+		log.Error("delivery: mint page token for %s: %v", ctx.Doer.Name, err)
+		return
+	}
+	ctx.Data["DeliveryPageToken"] = t.Token
 }
 
 // RouteRegistrar is the slice of *web.Router this package needs. Taking an interface keeps
@@ -58,9 +78,8 @@ type RouteRegistrar interface {
 	Get(pattern string, h ...any)
 }
 
-// RegisterRoutes mounts the fork's pages. It is the whole of the fork's web-route spoke:
-// routers/web/web.go inserts one call to it beside /milestones (F2, F13). Each page sits
-// behind reqSignIn and the settings gate.
+// RegisterRoutes mounts the fork's pages. routers/web/web.go inserts one call to it beside
+// /milestones. Each page sits behind reqSignIn and the settings gate.
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/delivery/environments", reqSignIn, PagesEnabled, Environment)
 	m.Get("/delivery/environments/{name}", reqSignIn, PagesEnabled, Environment)

@@ -73,6 +73,7 @@
 <script type="module">
 const base = {{.DeliveryAPIBase}};
 const subURL = {{.AppSubURL}};
+const pageToken = {{.DeliveryPageToken}};
 
 // The documented operation paths for the two writes, spelled exactly as the published
 // document spells them, so this page names the endpoints it is a client of rather than a
@@ -92,9 +93,9 @@ const groupSelect = document.querySelector('#delivery-group');
 const tokenKey = 'delivery-api-token';
 function storedToken() {
 	try {
-		return window.sessionStorage.getItem(tokenKey) ?? '';
+		return window.sessionStorage.getItem(tokenKey) ?? pageToken ?? '';
 	} catch {
-		return '';
+		return pageToken ?? '';
 	}
 }
 

@@ -2,20 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 // Package v1 is the fork's own API namespace, mounted at /api/delivery/v1 from
-// routers/init.go rather than as a group inside routers/api/v1/api.go (F3).
+// routers/init.go rather than as a group inside routers/api/v1/api.go.
 //
 // Every endpoint is an Operation before it is a handler: Routes mounts the endpoint list,
 // and the published OpenAPI document is generated from the same list. An endpoint that is
-// not in the document cannot be served, and a documented endpoint with no handler fails
-// Routes (I15, I16).
+// not in the document cannot be served, and a documented endpoint with no handler is fatal.
 package v1
 
 import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 
 	"gitea.dev/modules/log"
+	"gitea.dev/modules/session"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
 	"gitea.dev/modules/web"
@@ -25,6 +26,8 @@ import (
 
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 )
+
+var sessioner = sync.OnceValue(common.MustInitSessioner)
 
 // endpoint binds one documented Operation to its handler and its authorization.
 type endpoint struct {
@@ -88,10 +91,15 @@ func buildAuthGroup() *auth_service.Group {
 }
 
 // apiAuth authenticates as the calling user. Every endpoint then authorizes through Gitea's
-// own permission check; the API grants nothing the UI does not (I13, E10).
+// own permission check; the API grants nothing the UI does not.
 func apiAuth(authMethod auth_service.Method) func(*context.APIContext) {
 	return func(ctx *context.APIContext) {
-		ar, err := common.AuthShared(ctx.Base, nil, authMethod)
+		var sessionStore auth_service.SessionStore
+		if ctx.Req.Method == http.MethodGet || ctx.Req.Method == http.MethodHead {
+			sessioner()(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})).ServeHTTP(ctx.Resp, ctx.Req)
+			sessionStore = session.GetContextSession(ctx.Req)
+		}
+		ar, err := common.AuthShared(ctx.Base, sessionStore, authMethod)
 		if err != nil {
 			msg, ok := auth_service.ErrAsUserAuthMessage(err)
 			msg = util.Iif(ok, msg, "invalid username, password or token")
@@ -113,7 +121,7 @@ func reqSignIn(ctx *context.APIContext) {
 	}
 }
 
-// Routes builds the namespace. It is mounted from routers/init.go (F3).
+// Routes builds the namespace. It is mounted from routers/init.go.
 func Routes() *web.Router {
 	m := web.NewRouter()
 	m.BeforeRouting(chi_middleware.GetHead)

@@ -5,27 +5,28 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strings"
 
 	actions_model "gitea.dev/models/actions"
 	delivery_model "gitea.dev/models/delivery"
+	git_model "gitea.dev/models/git"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/services/notify"
 )
 
-// deployWorkflowPrefix is the D4 convention: one workflow file per environment, named for
-// the environment it deploys to. It is what makes workflow_id a proxy for environment, so
-// Gitea's own filtered run list is the per-environment deployment history.
+// deployWorkflowPrefix: one workflow file per environment, named for the environment it
+// deploys to, so Gitea's own filtered run list is the per-environment deployment history.
 const deployWorkflowPrefix = "deploy-"
 
-// EnvironmentFromWorkflowID reads the environment out of a deploy workflow's file name
-// (D4). A workflow that is not a deploy workflow resolves to "" and is not recorded, so
-// adding the fork records nothing for a repository that has no deploy workflow.
+// EnvironmentFromWorkflowID reads the environment out of a deploy workflow's file name.
+// A non-deploy workflow resolves to "" and is not recorded.
 func EnvironmentFromWorkflowID(workflowID string) string {
 	name := path.Base(strings.TrimSpace(workflowID))
 	if !strings.HasPrefix(name, deployWorkflowPrefix) {
@@ -42,9 +43,8 @@ func EnvironmentFromWorkflowID(workflowID string) string {
 	return ""
 }
 
-// EventForRunStatus maps a run's state to the audit event it records (E5). An unmapped
-// state records nothing rather than a guess: the log is evidence, so an event it cannot
-// justify must not appear in it.
+// EventForRunStatus maps a run's state to the audit event it records. An unmapped state
+// records nothing rather than a guess.
 func EventForRunStatus(status actions_model.Status) string {
 	switch status {
 	case actions_model.StatusWaiting, actions_model.StatusBlocked:
@@ -62,8 +62,7 @@ func EventForRunStatus(status actions_model.Status) string {
 }
 
 // RecordsForRun converts a run state change into the rows it records. It is pure — it
-// reaches no database and no network — so every state and every trigger is testable in
-// isolation (J5, J10).
+// reaches no database and no network — so every state and trigger is testable in isolation.
 //
 // The deployment row and the audit row are returned together because they describe the same
 // observation: the deployment is appended once per run, and the audit row once per state
@@ -90,8 +89,7 @@ func RecordsForRun(repo *repo_model.Repository, sender *user_model.User, run *ac
 		branch = ref.BranchName()
 	}
 	if releaseTag == "" {
-		// A deployment points at a release tag (D1). A deploy dispatched against a branch
-		// carries no release identity, so there is nothing to place in the grid.
+		// A deploy dispatched against a branch carries no release identity.
 		return nil, nil, false
 	}
 
@@ -132,25 +130,24 @@ func RecordsForRun(repo *repo_model.Repository, sender *user_model.User, run *ac
 		Branch:       branch,
 		RunID:        run.ID,
 		RunURL:       runURL,
-		// One code path records every deploy, whether it was started from the grid, from
-		// Gitea's own UI, or by a push, so the grid is complete by construction rather
-		// than by reconciliation (E11).
+		// One code path records every deploy, whether started from the grid, from Gitea's
+		// own UI, or by a push, so the grid is complete by construction.
 		Source: delivery_model.SourceNotifier,
 	}
 	return deployment, audit, true
 }
 
-// notifier captures deployment events from Gitea's own internal notifier (E2). There is no
+// notifier captures deployment events from Gitea's own internal notifier. There is no
 // webhook receiver, no signature validation and no delivery retries: the events never leave
-// the process (E1, E2).
+// the process.
 type notifier struct {
 	notify.NullNotifier
 }
 
 // WorkflowRunStatusUpdate records a deploy run's state change.
 //
-// It is the fork's whole capture surface. Registering on Gitea's own notifier registry is
-// what lets the fork observe every run without editing an upstream file (F2).
+// It is the fork's whole capture surface. Registering on Gitea's own notifier registry
+// lets the fork observe every run without editing an upstream file.
 func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model.Repository, sender *user_model.User, run *actions_model.ActionRun) {
 	deployment, audit, ok := RecordsForRun(repo, sender, run)
 	if !ok {
@@ -164,6 +161,56 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 		log.Error("delivery: record %s event for %s to %s (run %d): %v — the audit log is incomplete for this deploy; check the database is reachable",
 			audit.Event, audit.ReleaseTag, audit.Environment, audit.RunID, err)
 	}
+
+	// Write a commit status so the SHA's status page shows the deploy outcome.
+	sha, shaErr := git.NewIDFromString(deployment.SHA)
+	if shaErr == nil {
+		actor := sender
+		if actor == nil {
+			actor = user_model.NewGhostUser()
+		}
+		csErr := git_model.NewCommitStatus(ctx, git_model.NewCommitStatusOptions{
+			Repo:    repo,
+			Creator: actor,
+			SHA:     sha,
+			CommitStatus: &git_model.CommitStatus{
+				State:       mapRunStatusToCommitState(run.Status),
+				Context:     "deploy/" + deployment.Environment,
+				Description: fmt.Sprintf("%s %s to %s", deployment.ReleaseTag, run.Status.String(), deployment.Environment),
+				TargetURL:   deployment.RunURL,
+			},
+		})
+		if csErr != nil {
+			log.Error("delivery: commit status for %s to %s: %v", deployment.SHA, deployment.Environment, csErr)
+		}
+	}
+
+	// Tag the commit so `git log --oneline deployed/env` shows the latest deploy.
+	if run.Status.IsSuccess() {
+		tagName := "deployed/" + deployment.Environment
+		gitRepo, err := git.OpenRepository(ctx, repo)
+		if err == nil {
+			defer gitRepo.Close()
+			if err := gitRepo.CreateTag(ctx, tagName, deployment.SHA); err != nil {
+				log.Error("delivery: tag %s at %s: %v", tagName, deployment.SHA, err)
+			}
+		} else {
+			log.Error("delivery: open repo %s for tag: %v", repo.FullName(), err)
+		}
+	}
+}
+
+func mapRunStatusToCommitState(status actions_model.Status) commitstatus.CommitStatusState {
+	switch {
+	case status.IsSuccess():
+		return commitstatus.CommitStatusSuccess
+	case status.IsFailure():
+		return commitstatus.CommitStatusFailure
+	case status.IsCancelled(), status.IsSkipped():
+		return commitstatus.CommitStatusError
+	default:
+		return commitstatus.CommitStatusPending
+	}
 }
 
 // NewNotifier builds the fork's notifier. It is exported so a test can register it against
@@ -171,8 +218,7 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 func NewNotifier() notify.Notifier { return &notifier{} }
 
 // Init mounts the fork: it runs the hub's own migrations and seeds, then registers the
-// deployment notifier. It is what routers/init.go's single hub-mount spoke calls (F2, F3,
-// F6, M5).
+// deployment notifier.
 //
 // The notifier is registered here rather than from models/delivery because services/notify
 // sits above the models layer; registering from the model package would invert the

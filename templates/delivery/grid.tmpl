@@ -54,6 +54,7 @@
 <script type="module">
 const base = {{.DeliveryAPIBase}};
 const subURL = {{.AppSubURL}};
+const pageToken = {{.DeliveryPageToken}};
 const head = document.querySelector('#delivery-grid-head');
 const body = document.querySelector('#delivery-grid-body');
 const tokenBox = document.querySelector('#delivery-token-box');
@@ -62,9 +63,9 @@ const tokenInput = document.querySelector('#delivery-token');
 const tokenKey = 'delivery-api-token';
 function storedToken() {
 	try {
-		return window.sessionStorage.getItem(tokenKey) ?? '';
+		return window.sessionStorage.getItem(tokenKey) ?? pageToken ?? '';
 	} catch {
-		return '';
+		return pageToken ?? '';
 	}
 }
 

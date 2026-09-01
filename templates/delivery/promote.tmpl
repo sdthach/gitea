@@ -67,6 +67,7 @@
 <script type="module">
 const base = {{.DeliveryAPIBase}};
 const subURL = {{.AppSubURL}};
+const pageToken = {{.DeliveryPageToken}};
 const params = new URLSearchParams(window.location.search);
 const request = {
 	repo: params.get('repo') ?? '',
@@ -76,9 +77,9 @@ const request = {
 const tokenKey = 'delivery-api-token';
 function storedToken() {
 	try {
-		return window.sessionStorage.getItem(tokenKey) ?? '';
+		return window.sessionStorage.getItem(tokenKey) ?? pageToken ?? '';
 	} catch {
-		return '';
+		return pageToken ?? '';
 	}
 }
 

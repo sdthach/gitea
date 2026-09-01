@@ -14,18 +14,14 @@ import (
 
 const tplPromote templates.TplName = "delivery/promote"
 
-// Promote renders /delivery/promote, the second of E14's two steps.
-//
-// It is the confirm step and nothing else: the handler serves the page shell, and the page
-// asks POST /deployments with confirm false for the target environment, the release tag, the
-// release currently live there and what the sequence rule decided — then sends the same
-// request again with confirm true only when the human presses the button. Every figure on it
-// arrives over the public API (E18, I14), and the rule is applied by the API rather than by
-// this page, so the CLI is refused exactly where the page is (K6).
+// Promote renders /delivery/promote. It is the confirm step: the page POSTs to /deployments
+// with confirm=false first, then confirm=true when the human presses the button. The
+// sequence rule is applied by the API, so the CLI is refused exactly where the page is.
 func Promote(ctx *context.Context) {
 	ctx.Data["Title"] = "Confirm deploy"
 	ctx.Data["PageIsDelivery"] = true
 	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
 	ctx.Data["AppSubURL"] = setting.AppSubURL
+	setPageToken(ctx)
 	ctx.HTML(http.StatusOK, tplPromote)
 }

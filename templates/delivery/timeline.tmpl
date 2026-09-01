@@ -92,6 +92,7 @@
 <script type="module">
 const base = {{.DeliveryAPIBase}};
 const subURL = {{.AppSubURL}};
+const pageToken = {{.DeliveryPageToken}};
 
 const body = document.querySelector('#delivery-timeline-body');
 const spansBody = document.querySelector('#delivery-spans');
@@ -105,9 +106,9 @@ const stateSelect = document.querySelector('#delivery-state');
 const tokenKey = 'delivery-api-token';
 function storedToken() {
 	try {
-		return window.sessionStorage.getItem(tokenKey) ?? '';
+		return window.sessionStorage.getItem(tokenKey) ?? pageToken ?? '';
 	} catch {
-		return '';
+		return pageToken ?? '';
 	}
 }
 
