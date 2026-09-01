@@ -42,6 +42,19 @@ type Environment struct {
 	RequiredApprovals int64              `xorm:"NOT NULL DEFAULT 1" json:"required_approvals"`
 	CreatedUnix       timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
 	UpdatedUnix       timeutil.TimeStamp `xorm:"updated NOT NULL" json:"updated_unix"`
+
+	// The sequence policy (E17) and its bypass (F10). RequirePredecessor defaults to false,
+	// so an environment with no policy behaves as it did before slice 5 — a warning only
+	// (F11). The three allowlist fields are branch protection's own, spelled exactly as
+	// models/git/protected_branch.go:46-48 spells them, so no gate models permission twice
+	// (F12). BlockAdminOverride is upstream's BlockAdminMergeOverride without the "Merge",
+	// which names a step no deploy has; see promotion.go.
+	Predecessor            string  `xorm:"VARCHAR(64) NOT NULL DEFAULT ''" json:"predecessor"`
+	RequirePredecessor     bool    `xorm:"NOT NULL DEFAULT false" json:"require_predecessor"`
+	BlockAdminOverride     bool    `xorm:"NOT NULL DEFAULT false" json:"block_admin_override"`
+	EnableBypassAllowlist  bool    `xorm:"NOT NULL DEFAULT false" json:"enable_bypass_allowlist"`
+	BypassAllowlistUserIDs []int64 `xorm:"JSON TEXT" json:"bypass_allowlist_user_ids"`
+	BypassAllowlistTeamIDs []int64 `xorm:"JSON TEXT" json:"bypass_allowlist_team_ids"`
 }
 
 // TableName keeps every fork table under one prefix, so no fork table can collide with an
@@ -85,7 +98,7 @@ func ValidateEnvironment(env *Environment) error {
 			SuggestedAction: "Set required_approvals to 1 or more, or set approval_policy to \"none\" to remove the gate.",
 		}
 	}
-	return nil
+	return ValidatePromotionPolicy(env) // the sequence rule, in promotion.go (E17, F11)
 }
 
 func isKnownPolicy(policy string) bool { return slices.Contains(ApprovalPolicies, policy) }

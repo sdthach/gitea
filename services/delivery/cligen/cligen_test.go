@@ -35,10 +35,23 @@ func TestEveryOperationGetsACommand(t *testing.T) {
 	ops := deliveryv1.Operations()
 	require.NotEmpty(t, ops)
 	names := CommandNames(ops)
-	assert.Len(t, names, len(ops))
-	for _, name := range names {
-		assert.NotEmpty(t, name)
+	// An operation may serve more than one command — slice 5's deploy and rollback compose
+	// the identical request — so the count is a lower bound, not an equality. What has to
+	// hold is that every operation yields at least one command and that no two operations
+	// answer to the same name, which is what K7's parity check would otherwise discover in
+	// the published document rather than here.
+	assert.GreaterOrEqual(t, len(names), len(ops), "every operation yields at least one command")
+	seen := map[string]bool{}
+	for _, op := range ops {
+		served := CommandNamesFor(op)
+		assert.NotEmpty(t, served, "operation %q serves no command", op.ID)
+		for _, name := range served {
+			assert.NotEmpty(t, name)
+			assert.False(t, seen[name], "command %q is served by more than one operation", name)
+			seen[name] = true
+		}
 	}
+	assert.Len(t, names, len(seen))
 }
 
 func TestRenderClientIsDeterministic(t *testing.T) {

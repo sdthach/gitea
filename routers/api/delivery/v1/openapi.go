@@ -11,6 +11,7 @@ import (
 
 	"gitea.dev/models/delivery"
 	"gitea.dev/modules/json"
+	delivery_service "gitea.dev/services/delivery"
 	"gitea.dev/services/delivery/query"
 )
 
@@ -45,6 +46,14 @@ type Operation struct {
 	Query       *query.Spec // list endpoints derive their grammar parameters from this
 	Response    string      // component schema name
 	ResponseIs  string      // "array" or "object"
+	// Body is the request body, one Param per member, for the operations that take one.
+	// The CLI's generated request layer renders each as a flag, so a body member cannot be
+	// published without a way to send it (K2, K7).
+	Body []Param
+	// CLINames overrides the command name derived from ID, and may name more than one:
+	// deploy and rollback are the same operation, because rolling back is deploying a prior
+	// release tag rather than a second code path. Empty means the derived name.
+	CLINames []string
 }
 
 // GrammarParams renders the section I grammar for the operation's resource. The grammar is
@@ -173,6 +182,7 @@ var componentSchemas = map[string]any{
 		"created_unix": prop("integer", "When the row was appended, unix seconds."),
 		"release":      prop("object", "The release, when ?expand=release was asked for (I9)."),
 		"audit":        arrayProp("object", "The run's audit events, when ?expand=audit was asked for (I9)."),
+		"approval":     prop("object", "The approval gate's hold on this run, when ?expand=approval was asked for (I9)."),
 	}, "id", "repo_id", "environment", "release_tag", "run_id", "status", "created_unix"),
 	"AuditEvent": objectSchema(map[string]any{
 		"id":            prop("integer", "Primary key."),
@@ -211,6 +221,110 @@ var componentSchemas = map[string]any{
 		"created_unix":   prop("integer", "Release creation time, unix seconds."),
 		"cells":          arrayProp("object", "One cell per environment, in configured order (E7). Each carries environment, state, symbol, successes, run_id, run_url and occurred_unix; a cell opens its run (E8)."),
 	}, "repo_id", "repo_full_name", "release_tag", "cells"),
+	"Promotion": objectSchema(map[string]any{
+		"repo_id":                  prop("integer", "Repository the deploy targets."),
+		"repo_full_name":           prop("string", "owner/name."),
+		"environment":              prop("string", "Target environment, lower-cased."),
+		"release_tag":              prop("string", "Release tag being deployed. Rolling back names a prior tag; it is the same request (E14)."),
+		"is_prerelease":            prop("boolean", "Whether the release is marked as a prerelease. Prereleases reach only the configured prerelease environments."),
+		"currently_live":           prop("string", "The release live in the target environment right now, empty when nothing has ever succeeded there. The confirm step names it before anything is dispatched (E14)."),
+		"is_rollback":              prop("boolean", "Whether the target release predates what is live there. A label on the request, never a second code path."),
+		"predecessor":              prop("string", "The environment this one names as its predecessor, empty when it names none (E17)."),
+		"predecessor_state":        enumProp("What the predecessor has done with this release: none, never, held or live.", []string{"none", "never", "held", "live"}),
+		"outcome":                  enumProp("The sequence rule's decision: proceed, warn, override or refuse (E17).", []string{"proceed", "warn", "override", "refuse"}),
+		"message":                  prop("string", "What the decision was, in words, for the confirm step to show."),
+		"suggested_action":         prop("string", "What to do about it. Every decision carries one (A21)."),
+		"requires_override_reason": prop("boolean", "Whether a confirmed deploy must carry override_reason. The reason is written to the audit log (E17)."),
+		"workflow_id":              prop("string", "The workflow file the deploy dispatches, named for the environment (D4)."),
+		"ref":                      prop("string", "The ref dispatched. Deploy and rollback compose the identical request and differ only here."),
+		"confirmed":                prop("boolean", "Whether this call dispatched. False on the first of E14's two steps."),
+		"override_reason":          prop("string", "The reason given for bypassing the sequence rule."),
+		"run_id":                   prop("integer", "Gitea's own Actions run id, once dispatched."),
+		"run_url":                  prop("string", "Link to the run, once dispatched."),
+	}, "repo_id", "repo_full_name", "environment", "release_tag", "outcome", "predecessor_state", "confirmed"),
+	"Run": objectSchema(map[string]any{
+		"id":               prop("integer", "Gitea's own Actions run id."),
+		"repo_id":          prop("integer", "Repository the run belongs to."),
+		"repo_full_name":   prop("string", "owner/name, so the row links out to Gitea's own repository page (P1)."),
+		"index":            prop("integer", "The run's per-repository number, as Gitea's own run page shows it."),
+		"title":            prop("string", "Run title."),
+		"workflow_id":      prop("string", "The workflow file that produced the run."),
+		"event":            prop("string", "The webhook event that caused the run."),
+		"ref":              prop("string", "The commit, branch or tag that caused the run."),
+		"commit_sha":       prop("string", "Commit the run built."),
+		"status":           enumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer (P2, P8).", delivery_service.RunStateNames()),
+		"run_url":          prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page (P1, P3)."),
+		"created_unix":     prop("integer", "When the run was created, unix seconds."),
+		"started_unix":     prop("integer", "When the run started, unix seconds; 0 if it has not."),
+		"stopped_unix":     prop("integer", "When the run stopped, unix seconds; 0 if it has not."),
+		"duration_seconds": prop("integer", "stopped minus started. An unfinished run contributes zero rather than a negative duration."),
+	}, "id", "repo_id", "repo_full_name", "workflow_id", "status", "created_unix"),
+	"RepoStat": objectSchema(map[string]any{
+		"repo_id":                  prop("integer", "Repository id."),
+		"repo_full_name":           prop("string", "owner/name."),
+		"runs":                     prop("integer", "Runs in the window."),
+		"successes":                prop("integer", "Runs that succeeded."),
+		"failures":                 prop("integer", "Runs that failed."),
+		"success_rate":             prop("number", "Successes over runs that reached a result. A queue of pending runs does not depress it."),
+		"average_duration_seconds": prop("integer", "Mean duration over the runs that finished."),
+	}, "repo_id", "repo_full_name", "runs", "success_rate", "average_duration_seconds"),
+	"WorkflowStat": objectSchema(map[string]any{
+		"repo_id":                  prop("integer", "Repository id."),
+		"repo_full_name":           prop("string", "owner/name."),
+		"workflow_id":              prop("string", "The workflow file."),
+		"runs":                     prop("integer", "Runs in the window."),
+		"successes":                prop("integer", "Runs that succeeded."),
+		"failures":                 prop("integer", "Runs that failed."),
+		"success_rate":             prop("number", "Successes over runs that reached a result."),
+		"average_duration_seconds": prop("integer", "Mean duration over the runs that finished."),
+		"disabled":                 prop("boolean", "Whether the repository has this workflow disabled, read from Gitea's own Actions unit configuration."),
+	}, "repo_id", "workflow_id", "runs", "success_rate", "average_duration_seconds", "disabled"),
+	"Summary": objectSchema(map[string]any{
+		"window":                 prop("object", "The half-open window the figures cover: from_unix, to_unix and days."),
+		"total_runs":             prop("integer", "Runs in the window."),
+		"runs":                   prop("object", "Run count per state: "+strings.Join(delivery_service.RunStateNames(), ", ")+" (P2)."),
+		"success_rate":           prop("number", "Successes over runs that reached a result."),
+		"total_duration_seconds": prop("integer", "Summed run duration."),
+		"active_repositories":    prop("integer", "Repositories with at least one run in the window."),
+		"inactive_repositories":  prop("integer", "Repositories the viewer can see that had no run in the window."),
+		"active_workflows":       prop("integer", "Distinct (repository, workflow file) pairs that ran in the window."),
+		"disabled_workflows":     prop("integer", "Workflow files the viewer's repositories have disabled."),
+	}, "window", "total_runs", "runs", "success_rate", "total_duration_seconds",
+		"active_repositories", "inactive_repositories", "active_workflows", "disabled_workflows"),
+	"Overview": objectSchema(map[string]any{
+		"summary":   prop("object", "The selected window's Summary."),
+		"previous":  prop("object", "The previous window of equal length, shown beside each tile for comparison (P2)."),
+		"truncated": prop("boolean", "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so."),
+	}, "summary", "previous", "truncated"),
+	"TrendPoint": objectSchema(map[string]any{
+		"date":                     prop("string", "The UTC day, YYYY-MM-DD."),
+		"day_unix":                 prop("integer", "Start of that UTC day, unix seconds."),
+		"runs":                     prop("integer", "Runs created that day."),
+		"successes":                prop("integer", "Runs that succeeded."),
+		"failures":                 prop("integer", "Runs that failed."),
+		"average_duration_seconds": prop("integer", "Mean duration over the runs that finished."),
+		"deployments":              prop("integer", "Deployments appended that day, read from the fork's own table so both dashboards share one source of truth (P5, E3)."),
+	}, "date", "day_unix", "runs", "successes", "failures", "average_duration_seconds", "deployments"),
+	"Approval": objectSchema(map[string]any{
+		"id":                 prop("integer", "Primary key."),
+		"repo_id":            prop("integer", "Repository the held run belongs to."),
+		"environment":        prop("string", "Environment the held job declares, lower-cased."),
+		"run_id":             prop("integer", "Gitea's own Actions run id."),
+		"job_id":             prop("integer", "Gitea's own Actions job id. The gate holds exactly this job (F5e)."),
+		"release_tag":        prop("string", "Release tag the run was dispatched at; empty when it was dispatched against a branch."),
+		"sha":                prop("string", "Commit the run builds."),
+		"run_url":            prop("string", "Link to the held run."),
+		"requester_id":       prop("integer", "Gitea user id of whoever asked for the deploy."),
+		"requester_login":    prop("string", "Requester login, denormalized so deleting the user does not erase who asked."),
+		"created_unix":       prop("integer", "When the hold was recorded, unix seconds."),
+		"state":              enumProp("Projected over the append-only audit log, never a stored column (E15).", delivery.ApprovalStates),
+		"approval_policy":    enumProp("The environment's live approval policy.", delivery.ApprovalPolicies),
+		"approvals_count":    prop("integer", "Distinct approvers so far, counted under the environment's policy."),
+		"required_approvals": prop("integer", "Approvals this deploy needs before the job is assigned."),
+		"age_seconds":        prop("integer", "How long the deploy has been held (E16)."),
+		"can_approve":        prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces (SC 21)."),
+		"deployment":         prop("object", "The deployment row for this run, when ?expand=deployment was asked for (I9)."),
+	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "approvals_count", "required_approvals", "created_unix", "can_approve"),
 	"Error": objectSchema(map[string]any{
 		"code":             prop("string", "Machine-readable rejection code."),
 		"message":          prop("string", "What went wrong."),
@@ -269,6 +383,9 @@ func OpenAPI() ([]byte, error) {
 				"403": errorResponse("The calling user is not permitted, by Gitea's own permission check (I13)."),
 				"404": errorResponse("No such resource."),
 			},
+		}
+		if len(op.Body) > 0 {
+			operation["requestBody"] = requestBody(op.Body)
 		}
 		entry, ok := paths[op.Path].(map[string]any)
 		if !ok {
@@ -369,6 +486,32 @@ func encodeArray(buf *bytes.Buffer, items []any, indent string) error {
 	}
 	buf.WriteString(indent + "]")
 	return nil
+}
+
+// requestBody renders an operation's body from the same Param list the CLI generates its
+// flags from, so the document and the client cannot disagree about what may be sent.
+func requestBody(members []Param) map[string]any {
+	props := map[string]any{}
+	required := make([]string, 0, len(members))
+	for _, m := range members {
+		schema := map[string]any{"type": m.Type, "description": m.Description}
+		if len(m.Enum) > 0 {
+			schema["enum"] = m.Enum
+		}
+		props[m.Name] = schema
+		if m.Required {
+			required = append(required, m.Name)
+		}
+	}
+	sort.Strings(required)
+	return map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{"type": "object", "properties": props, "required": required},
+			},
+		},
+	}
 }
 
 func errorResponse(desc string) map[string]any {

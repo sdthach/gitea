@@ -4,11 +4,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,8 +29,17 @@ type Command struct {
 	Summary     string
 	PathParams  []string
 	QueryParams []string
-	Columns     []string
-	IsList      bool
+	// BodyParams are the request body's members, one flag each. RequiredBody is the subset
+	// the endpoint refuses the request without, and BoolBody the subset that marshals as a
+	// JSON boolean rather than a string.
+	BodyParams   []string
+	RequiredBody []string
+	BoolBody     []string
+	// BodyHelp is each member's published description, used as its flag's help text so the
+	// generated command reference explains the body rather than listing it (K11, A21).
+	BodyHelp map[string]string
+	Columns  []string
+	IsList   bool
 }
 
 // Error carries a message, an exit code and a suggested next action. An error that states
@@ -93,6 +104,27 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 	asJSON := fs.Bool("json", false, "emit the API response verbatim and unshaped (K5)")
 	server := fs.String("server", "", "Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER")
 	token := fs.String("token", "", "API token; resolved by the same precedence detect.sh implements (K8)")
+
+	// One flag per request-body member, from the published document. deploy and rollback are
+	// the same operation, so they take the same flags and compose the identical request,
+	// differing only in --release-tag (K6).
+	bodyStrings := map[string]*string{}
+	bodyBools := map[string]*bool{}
+	for _, name := range cmd.BodyParams {
+		flagName := strings.ReplaceAll(name, "_", "-")
+		help := cmd.BodyHelp[name]
+		if help == "" {
+			help = "request body: " + name
+		}
+		if slices.Contains(cmd.RequiredBody, name) {
+			help = "required. " + help
+		}
+		if slices.Contains(cmd.BoolBody, name) {
+			bodyBools[name] = fs.Bool(flagName, false, help)
+			continue
+		}
+		bodyStrings[name] = fs.String(flagName, "", help)
+	}
 
 	printUsage := func(w io.Writer) {
 		fs.SetOutput(w)
@@ -173,11 +205,23 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 		target += "?" + encoded
 	}
 
-	req, reqErr := http.NewRequest(cmd.Method, target, nil)
+	payload, bodyErr := composeBody(cmd, bodyStrings, bodyBools)
+	if bodyErr != nil {
+		return bodyErr
+	}
+
+	var bodyReader io.Reader
+	if payload != nil {
+		bodyReader = bytes.NewReader(payload)
+	}
+	req, reqErr := http.NewRequest(cmd.Method, target, bodyReader)
 	if reqErr != nil {
 		return failf(1, "Check --server is a URL, for example https://gitea.example.com.", "%v", reqErr)
 	}
 	req.Header.Set("Accept", "application/json")
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if authToken != "" {
 		req.Header.Set("Authorization", "token "+authToken)
 	}
@@ -207,6 +251,67 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 		return nil
 	}
 	return renderTable(cmd, body, stdout)
+}
+
+// composeBody builds the JSON request body from the body flags. It returns nil for a command
+// that takes none, so a GET is sent with no body exactly as before.
+//
+// The bytes are deterministic: members are written in the order the generated command lists
+// them, which is sorted. That is what makes "deploy and rollback compose the identical
+// request" a byte comparison rather than a structural one.
+func composeBody(cmd Command, stringValues map[string]*string, bools map[string]*bool) ([]byte, *Error) {
+	if len(cmd.BodyParams) == 0 {
+		return nil, nil
+	}
+	var missing []string
+	for _, name := range cmd.RequiredBody {
+		if v, ok := stringValues[name]; ok && strings.TrimSpace(*v) == "" {
+			missing = append(missing, "--"+strings.ReplaceAll(name, "_", "-"))
+		}
+	}
+	if len(missing) > 0 {
+		return nil, failf(2,
+			fmt.Sprintf("Call it as `gitea-delivery %s %s`.", cmd.Name, strings.Join(missing, " <value> ")+" <value>"),
+			"%s needs %s", cmd.Name, strings.Join(missing, ", "))
+	}
+
+	var b bytes.Buffer
+	b.WriteByte('{')
+	first := true
+	for _, name := range cmd.BodyParams {
+		var encoded []byte
+		switch {
+		case bools[name] != nil:
+			if !*bools[name] {
+				continue // an unset switch is omitted, so the server's own default stands
+			}
+			encoded = []byte("true")
+		case stringValues[name] != nil:
+			if *stringValues[name] == "" {
+				continue
+			}
+			raw, err := json.Marshal(*stringValues[name])
+			if err != nil {
+				return nil, failf(1, "Remove any unprintable characters from the value.", "%v", err)
+			}
+			encoded = raw
+		default:
+			continue
+		}
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		key, err := json.Marshal(name)
+		if err != nil {
+			return nil, failf(1, "Regenerate the client with `make delivery-generate`.", "%v", err)
+		}
+		b.Write(key)
+		b.WriteByte(':')
+		b.Write(encoded)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 func apiFailure(status int, body []byte) *Error {

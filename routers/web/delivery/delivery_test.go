@@ -86,6 +86,21 @@ var forkPages = []struct {
 		endpoints: []string{"/grid", "/deployments", "/repos/{owner}/{repo}/releases"},
 		fetch:     "/grid?",
 	},
+	{ // slice 8
+		template:  "overview.tmpl",
+		endpoints: []string{"/overview", "/overview/trends", "/overview/repos", "/runs"},
+		fetch:     "/overview?",
+	},
+	{ // slice 5
+		template:  "promote.tmpl",
+		endpoints: []string{"/deployments"},
+		fetch:     "/deployments",
+	},
+	{ // slice 6
+		template:  "approvals.tmpl",
+		endpoints: []string{"/approvals"},
+		fetch:     "/approvals?",
+	},
 }
 
 func TestEveryPageIsListed(t *testing.T) {
@@ -156,7 +171,12 @@ func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	r := &recordingRouter{}
 	RegisterRoutes(r, "signin")
-	assert.Equal(t, []string{"/delivery/environments", "/delivery/environments/{name}", "/delivery/grid"}, r.patterns)
+	assert.Equal(t, []string{
+		"/delivery/environments", "/delivery/environments/{name}", "/delivery/grid",
+		"/delivery/ci",                                                   // slice 8
+		"/delivery/promote",                                              // slice 5
+		"/delivery/approvals", "/delivery/environments/{name}/approvals", // slice 6
+	}, r.patterns)
 	for _, handlers := range r.handlers {
 		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate (F13)")
 	}

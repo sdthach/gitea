@@ -36,9 +36,13 @@ var spokes = map[string]spoke{
 	"models/secret/secret.go":         {2, "secret narrowing tail call in GetSecretsOfTask (F4), one call plus its import"},
 	"templates/base/head_navbar.tmpl": {1, "one navigation entry delegating to a hub template (F13)"},
 	"models/unit/unit.go":             {1, "at most one unit enum entry (F2); unused at slice 3"},
-	"models/actions/task.go":          {2, "task-assignment gate (F5e), added by slice 6"},
-	".gitignore":                      {1, "ignores the gitignored planning directory; carries no fork logic"},
-	"Makefile":                        {1, "one -include line pulling in Makefile.delivery, so the fork adds no target to it"},
+	// The other spokes are tail calls, which are one statement and so one line. This one is
+	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
+	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if
+	// body unconditionally). Import plus guard is therefore four, not two.
+	"models/actions/task.go": {4, "task-assignment gate (F5e), added by slice 6: one import plus a three-line `if ... { continue }` guard"},
+	".gitignore":             {1, "ignores the gitignored planning directory; carries no fork logic"},
+	"Makefile":               {1, "one -include line pulling in Makefile.delivery, so the fork adds no target to it"},
 }
 
 func main() {

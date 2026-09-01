@@ -59,6 +59,16 @@ function link(text, href, title) {
 	return a;
 }
 
+// promoteURL is the first of E14's two steps: a cell offers "deploy this release here", and
+// the confirm page is where the target, the tag and the release currently live there are
+// named. Nothing is dispatched by following it.
+function promoteURL(row, cell) {
+	const query = new URLSearchParams({
+		repo: row.repo_full_name, environment: cell.environment, release_tag: row.release_tag,
+	});
+	return `${subURL}/delivery/promote?${query}`;
+}
+
 // showHistory expands a row to that release's history across environments, drawn from the
 // audit log, with the release's own attachments as its artifacts (E9). Both come from
 // documented endpoints; the page reaches past neither into the models.
@@ -111,6 +121,36 @@ async function showHistory(row, tr) {
 	cell.replaceChildren(list);
 }
 
+// decideHeld approves or rejects a held deploy from the cell holding it (E15). The endpoint
+// is the only thing that releases the job, so its refusal is the real answer and is shown
+// with the next action it suggests.
+async function decideHeld(approval, verb) {
+	const resp = await fetch(`${base}/approvals/${approval.id}/${verb}`, {method: 'POST', headers: {accept: 'application/json'}});
+	if (!resp.ok) {
+		const payload = await resp.json().catch(() => ({}));
+		fail(payload.message ?? `the API returned ${resp.status}`,
+			payload.suggested_action ?? `Open ${subURL}/delivery/approvals, which can be given an API token.`);
+		return;
+	}
+	window.location.reload();
+}
+
+// heldByRun indexes the deploys the approval gate is holding, so a `⏸` cell can offer the
+// actions that release it. can_approve is the server's own answer, resolved by the same
+// check the approve endpoint enforces, so no action is offered that would be refused.
+const heldByRun = new Map();
+try {
+	const resp = await fetch(`${base}/approvals?limit=200`, {headers: {accept: 'application/json'}});
+	if (resp.ok) {
+		for (const approval of await resp.json()) {
+			if (approval.state === 'pending') heldByRun.set(approval.run_id, approval);
+		}
+	}
+} catch {
+	// The grid still renders without them: the gate at job assignment, not this button,
+	// is what withholds the job.
+}
+
 try {
 	const resp = await fetch(`${base}/grid?limit=50`, {headers: {accept: 'application/json'}});
 	const payload = await resp.json();
@@ -153,6 +193,26 @@ try {
 				const href = cell.run_url ||
 					`${subURL}/${row.repo_full_name}/actions?workflow=deploy-${encodeURIComponent(cell.environment)}.yaml`;
 				td.append(link(cell.symbol, href, `${row.release_tag} → ${cell.environment}: ${cell.state}`));
+				td.append(' ');
+				// Step one of two: this opens the confirm page, which names the target
+				// environment, the release tag and what is live there before anything is
+				// dispatched (E14). Rolling back is this same action on an earlier row.
+				td.append(link('▸', promoteURL(row, cell), `Deploy ${row.release_tag} to ${cell.environment}`));
+				const held = heldByRun.get(cell.run_id);
+				if (held) {
+					td.append(' ');
+					td.append(link('review', `${subURL}/delivery/environments/${encodeURIComponent(cell.environment)}/approvals`,
+						`${row.release_tag} → ${cell.environment} is held awaiting approval`));
+					for (const verb of held.can_approve ? ['approve', 'reject'] : []) {
+						td.append(' ');
+						const button = document.createElement('button');
+						button.type = 'button';
+						button.className = 'ui mini basic button';
+						button.textContent = verb;
+						button.addEventListener('click', () => decideHeld(held, verb));
+						td.append(button);
+					}
+				}
 				tr.append(td);
 			}
 			return tr;

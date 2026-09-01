@@ -36,10 +36,10 @@ var deploymentSpec = query.Spec{
 	DefaultOrder: query.OrderDesc,
 	PrimaryKey:   "id",
 	SearchFields: []string{"release_tag", "environment"},
-	// approval joins the list in slice 6, which is where the approvals resource is
-	// declared. Whitelisting it here would publish an expansion that always returns
-	// nothing, which no test could tell from a broken one.
-	Expands: []string{"release", "audit"},
+	// approval joined the list in slice 6, which is where the approvals resource is
+	// declared. Whitelisting it before then would have published an expansion that always
+	// returned nothing, which no test could tell from a broken one.
+	Expands: []string{"release", "audit", "approval"},
 	Paging:  query.PagingCursor,
 }
 
@@ -49,6 +49,8 @@ type Deployment struct {
 	delivery.Deployment
 	Release *Release               `json:"release,omitempty"`
 	Audit   []*delivery.AuditEvent `json:"audit,omitempty"`
+	// Approval is the hold the approval gate placed on this run, when there was one (F5).
+	Approval *delivery.Approval `json:"approval,omitempty"`
 }
 
 func listDeploymentsEndpoint() *endpoint {
@@ -145,6 +147,17 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 					return err
 				}
 				row.Audit = events
+			}
+		case "approval":
+			for _, row := range rows {
+				cond := builder.Eq{"repo_id": row.RepoID, "run_id": row.RunID, "environment": row.Environment}
+				holds, _, err := delivery.FindApprovals(ctx, cond, "id DESC", 1, 0)
+				if err != nil {
+					return err
+				}
+				if len(holds) > 0 {
+					row.Approval = holds[0]
+				}
 			}
 		}
 	}

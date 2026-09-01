@@ -275,7 +275,7 @@ func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error)
 		if err != nil {
 			return nil, 0, err
 		}
-		cellsOf[repoID] = ProjectCells(environments, tags, events, policies)
+		cellsOf[repoID] = ProjectCellsHeld(ctx, repoID, environments, tags, events, policies)
 		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 		if err != nil {
 			return nil, 0, err

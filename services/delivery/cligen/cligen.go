@@ -41,30 +41,46 @@ func CommandName(operationID string) string {
 	return string(out)
 }
 
+// CommandNamesFor lists the commands one operation serves. An operation may declare more
+// than one: deploy and rollback compose the identical request and differ only in the release
+// tag, so they are one endpoint reached by two names rather than two endpoints (K6).
+func CommandNamesFor(op *deliveryv1.Operation) []string {
+	if len(op.CLINames) > 0 {
+		return op.CLINames
+	}
+	return []string{CommandName(op.ID)}
+}
+
 // CommandNames lists every command, sorted.
 func CommandNames(ops []*deliveryv1.Operation) []string {
 	names := make([]string, 0, len(ops))
 	for _, op := range ops {
-		names = append(names, CommandName(op.ID))
+		names = append(names, CommandNamesFor(op)...)
 	}
 	sort.Strings(names)
 	return names
 }
 
+// command is one emitted entry: an operation under one of the names it serves.
+type command struct {
+	Name string
+	Op   *deliveryv1.Operation
+}
+
 // RenderClient emits cmd/gitea-delivery/generated_client.go.
 func RenderClient(ops []*deliveryv1.Operation) ([]byte, error) {
-	sorted := make([]*deliveryv1.Operation, len(ops))
-	copy(sorted, ops)
-	sort.Slice(sorted, func(i, j int) bool { return CommandName(sorted[i].ID) < CommandName(sorted[j].ID) })
-
+	sorted := make([]command, 0, len(ops))
 	seen := map[string]string{}
-	for _, op := range sorted {
-		name := CommandName(op.ID)
-		if prev, dup := seen[name]; dup {
-			return nil, fmt.Errorf("operations %q and %q both map to command %q; rename one operation id", prev, op.ID, name)
+	for _, op := range ops {
+		for _, name := range CommandNamesFor(op) {
+			if prev, dup := seen[name]; dup {
+				return nil, fmt.Errorf("operations %q and %q both map to command %q; rename one operation id", prev, op.ID, name)
+			}
+			seen[name] = op.ID
+			sorted = append(sorted, command{Name: name, Op: op})
 		}
-		seen[name] = op.ID
 	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 
 	var b bytes.Buffer
 	b.WriteString(`// Copyright 2026 The Gitea Authors. All rights reserved.
@@ -81,15 +97,20 @@ package main
 // Commands is every command the CLI serves, one per documented endpoint (K3, K7).
 var Commands = []Command{
 `)
-	for _, op := range sorted {
+	for _, c := range sorted {
+		op := c.Op
 		fmt.Fprintf(&b, "\t{\n")
-		fmt.Fprintf(&b, "\t\tName:        %q,\n", CommandName(op.ID))
+		fmt.Fprintf(&b, "\t\tName:        %q,\n", c.Name)
 		fmt.Fprintf(&b, "\t\tOperationID: %q,\n", op.ID)
 		fmt.Fprintf(&b, "\t\tMethod:      %q,\n", op.Method)
 		fmt.Fprintf(&b, "\t\tPath:        %q,\n", op.Path)
 		fmt.Fprintf(&b, "\t\tSummary:     %q,\n", op.Summary)
 		fmt.Fprintf(&b, "\t\tPathParams:  %s,\n", stringSlice(pathParamNames(op)))
 		fmt.Fprintf(&b, "\t\tQueryParams: %s,\n", stringSlice(queryParamNames(op)))
+		fmt.Fprintf(&b, "\t\tBodyParams:  %s,\n", stringSlice(bodyParamNames(op)))
+		fmt.Fprintf(&b, "\t\tRequiredBody: %s,\n", stringSlice(requiredBodyNames(op)))
+		fmt.Fprintf(&b, "\t\tBoolBody:    %s,\n", stringSlice(boolBodyNames(op)))
+		fmt.Fprintf(&b, "\t\tBodyHelp:    %s,\n", stringMap(bodyHelp(op)))
 		fmt.Fprintf(&b, "\t\tColumns:     %s,\n", stringSlice(columnsFor(op)))
 		fmt.Fprintf(&b, "\t\tIsList:      %t,\n", op.ResponseIs == "array")
 		fmt.Fprintf(&b, "\t},\n")
@@ -108,6 +129,43 @@ func pathParamNames(op *deliveryv1.Operation) []string {
 	for _, p := range op.PathParams {
 		names = append(names, p.Name)
 	}
+	return names
+}
+
+// bodyParamNames lists an operation's request-body members. Each becomes a flag, so a body
+// the document publishes always has a way to send it from the CLI (K2, K7).
+func bodyParamNames(op *deliveryv1.Operation) []string {
+	names := make([]string, 0, len(op.Body))
+	for _, p := range op.Body {
+		names = append(names, p.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// requiredBodyNames lists the members the endpoint will refuse the request without, so the
+// CLI can say so before spending a round-trip.
+func requiredBodyNames(op *deliveryv1.Operation) []string {
+	names := make([]string, 0, len(op.Body))
+	for _, p := range op.Body {
+		if p.Required {
+			names = append(names, p.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// boolBodyNames lists the members that marshal as JSON booleans rather than strings; the
+// flag for one is a switch.
+func boolBodyNames(op *deliveryv1.Operation) []string {
+	names := make([]string, 0, len(op.Body))
+	for _, p := range op.Body {
+		if p.Type == "boolean" {
+			names = append(names, p.Name)
+		}
+	}
+	sort.Strings(names)
 	return names
 }
 
@@ -132,6 +190,35 @@ func columnsFor(op *deliveryv1.Operation) []string {
 	cols := append([]string(nil), required...)
 	sort.Strings(cols)
 	return cols
+}
+
+// bodyHelp carries each body member's published description into the flag's help text, so
+// the generated command reference explains the request body rather than merely listing it
+// (K11, A21).
+func bodyHelp(op *deliveryv1.Operation) map[string]string {
+	out := make(map[string]string, len(op.Body))
+	for _, p := range op.Body {
+		if p.Description != "" {
+			out[p.Name] = p.Description
+		}
+	}
+	return out
+}
+
+func stringMap(values map[string]string) string {
+	if len(values) == 0 {
+		return "nil"
+	}
+	keys := make([]string, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, fmt.Sprintf("%q: %q", k, values[k]))
+	}
+	return "map[string]string{" + strings.Join(pairs, ", ") + "}"
 }
 
 func stringSlice(values []string) string {

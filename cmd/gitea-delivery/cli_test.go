@@ -58,16 +58,39 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 	cases := map[string]struct {
 		args     []string
 		wantPath string
+		// wantMethod is empty for the GET commands, which is every list and read endpoint.
+		wantMethod string
 	}{
-		"environments":             {[]string{"environments"}, "/api/delivery/v1/environments"},
-		"repos":                    {[]string{"repos"}, "/api/delivery/v1/repos"},
-		"repo-environments":        {[]string{"repo-environments", "acme", "web"}, "/api/delivery/v1/repos/acme/web/environments"},
-		"repo-environment":         {[]string{"repo-environment", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod"},
-		"repo-environment-secrets": {[]string{"repo-environment-secrets", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod/secrets"},
-		"deployments":              {[]string{"deployments"}, "/api/delivery/v1/deployments"},
-		"audit":                    {[]string{"audit"}, "/api/delivery/v1/audit"},
-		"releases":                 {[]string{"releases", "acme", "web"}, "/api/delivery/v1/repos/acme/web/releases"},
-		"grid":                     {[]string{"grid"}, "/api/delivery/v1/grid"},
+		"environments":             {[]string{"environments"}, "/api/delivery/v1/environments", ""},
+		"repos":                    {[]string{"repos"}, "/api/delivery/v1/repos", ""},
+		"repo-environments":        {[]string{"repo-environments", "acme", "web"}, "/api/delivery/v1/repos/acme/web/environments", ""},
+		"repo-environment":         {[]string{"repo-environment", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod", ""},
+		"repo-environment-secrets": {[]string{"repo-environment-secrets", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod/secrets", ""},
+		"deployments":              {[]string{"deployments"}, "/api/delivery/v1/deployments", ""},
+		"audit":                    {[]string{"audit"}, "/api/delivery/v1/audit", ""},
+		"releases":                 {[]string{"releases", "acme", "web"}, "/api/delivery/v1/repos/acme/web/releases", ""},
+		"grid":                     {[]string{"grid"}, "/api/delivery/v1/grid", ""},
+		// slice 5: deploy and rollback are one endpoint under two names, because rolling
+		// back is deploying a prior release tag rather than a second path (K6).
+		"deploy": {
+			[]string{"deploy", "--repo", "acme/web", "--environment", "prod", "--release-tag", "v1.0"},
+			"/api/delivery/v1/deployments", http.MethodPost,
+		},
+		"rollback": {
+			[]string{"rollback", "--repo", "acme/web", "--environment", "prod", "--release-tag", "v0.9"},
+			"/api/delivery/v1/deployments", http.MethodPost,
+		},
+		// slice 8: the cross-repository CI overview's resources (K3).
+		"runs":            {[]string{"runs"}, "/api/delivery/v1/runs", ""},
+		"workflows":       {[]string{"workflows"}, "/api/delivery/v1/workflows", ""},
+		"overview":        {[]string{"overview"}, "/api/delivery/v1/overview", ""},
+		"overview-trends": {[]string{"overview-trends"}, "/api/delivery/v1/overview/trends", ""},
+		"overview-repos":  {[]string{"overview-repos"}, "/api/delivery/v1/overview/repos", ""},
+		// slice 6: a gated environment holds a CLI-started deploy identically, and these
+		// are the only way to release it — there is no CLI path around the gate (K6).
+		"approvals": {[]string{"approvals"}, "/api/delivery/v1/approvals", ""},
+		"approve":   {[]string{"approve", "42"}, "/api/delivery/v1/approvals/42/approve", http.MethodPost},
+		"reject":    {[]string{"reject", "42"}, "/api/delivery/v1/approvals/42/reject", http.MethodPost},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 
@@ -86,7 +109,11 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			require.Nil(t, err)
 			require.Len(t, rec.requests, 1)
 			req := rec.requests[0]
-			assert.Equal(t, http.MethodGet, req.Method)
+			wantMethod := c.wantMethod
+			if wantMethod == "" {
+				wantMethod = http.MethodGet
+			}
+			assert.Equal(t, wantMethod, req.Method)
 			assert.Equal(t, c.wantPath, req.URL.Path)
 			assert.Equal(t, "token t0ken", req.Header.Get("Authorization"))
 		})
@@ -301,4 +328,23 @@ func TestSubcommandHelpGoesToStdoutAndExitsZero(t *testing.T) {
 			assert.Empty(t, stderr.String(), "help is not an error, so nothing goes to stderr")
 		})
 	}
+}
+
+// TestDeliveryRunsFilterComposesTheFailedRunsRequest is SC 41's CLI half: the command the
+// success criterion names has to compose exactly the request the page's failed-runs list
+// makes, or the two would disagree about what "failed" means (J13).
+func TestDeliveryRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
+	rec := &recorder{body: "[]"}
+	withRecorder(t, rec)
+
+	stdout, _, err := exec(t, rec, "runs", "--filter", "status[eq]=failure", "--json")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	req := rec.requests[0]
+	assert.Equal(t, http.MethodGet, req.Method)
+	assert.Equal(t, "/api/delivery/v1/runs", req.URL.Path)
+	assert.Equal(t, "failure", req.URL.Query().Get("status[eq]"),
+		"the filter is sent verbatim; the server maps the state name onto its own status integer (I3, K4)")
+	assert.Equal(t, "[]", strings.TrimSpace(stdout), "--json emits the API response verbatim and unshaped (K5)")
 }

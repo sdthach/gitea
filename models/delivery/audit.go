@@ -26,12 +26,18 @@ const (
 	AuditCancelled = "cancelled"
 	AuditApproved  = "approved"
 	AuditRejected  = "rejected"
+	// AuditOverridden records that someone who could bypass the sequence rule did so, and
+	// why (E17). It is appended only after the deploy it authorized was dispatched, so the
+	// row carries the run that is its evidence.
+	AuditOverridden = "overridden"
 )
 
-// AuditEvents is the complete event set, in the order E5 lists it.
+// AuditEvents is the complete event set, in the order E5 lists it, with slice 5's override
+// appended rather than inserted so an existing row's meaning never moves.
 var AuditEvents = []string{
 	AuditRequested, AuditStarted, AuditSucceeded,
 	AuditFailed, AuditCancelled, AuditApproved, AuditRejected,
+	AuditOverridden,
 }
 
 // The source set, declared once (E5).
@@ -63,7 +69,10 @@ type AuditEvent struct {
 	RunID        int64              `xorm:"INDEX NOT NULL DEFAULT 0" json:"run_id"`
 	RunURL       string             `xorm:"VARCHAR(255) NOT NULL DEFAULT ''" json:"run_url"`
 	Source       string             `xorm:"VARCHAR(32) NOT NULL" json:"source"`
-	CreatedUnix  timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
+	// Reason is the actor's own words for an event that needed them: the reason given when
+	// the sequence rule was overridden (E17). It is empty on every event that needs none.
+	Reason      string             `xorm:"TEXT NOT NULL DEFAULT ''" json:"reason"`
+	CreatedUnix timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
 }
 
 // TableName keeps every fork table under one prefix.
@@ -108,6 +117,14 @@ func ValidateAuditEvent(e *AuditEvent) error {
 		return &Error{
 			Message:         "audit event names no environment",
 			SuggestedAction: "Name the workflow file deploy-<env>.yaml so the environment is read from it (D4), or set environment explicitly.",
+		}
+	}
+	// An override is the reason it records. A row saying only that the sequence rule was
+	// bypassed answers none of what E17 asks the log to keep, so the write path refuses it.
+	if e.Event == AuditOverridden && strings.TrimSpace(e.Reason) == "" {
+		return &Error{
+			Message:         "an overridden event carries no reason",
+			SuggestedAction: "Send override_reason with the deploy; the sequence rule is only bypassable with a reason on the record (E17).",
 		}
 	}
 	return nil

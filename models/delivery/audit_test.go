@@ -15,8 +15,8 @@ import (
 
 func TestDeliveryAuditEnumsAreDeclaredOnce(t *testing.T) {
 	assert.Equal(t,
-		[]string{"requested", "started", "succeeded", "failed", "cancelled", "approved", "rejected"},
-		AuditEvents, "the event set is E5's, in E5's order")
+		[]string{"requested", "started", "succeeded", "failed", "cancelled", "approved", "rejected", "overridden"},
+		AuditEvents, "the event set is E5's, in E5's order, with slice 5's override appended rather than inserted")
 	assert.Equal(t, []string{"ui", "notifier", "reconcile"}, AuditSources)
 }
 
