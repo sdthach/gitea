@@ -113,6 +113,7 @@ prime/
 /.goosehints
 /.windsurfrules
 /.github/copilot-instructions.md
+/planning
 /llms.txt
 
 # Ignore worktrees when working on multiple branches
