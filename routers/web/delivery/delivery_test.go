@@ -57,30 +57,81 @@ func TestForkTemplatesParse(t *testing.T) {
 // exactly as templates/user/dashboard/milestones.tmpl does, so chrome, themes, dark mode and
 // Fomantic classes are inherited and the fork ships no stylesheet.
 func TestPagesInheritGiteasChrome(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "environment.tmpl"))
+	for _, page := range forkPages {
+		t.Run(page.template, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", page.template))
+			require.NoError(t, err)
+			body := string(raw)
+			assert.True(t, strings.HasPrefix(body, `{{template "base/head" .}}`))
+			assert.True(t, strings.HasSuffix(strings.TrimSpace(body), `{{template "base/footer" .}}`))
+			assert.NotContains(t, body, "<link rel=\"stylesheet\"", "the fork ships no stylesheet")
+			assert.NotContains(t, body, "<style", "the fork ships no stylesheet")
+		})
+	}
+}
+
+// forkPages is every page the fork serves, with the documented operation it is a client of.
+// A page added without an entry here fails TestEveryPageIsListed, so no page can slip past
+// the E18/I14 check.
+var forkPages = []struct {
+	template string
+	// endpoints are every operation path the page fetches. Each must be published, and
+	// each must actually appear in the template, so neither list can rot.
+	endpoints []string
+	fetch     string
+}{
+	{template: "environment.tmpl", endpoints: []string{"/environments"}, fetch: "/environments?"},
+	{
+		template:  "grid.tmpl",
+		endpoints: []string{"/grid", "/deployments", "/repos/{owner}/{repo}/releases"},
+		fetch:     "/grid?",
+	},
+}
+
+func TestEveryPageIsListed(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join(templateDir(t), "delivery"))
 	require.NoError(t, err)
-	body := string(raw)
-	assert.True(t, strings.HasPrefix(body, `{{template "base/head" .}}`))
-	assert.True(t, strings.HasSuffix(strings.TrimSpace(body), `{{template "base/footer" .}}`))
-	assert.NotContains(t, body, "<link rel=\"stylesheet\"", "the fork ships no stylesheet")
-	assert.NotContains(t, body, "<style", "the fork ships no stylesheet")
+
+	pages := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		// navbar_entry.tmpl is the spoke's fragment, not a page.
+		if entry.Name() == "navbar_entry.tmpl" {
+			continue
+		}
+		pages = append(pages, entry.Name())
+	}
+	listed := make([]string, 0, len(forkPages))
+	for _, p := range forkPages {
+		listed = append(listed, p.template)
+	}
+	assert.ElementsMatch(t, pages, listed, "every page the fork ships is checked against its API (E18, I14)")
 }
 
 // TestPageIsAClientOfItsAPI is E18/I14: the page fetches its data from a documented
 // endpoint and the handler serves only the shell. A handler serving the UI alone is a defect.
 func TestPageIsAClientOfItsAPI(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "environment.tmpl"))
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), "/environments?", "the page reads its rows over the API")
-	assert.Contains(t, string(raw), "suggested_action", "the page surfaces the API's suggested next action (A21)")
+	for _, page := range forkPages {
+		t.Run(page.template, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", page.template))
+			require.NoError(t, err)
+			body := string(raw)
+			assert.Contains(t, body, page.fetch, "the page reads its rows over the API")
+			assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action (A21)")
 
-	documented := false
-	for _, op := range deliveryv1.Operations() {
-		if op.Path == "/environments" {
-			documented = true
-		}
+			published := map[string]bool{}
+			for _, op := range deliveryv1.Operations() {
+				published[op.Path] = true
+			}
+			for _, endpoint := range page.endpoints {
+				assert.True(t, published[endpoint],
+					"the page's endpoint %s must be a published operation (E18, I14)", endpoint)
+				// The template has to name it, so an endpoint listed here but no longer
+				// fetched is caught rather than standing as a claim about a dead page.
+				probe := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
+				assert.Contains(t, body, probe, "the page fetches %s", endpoint)
+			}
+		})
 	}
-	assert.True(t, documented, "the page's endpoint must be a published operation")
 }
 
 // TestNavbarSpokeDelegatesToAHubTemplate is F2: the single upstream template edit is one
@@ -105,7 +156,7 @@ func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	r := &recordingRouter{}
 	RegisterRoutes(r, "signin")
-	assert.Equal(t, []string{"/delivery/environments", "/delivery/environments/{name}"}, r.patterns)
+	assert.Equal(t, []string{"/delivery/environments", "/delivery/environments/{name}", "/delivery/grid"}, r.patterns)
 	for _, handlers := range r.handlers {
 		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate (F13)")
 	}

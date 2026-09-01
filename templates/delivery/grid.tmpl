@@ -1,0 +1,165 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard delivery">
+	<div class="ui container">
+		<h2 class="ui header">{{.Title}}</h2>
+		<p class="tw-text-14">
+			Releases are rows, environments are columns in configured order. Every cell state is
+			projected from the append-only audit log by
+			<code>{{.DeliveryAPIBase}}/grid</code>; this page is a client of that endpoint and reads
+			nothing the API does not serve.
+		</p>
+
+		<div id="delivery-error" class="ui negative message tw-hidden">
+			<div class="header">Could not load the grid</div>
+			<p id="delivery-error-message"></p>
+			<p><strong>Suggested action:</strong> <span id="delivery-error-action"></span></p>
+		</div>
+
+		<table class="ui table" id="delivery-grid">
+			<thead>
+				<tr id="delivery-grid-head">
+					<th>Repository</th>
+					<th>Release</th>
+				</tr>
+			</thead>
+			<tbody id="delivery-grid-body">
+				<tr><td colspan="2">Loading…</td></tr>
+			</tbody>
+		</table>
+
+		<p class="tw-text-12">
+			<code>·</code> never deployed ·
+			<code>✔ now</code> currently live ·
+			<code>✔</code> superseded ·
+			<code>✔ ×N</code> deployed here N times ·
+			<code>✗</code> last attempt failed ·
+			<code>⟳</code> in progress ·
+			<code>⏸</code> awaiting approval
+		</p>
+	</div>
+</div>
+<script type="module">
+const base = {{.DeliveryAPIBase}};
+const subURL = {{.AppSubURL}};
+const head = document.querySelector('#delivery-grid-head');
+const body = document.querySelector('#delivery-grid-body');
+
+function fail(message, action) {
+	document.querySelector('#delivery-error-message').textContent = message;
+	document.querySelector('#delivery-error-action').textContent = action;
+	document.querySelector('#delivery-error').classList.remove('tw-hidden');
+	body.replaceChildren();
+}
+
+function link(text, href, title) {
+	const a = document.createElement('a');
+	a.textContent = text;
+	a.href = href;
+	if (title) a.title = title;
+	return a;
+}
+
+// showHistory expands a row to that release's history across environments, drawn from the
+// audit log, with the release's own attachments as its artifacts (E9). Both come from
+// documented endpoints; the page reaches past neither into the models.
+async function showHistory(row, tr) {
+	const open = tr.nextElementSibling?.dataset?.detailFor === row.release_tag;
+	if (tr.nextElementSibling?.dataset?.detailFor) tr.nextElementSibling.remove();
+	if (open) return;
+
+	const detail = document.createElement('tr');
+	detail.dataset.detailFor = row.release_tag;
+	const cell = document.createElement('td');
+	cell.colSpan = tr.children.length;
+	cell.textContent = 'Loading…';
+	detail.append(cell);
+	tr.after(detail);
+
+	const tag = encodeURIComponent(row.release_tag);
+	const [history, releases] = await Promise.all([
+		fetch(`${base}/deployments?repo_id=${row.repo_id}&release_tag=${tag}&expand=audit&limit=200`,
+			{headers: {accept: 'application/json'}}).then((r) => r.json()),
+		fetch(`${base}/repos/${row.repo_full_name}/releases?tag_name=${tag}`,
+			{headers: {accept: 'application/json'}}).then((r) => r.json()),
+	]);
+
+	const list = document.createElement('ul');
+	for (const deployment of history) {
+		const item = document.createElement('li');
+		const events = (deployment.audit ?? []).map((e) => `${e.event} by ${e.actor_login || 'unknown'}`).join(' → ');
+		item.textContent = `${deployment.environment}: ${events || deployment.status}`;
+		if (deployment.run_url) {
+			item.append(' ');
+			item.append(link('run', deployment.run_url));
+		}
+		list.append(item);
+	}
+	if (!list.children.length) {
+		list.append(Object.assign(document.createElement('li'), {textContent: 'never deployed anywhere'}));
+	}
+
+	const artifacts = releases[0]?.artifacts ?? [];
+	if (artifacts.length) {
+		const item = document.createElement('li');
+		item.append('artifacts: ');
+		for (const artifact of artifacts) {
+			item.append(link(artifact.name, artifact.url));
+			item.append(' ');
+		}
+		list.append(item);
+	}
+	cell.replaceChildren(list);
+}
+
+try {
+	const resp = await fetch(`${base}/grid?limit=50`, {headers: {accept: 'application/json'}});
+	const payload = await resp.json();
+	if (!resp.ok) {
+		fail(payload.message ?? `the API returned ${resp.status}`,
+			payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
+	} else if (!payload.length) {
+		fail('no release is visible to you yet',
+			'Cut a release, or check your account can read the Actions unit of a repository that has one.');
+	} else {
+		// Environment headers open that environment's view (E8). Column order is the order
+		// the API returned the cells in, which is the configured order (E7).
+		for (const cell of payload[0].cells) {
+			const th = document.createElement('th');
+			th.append(link(cell.environment, `${subURL}/delivery/environments/${encodeURIComponent(cell.environment)}`,
+				'Open this environment'));
+			head.append(th);
+		}
+		body.replaceChildren(...payload.map((row) => {
+			const tr = document.createElement('tr');
+			const repo = document.createElement('td');
+			repo.append(link(row.repo_full_name, `${subURL}/${row.repo_full_name}`));
+			tr.append(repo);
+			const release = document.createElement('td');
+			// A release row opens the release (E8).
+			release.append(link(row.release_tag, row.release_url || `${subURL}/${row.repo_full_name}/releases`));
+			release.append(' ');
+			const toggle = document.createElement('button');
+			toggle.type = 'button';
+			toggle.className = 'ui mini basic button';
+			toggle.textContent = 'history';
+			toggle.title = 'This release across every environment, from the audit log';
+			toggle.addEventListener('click', () => showHistory(row, tr));
+			release.append(toggle);
+			tr.append(release);
+			for (const cell of row.cells) {
+				const td = document.createElement('td');
+				// A cell opens its run; a cell with no run opens Gitea's run list filtered
+				// by that environment's workflow file, which is the same history (E8, D4).
+				const href = cell.run_url ||
+					`${subURL}/${row.repo_full_name}/actions?workflow=deploy-${encodeURIComponent(cell.environment)}.yaml`;
+				td.append(link(cell.symbol, href, `${row.release_tag} → ${cell.environment}: ${cell.state}`));
+				tr.append(td);
+			}
+			return tr;
+		}));
+	}
+} catch (err) {
+	fail(String(err), 'Check that you are signed in and that the delivery API is reachable at ' + base + '.');
+}
+</script>
+{{template "base/footer" .}}

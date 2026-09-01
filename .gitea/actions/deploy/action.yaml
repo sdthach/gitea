@@ -1,0 +1,99 @@
+# Copyright 2026 The Gitea Authors. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# The shared deploy steps, called by every .gitea/workflows/deploy-<env>.yaml (D2, D3).
+#
+# It is a composite ACTION rather than a reusable workflow. A reusable workflow's jobs are
+# expanded from the called file, so the calling job's `environment:` literal would no longer
+# be the one the fork reads back when it narrows secrets (F4), and the run's workflow_id
+# would stop being a proxy for the environment (D4). A composite action keeps both: the job
+# stays in deploy-<env>.yaml, declares `environment:` as a literal, and shares its steps.
+
+name: Record a deployment
+description: Posts the deploy commit status and moves the environment's pointer tag.
+
+inputs:
+  environment:
+    description: The environment being deployed to. The caller passes its own literal.
+    required: true
+  token:
+    description: Token used to post the commit status. The per-run token is enough.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Post the deploy commit status
+      shell: bash
+      env:
+        DELIVERY_ENVIRONMENT: ${{ inputs.environment }}
+        DELIVERY_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        tag="${GITHUB_REF_NAME}"
+        if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+          echo "::error::this workflow was dispatched against ${GITHUB_REF_TYPE} '${tag}', not a release tag"
+          echo "Suggested action: dispatch it with the release tag as Ref (D5); a deployment points at a release, never at a version string."
+          exit 1
+        fi
+
+        api="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
+        auth=(-H "Authorization: token ${DELIVERY_TOKEN}")
+
+        if ! release=$(curl -fsSL "${auth[@]}" "${api}/releases/tags/${tag}"); then
+          echo "::error::no release is cut for tag ${tag}"
+          echo "Suggested action: cut the release first; the release owns version identity and the deployment only points at it (D1)."
+          exit 1
+        fi
+
+        # The status goes against the commit the RELEASE resolves to. Measured at the pin:
+        # services/release/release.go sets Release.Sha1 to the tag's commit, and
+        # routers/web/repo/release.go bulk-loads statuses with
+        # GetLatestCommitStatusForRepoCommitIDs over each release's Sha1. A status posted
+        # against any other commit — including the release's target_commitish, which is
+        # usually a branch name — passes every API check while leaving the release page
+        # blank. GITHUB_SHA is that commit, because the run was dispatched at the tag; the
+        # comparison below is what proves it rather than assuming it.
+        #
+        # The published API Release has no sha field, so the tag is resolved with git.
+        release_sha=$(git rev-parse "refs/tags/${tag}^{commit}")
+        if [ "${release_sha}" != "${GITHUB_SHA}" ]; then
+          echo "::error::the run is at ${GITHUB_SHA} but release ${tag} resolves to ${release_sha}"
+          echo "Suggested action: re-dispatch the workflow with the release tag as Ref (D5) so the status lands on the commit the release page reads."
+          exit 1
+        fi
+        printf '%s' "${release}" | jq -e '.tag_name' > /dev/null
+
+        run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_NUMBER}"
+
+        # curl, not a wrapper that builds map[string]string before marshalling: the payload
+        # has to stay typed JSON (A10).
+        jq -n \
+          --arg context "deploy/${DELIVERY_ENVIRONMENT}" \
+          --arg description "${tag}" \
+          --arg target_url "${run_url}" \
+          '{state: "success", context: $context, description: $description, target_url: $target_url}' \
+        | curl -fsSL -X POST "${auth[@]}" \
+            -H 'Content-Type: application/json' \
+            --data @- \
+            "${api}/statuses/${GITHUB_SHA}" > /dev/null
+
+        echo "posted deploy/${DELIVERY_ENVIRONMENT} = ${tag} against ${GITHUB_SHA}"
+
+    - name: Move the environment's pointer tag
+      shell: bash
+      env:
+        DELIVERY_ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        set -euo pipefail
+
+        # A moving tag, force-updated on every deploy, so "what is live in <env>" is
+        # answerable from the forge alone with no service running (D3).
+        pointer="deployed/${DELIVERY_ENVIRONMENT}"
+        git config user.name "${GITHUB_ACTOR}"
+        git config user.email "${GITHUB_ACTOR}@users.noreply.${GITHUB_SERVER_URL#*://}"
+        git tag --force "${pointer}" "${GITHUB_SHA}"
+        git push --force origin "refs/tags/${pointer}"
+
+        echo "${pointer} now points at ${GITHUB_SHA} (${GITHUB_REF_NAME})"

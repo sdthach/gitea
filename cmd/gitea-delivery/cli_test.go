@@ -64,6 +64,10 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 		"repo-environments":        {[]string{"repo-environments", "acme", "web"}, "/api/delivery/v1/repos/acme/web/environments"},
 		"repo-environment":         {[]string{"repo-environment", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod"},
 		"repo-environment-secrets": {[]string{"repo-environment-secrets", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod/secrets"},
+		"deployments":              {[]string{"deployments"}, "/api/delivery/v1/deployments"},
+		"audit":                    {[]string{"audit"}, "/api/delivery/v1/audit"},
+		"releases":                 {[]string{"releases", "acme", "web"}, "/api/delivery/v1/repos/acme/web/releases"},
+		"grid":                     {[]string{"grid"}, "/api/delivery/v1/grid"},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 
@@ -183,7 +187,7 @@ func TestUsageErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown command", []string{"deployments"}, "unknown command"},
+		{"unknown command", []string{"no-such-command"}, "unknown command"},
 		{"missing positional", []string{"repo-environment", "acme"}, "positional"},
 		{"filter with no equals", []string{"environments", "--filter", "broken"}, "no '='"},
 	}

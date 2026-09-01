@@ -19,6 +19,7 @@ import (
 
 const (
 	tplEnvironment templates.TplName = "delivery/environment"
+	tplGrid        templates.TplName = "delivery/grid"
 )
 
 // PagesEnabled is the settings gate, mirroring reqMilestonesDashboardPageEnabled so the
@@ -39,6 +40,18 @@ func Environment(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplEnvironment)
 }
 
+// Grid renders /delivery/grid: releases as rows, environments as columns (E7). Like every
+// other page it is a client of a documented endpoint and reads nothing the API does not
+// serve (E18, I14) — including the cell states, which are projected server-side so the page
+// and the CLI cannot disagree about what a cell means.
+func Grid(ctx *context.Context) {
+	ctx.Data["Title"] = "Delivery grid"
+	ctx.Data["PageIsDelivery"] = true
+	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
+	ctx.Data["AppSubURL"] = setting.AppSubURL
+	ctx.HTML(http.StatusOK, tplGrid)
+}
+
 // RouteRegistrar is the slice of *web.Router this package needs. Taking an interface keeps
 // the registration testable without standing up a router.
 type RouteRegistrar interface {
@@ -51,4 +64,5 @@ type RouteRegistrar interface {
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/delivery/environments", reqSignIn, PagesEnabled, Environment)
 	m.Get("/delivery/environments/{name}", reqSignIn, PagesEnabled, Environment)
+	m.Get("/delivery/grid", reqSignIn, PagesEnabled, Grid)
 }

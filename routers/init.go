@@ -11,7 +11,6 @@ import (
 
 	"gitea.dev/models"
 	authmodel "gitea.dev/models/auth"
-	delivery_model "gitea.dev/models/delivery" // delivery fork spoke (F2/F6/M5)
 	"gitea.dev/modules/cache"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
@@ -40,6 +39,7 @@ import (
 	"gitea.dev/services/auth/source/oauth2"
 	"gitea.dev/services/automerge"
 	"gitea.dev/services/cron"
+	delivery_service "gitea.dev/services/delivery" // delivery fork spoke (F2/F6/M5)
 	feed_service "gitea.dev/services/feed"
 	indexer_service "gitea.dev/services/indexer"
 	"gitea.dev/services/mailer"
@@ -140,7 +140,7 @@ func InitWebInstalled(ctx context.Context) {
 	log.Info("ORM engine initialization successful!")
 	mustInit(system.Init)
 	mustInitCtx(ctx, oauth2.Init)
-	mustInitCtx(ctx, delivery_model.Init) // delivery fork spoke (F2/F6/M5)
+	mustInitCtx(ctx, delivery_service.Init) // delivery fork spoke (F2/F6/M5)
 	mustInitCtx(ctx, oauth2_provider.Init)
 	mustInit(release_service.Init)
 

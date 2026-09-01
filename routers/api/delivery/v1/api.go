@@ -42,6 +42,10 @@ func endpoints() []*endpoint {
 		getRepoEnvironmentEndpoint(),
 		listRepoEnvironmentSecretsEndpoint(),
 		listReposEndpoint(),
+		listDeploymentsEndpoint(),
+		listAuditEndpoint(),
+		listReleasesEndpoint(),
+		getGridEndpoint(),
 	}
 }
 
