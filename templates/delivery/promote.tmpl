@@ -15,6 +15,19 @@
 			<p><strong>Suggested action:</strong> <span id="delivery-error-action"></span></p>
 		</div>
 
+		<div id="delivery-token-box" class="ui warning message tw-hidden">
+			<div class="header">This page needs an API token</div>
+			<p>
+				Planning and dispatching a deploy authenticate with a token, never with your browser
+				session, so that no other site holding your cookie can release one. Create a token
+				under Settings &gt; Applications and paste it here; it is kept in this tab only.
+			</p>
+			<div class="ui action input">
+				<input id="delivery-token" type="password" autocomplete="off" placeholder="API token">
+				<button id="delivery-token-save" class="ui primary button" type="button">Use token</button>
+			</div>
+		</div>
+
 		<div id="delivery-warning" class="ui warning message tw-hidden">
 			<div class="header">Out of sequence</div>
 			<p id="delivery-warning-message"></p>
@@ -60,6 +73,15 @@ const request = {
 	environment: params.get('environment') ?? '',
 	release_tag: params.get('release_tag') ?? '',
 };
+const tokenKey = 'delivery-api-token';
+function storedToken() {
+	try {
+		return window.sessionStorage.getItem(tokenKey) ?? '';
+	} catch {
+		return '';
+	}
+}
+
 const confirmButton = document.querySelector('#delivery-confirm');
 const overrideBox = document.querySelector('#delivery-override');
 const reasonField = document.querySelector('#override-reason');
@@ -81,11 +103,17 @@ function fail(header, message, action) {
 async function post(confirm, overrideReason) {
 	const body = {...request, confirm};
 	if (overrideReason) body.override_reason = overrideReason;
+	const headers = {'content-type': 'application/json', accept: 'application/json'};
+	const token = storedToken();
+	if (token) headers.authorization = `token ${token}`;
 	const resp = await fetch(`${base}/deployments`, {
 		method: 'POST',
-		headers: {'content-type': 'application/json', accept: 'application/json'},
+		headers,
 		body: JSON.stringify(body),
 	});
+	if (resp.status === 401 || resp.status === 403) {
+		document.querySelector('#delivery-token-box').classList.remove('tw-hidden');
+	}
 	return {status: resp.status, payload: await resp.json()};
 }
 
@@ -147,7 +175,9 @@ try {
 			'Open this page from a grid cell, which fills all three in.');
 	} else {
 		const {status, payload} = await post(false, '');
-		if (status >= 400 && status !== 403) {
+		// A 403 is normally the sequence rule refusing, which renders as a plan. An auth 403
+		// carries no plan at all, so it must not reach renderPlan.
+		if (status >= 400 && (status !== 403 || payload.code === 'sign_in_required')) {
 			fail('Could not plan this deploy', payload.message ?? `the API returned ${status}`,
 				payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
 		} else {
@@ -158,5 +188,16 @@ try {
 	fail('Could not plan this deploy', String(err),
 		'Check that you are signed in and that the delivery API is reachable at ' + base + '.');
 }
+
+document.querySelector('#delivery-token-save').addEventListener('click', () => {
+	try {
+		window.sessionStorage.setItem(tokenKey, document.querySelector('#delivery-token').value.trim());
+	} catch {
+		fail('Could not keep the token', 'this browser refused to keep the token for this tab',
+			'Allow site data for this origin, or use the gitea-delivery CLI instead.');
+		return;
+	}
+	window.location.reload();
+});
 </script>
 {{template "base/footer" .}}

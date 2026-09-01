@@ -110,7 +110,7 @@ async function decide(approval, verb) {
 	const resp = await fetch(`${base}/approvals/${approval.id}/${verb}`, {method: 'POST', headers: headers()});
 	const payload = await resp.json().catch(() => ({}));
 	if (!resp.ok) {
-		if (resp.status === 401) tokenBox.classList.remove('tw-hidden');
+		if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
 		fail(payload.message ?? `the API returned ${resp.status}`,
 			payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
 		return;
@@ -127,7 +127,7 @@ async function load() {
 		const resp = await fetch(`${base}/approvals?${params}`, {headers: headers()});
 		payload = await resp.json();
 		if (!resp.ok) {
-			if (resp.status === 401) tokenBox.classList.remove('tw-hidden');
+			if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
 			fail(payload.message ?? `the API returned ${resp.status}`,
 				payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
 			body.replaceChildren();

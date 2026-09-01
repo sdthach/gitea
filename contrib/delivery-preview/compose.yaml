@@ -1,0 +1,58 @@
+name: gitea-preview
+
+services:
+  db:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: gitea
+      POSTGRES_USER: gitea
+      POSTGRES_PASSWORD: preview
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitea -d gitea"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  gitea:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GITEA_WORK_DIR: /data/gitea
+      GITEA_CUSTOM: /data/gitea/custom
+      GITEA_APP_INI: /data/gitea/custom/conf/app.ini
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - data:/data
+      # live assets: edit a .tmpl in the repo and reload the page, no restart
+      - ../../templates:/app/gitea/templates:ro
+      - ../../public:/app/gitea/public:ro
+      - ../../options:/app/gitea/options:ro
+
+  # Without a runner a deploy dispatches but no job is ever assigned, so the approval gate
+  # — which holds at task assignment (models/actions/task.go) — never fires.
+  runner:
+    image: gitea/act_runner:0.6.1
+    profiles: ["runner"]
+    depends_on:
+      - gitea
+    environment:
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${RUNNER_TOKEN:?run up.sh, which generates one}
+      GITEA_RUNNER_NAME: preview
+      CONFIG_FILE: /config.yaml
+    volumes:
+      - ./runner-config.yaml:/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner:/data
+
+volumes:
+  db:
+  data:
+  runner:

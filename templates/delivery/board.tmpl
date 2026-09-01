@@ -200,7 +200,7 @@ async function post(path, payload) {
 	});
 	const data = await resp.json().catch(() => ({}));
 	if (!resp.ok) {
-		if (resp.status === 401) tokenBox.classList.remove('tw-hidden');
+		if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
 		fail(data.message ?? `the API returned ${resp.status}`,
 			data.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
 		return;
@@ -237,7 +237,7 @@ async function load() {
 		const resp = await fetch(`${base}/board?${params}`, {headers: headers(false)});
 		payload = await resp.json();
 		if (!resp.ok) {
-			if (resp.status === 401) tokenBox.classList.remove('tw-hidden');
+			if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
 			// A build without the Projects API, or a repository with the unit switched
 			// off, answers here with the reason and what to do about it — the board
 			// degrades rather than breaking, and the timeline still renders.
