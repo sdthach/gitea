@@ -638,6 +638,10 @@ lockfile-check:
 generate-gitignore: ## update gitignore files
 	$(GO) run build/generate-gitignores.go
 
+.PHONY: generate-themes
+generate-themes: ## generate dracula pro theme css
+	$(GO) run build/generate-themes.go
+
 .PHONY: generate-images
 generate-images: | node_modules ## generate images
 	cd tools && node generate-images.ts $(TAGS)

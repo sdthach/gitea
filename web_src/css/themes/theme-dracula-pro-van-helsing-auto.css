@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-van-helsing-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-van-helsing-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Van Helsing Auto";
+  --theme-color-scheme: "auto";
+}
