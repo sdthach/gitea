@@ -91,6 +91,21 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 		"approvals": {[]string{"approvals"}, "/api/delivery/v1/approvals", ""},
 		"approve":   {[]string{"approve", "42"}, "/api/delivery/v1/approvals/42/approve", http.MethodPost},
 		"reject":    {[]string{"reject", "42"}, "/api/delivery/v1/approvals/42/reject", http.MethodPost},
+		// slice 7: the board with its swimlanes, its two writes, and the timeline, which
+		// needs no Projects API and so is reachable where the board is not (K3, O13).
+		"board": {
+			[]string{"board", "--filter", "repo_id=1", "--filter", "project_id=5", "--filter", "group_by=type"},
+			"/api/delivery/v1/board", "",
+		},
+		"timeline": {[]string{"timeline", "--filter", "repo_id=1"}, "/api/delivery/v1/timeline", ""},
+		"board-move-column": {
+			[]string{"board-move-column", "--repo", "acme/web", "--project-id", "5", "--column-id", "12", "9042"},
+			"/api/delivery/v1/board/cards/9042/column", http.MethodPost,
+		},
+		"board-move-lane": {
+			[]string{"board-move-lane", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--lane", "bug", "9042"},
+			"/api/delivery/v1/board/cards/9042/lane", http.MethodPost,
+		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

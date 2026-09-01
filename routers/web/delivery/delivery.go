@@ -69,4 +69,6 @@ func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/delivery/promote", reqSignIn, PagesEnabled, Promote)                         // slice 5
 	m.Get("/delivery/approvals", reqSignIn, PagesEnabled, Approvals)                     // slice 6
 	m.Get("/delivery/environments/{name}/approvals", reqSignIn, PagesEnabled, Approvals) // slice 6
+	m.Get("/delivery/board", reqSignIn, PagesEnabled, Board)                             // slice 7
+	m.Get("/delivery/timeline", reqSignIn, PagesEnabled, Timeline)                       // slice 7
 }

@@ -101,6 +101,16 @@ var forkPages = []struct {
 		endpoints: []string{"/approvals"},
 		fetch:     "/approvals?",
 	},
+	{ // slice 7
+		template:  "board.tmpl",
+		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/lane"},
+		fetch:     "/board?",
+	},
+	{ // slice 7
+		template:  "timeline.tmpl",
+		endpoints: []string{"/timeline"},
+		fetch:     "/timeline?",
+	},
 }
 
 func TestEveryPageIsListed(t *testing.T) {
@@ -176,6 +186,7 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 		"/delivery/ci",                                                   // slice 8
 		"/delivery/promote",                                              // slice 5
 		"/delivery/approvals", "/delivery/environments/{name}/approvals", // slice 6
+		"/delivery/board", "/delivery/timeline", // slice 7
 	}, r.patterns)
 	for _, handlers := range r.handlers {
 		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate (F13)")

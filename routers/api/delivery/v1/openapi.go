@@ -325,6 +325,34 @@ var componentSchemas = map[string]any{
 		"can_approve":        prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces (SC 21)."),
 		"deployment":         prop("object", "The deployment row for this run, when ?expand=deployment was asked for (I9)."),
 	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "approvals_count", "required_approvals", "created_unix", "can_approve"),
+	"Board": objectSchema(map[string]any{
+		"repo_id":        prop("integer", "Repository the board belongs to."),
+		"repo_full_name": prop("string", "owner/name."),
+		"project_id":     prop("integer", "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json."),
+		"title":          prop("string", "The board's title."),
+		"group_by":       enumProp("The active lane grouping. A view setting, never stored on the project (O2).", delivery_service.Groupings),
+		"columns":        arrayProp("object", "Gitea's own project columns, in its own order. Each carries column_id, title, color and default."),
+		"lanes": arrayProp("object", "The horizontal lanes Gitea does not model (O1). Each carries key, label, is_empty_value, "+
+			"cards and one entry per column, so the result is a rectangle. The lane whose is_empty_value is true holds the "+
+			"issues with no value for the active grouping (O3)."),
+		"can_write":      prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
+		"can_edit_issue": prop("boolean", "Whether the caller may move a card between lanes, which edits the issue's own label or assignee."),
+	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "lanes", "can_write", "can_edit_issue"),
+	"Timeline": objectSchema(map[string]any{
+		"repo_id":        prop("integer", "Repository the chart covers."),
+		"repo_full_name": prop("string", "owner/name."),
+		"bars": arrayProp("object", "One bar per issue ccpm manages. Each carries issue_id, number, title, url, epic, milestone, "+
+			"start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of "+
+			strings.Join(delivery_service.StartSources, ", ")+" and end_source one of "+
+			strings.Join(delivery_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record (O8)."),
+		"arrows": arrayProp("object", "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of "+
+			strings.Join(delivery_service.ArrowKinds, ", ")+" — a hard gate the forge acts on, or a sequencing hint it does not (O9, N9)."),
+		"spans": arrayProp("object", "Epic and milestone rows spanning earliest start to latest end of their children, with "+
+			"ccpm's own task-close percentage as progress (O11)."),
+		"unmanaged": arrayProp("object", "Issues with no bar, each with the reason and a suggested action. An issue ccpm does "+
+			"not manage has no start to draw and is listed rather than given a fabricated bar (O10)."),
+		"truncated": prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
+	}, "repo_id", "repo_full_name", "bars", "arrows", "spans", "unmanaged", "truncated"),
 	"Error": objectSchema(map[string]any{
 		"code":             prop("string", "Machine-readable rejection code."),
 		"message":          prop("string", "What went wrong."),

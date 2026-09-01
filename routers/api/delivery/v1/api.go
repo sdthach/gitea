@@ -46,15 +46,19 @@ func endpoints() []*endpoint {
 		listAuditEndpoint(),
 		listReleasesEndpoint(),
 		getGridEndpoint(),
-		createDeploymentEndpoint(),  // slice 5
-		listRunsEndpoint(),          // slice 8
-		listWorkflowsEndpoint(),     // slice 8
-		getOverviewEndpoint(),       // slice 8
-		getOverviewTrendsEndpoint(), // slice 8
-		listOverviewReposEndpoint(), // slice 8
-		listApprovalsEndpoint(),     // slice 6
-		approveEndpoint(),           // slice 6
-		rejectEndpoint(),            // slice 6
+		createDeploymentEndpoint(),    // slice 5
+		listRunsEndpoint(),            // slice 8
+		listWorkflowsEndpoint(),       // slice 8
+		getOverviewEndpoint(),         // slice 8
+		getOverviewTrendsEndpoint(),   // slice 8
+		listOverviewReposEndpoint(),   // slice 8
+		listApprovalsEndpoint(),       // slice 6
+		approveEndpoint(),             // slice 6
+		rejectEndpoint(),              // slice 6
+		getBoardEndpoint(),            // slice 7
+		moveBoardCardColumnEndpoint(), // slice 7
+		moveBoardCardLaneEndpoint(),   // slice 7
+		getTimelineEndpoint(),         // slice 7
 	}
 }
 

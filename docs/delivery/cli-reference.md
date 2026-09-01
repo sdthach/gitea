@@ -12,6 +12,9 @@ Commands:
   approvals                 List held deploys and their approval state
   approve                   Approve a held deploy
   audit                     List delivery audit events across every repository the caller can see
+  board                     A project board with horizontal swimlanes
+  board-move-column         Move a card between the board's columns
+  board-move-lane           Move a card between the board's lanes
   deploy                    Plan or dispatch a deploy of a release to an environment
   deployments               List deployments across every repository the caller can see
   environments              List environments across every repository the caller can see
@@ -27,6 +30,7 @@ Commands:
   repos                     List the repositories the caller can see delivery data for
   rollback                  Plan or dispatch a deploy of a release to an environment
   runs                      List Actions runs across every repository the caller can see
+  timeline                  The delivery timeline: one bar per issue, with dependency arrows
   workflows                 List workflows with their run counts, success rate and average duration
 
 Every command accepts the section I query grammar as flags:
@@ -130,6 +134,122 @@ Flags:
     	asc or desc (I5)
   -q string
     	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery board
+
+```
+gitea-delivery board — A project board with horizontal swimlanes
+
+  GET /board
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery board-move-column
+
+```
+gitea-delivery board-move-column — Move a card between the board's columns
+
+  POST /board/cards/{issue_id}/column
+
+Positional arguments: issue_id
+
+Flags:
+  -column-id string
+    	required. The column to move the card into.
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -project-id string
+    	required. The board the card is on.
+  -q string
+    	free-text search (I10)
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -sorting string
+    	Position within the column. Omit to append.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery board-move-lane
+
+```
+gitea-delivery board-move-lane — Move a card between the board's lanes
+
+  POST /board/cards/{issue_id}/lane
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -group-by string
+    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write (O4).
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -lane string
+    	The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -project-id string
+    	required. The board the card is on.
+  -q string
+    	free-text search (I10)
+  -repo string
+    	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
@@ -622,6 +742,38 @@ Flags:
 gitea-delivery runs — List Actions runs across every repository the caller can see
 
   GET /runs
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery timeline
+
+```
+gitea-delivery timeline — The delivery timeline: one bar per issue, with dependency arrows
+
+  GET /timeline
 
 Flags:
   -cursor string

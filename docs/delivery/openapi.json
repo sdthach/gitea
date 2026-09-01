@@ -188,6 +188,69 @@
         ],
         "type": "object"
       },
+      "Board": {
+        "properties": {
+          "can_edit_issue": {
+            "description": "Whether the caller may move a card between lanes, which edits the issue's own label or assignee.",
+            "type": "boolean"
+          },
+          "can_write": {
+            "description": "Whether the caller may move a card between columns, by the same check that endpoint enforces.",
+            "type": "boolean"
+          },
+          "columns": {
+            "description": "Gitea's own project columns, in its own order. Each carries column_id, title, color and default.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "group_by": {
+            "description": "The active lane grouping. A view setting, never stored on the project (O2).",
+            "enum": [
+              "type",
+              "assignee",
+              "epic",
+              "none"
+            ],
+            "type": "string"
+          },
+          "lanes": {
+            "description": "The horizontal lanes Gitea does not model (O1). Each carries key, label, is_empty_value, cards and one entry per column, so the result is a rectangle. The lane whose is_empty_value is true holds the issues with no value for the active grouping (O3).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "project_id": {
+            "description": "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json.",
+            "type": "integer"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the board belongs to.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The board's title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "can_edit_issue",
+          "can_write",
+          "columns",
+          "group_by",
+          "lanes",
+          "project_id",
+          "repo_full_name",
+          "repo_id"
+        ],
+        "type": "object"
+      },
       "Deployment": {
         "properties": {
           "approval": {
@@ -790,6 +853,60 @@
           "total_duration_seconds",
           "total_runs",
           "window"
+        ],
+        "type": "object"
+      },
+      "Timeline": {
+        "properties": {
+          "arrows": {
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not (O9, N9).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "bars": {
+            "description": "One bar per issue ccpm manages. Each carries issue_id, number, title, url, epic, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of ccpm_started, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record (O8).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the chart covers.",
+            "type": "integer"
+          },
+          "spans": {
+            "description": "Epic and milestone rows spanning earliest start to latest end of their children, with ccpm's own task-close percentage as progress (O11).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so.",
+            "type": "boolean"
+          },
+          "unmanaged": {
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue ccpm does not manage has no start to draw and is listed rather than given a fabricated bar (O10).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "arrows",
+          "bars",
+          "repo_full_name",
+          "repo_id",
+          "spans",
+          "truncated",
+          "unmanaged"
         ],
         "type": "object"
       },
@@ -2234,6 +2351,303 @@
         "summary": "List delivery audit events across every repository the caller can see",
         "tags": [
           "audit"
+        ]
+      }
+    },
+    "/board": {
+      "get": {
+        "description": "Gitea's project columns rendered vertically, with horizontal lanes it does not model at all: project.Column carries title, sorting, colour and project and no lane, row or group field, so lanes are a rendering over rows the Projects API already returns — no schema change and no fork change (O1). group_by selects the lane dimension at view time and is never stored on the project, so two people may group the same board differently (O2). An issue with no value for the active grouping falls into an explicit empty-value lane; nothing disappears from a board because a field is unset (O3). Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board (O5, C3). The /delivery/board page is a client of this endpoint (E18, I14).",
+        "operationId": "getBoard",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on project_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on group_by. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "A project board with horizontal swimlanes",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/cards/{issue_id}/column": {
+      "post": {
+        "description": "The first of the board's exactly two writes (O4). It is the same operation ccpm's board-issue-move verb performs over Gitea's own Projects API, reached here as the calling user. Authorized by Gitea's own write check on the Projects unit (E10, I13).",
+        "operationId": "moveBoardCardColumn",
+        "parameters": [
+          {
+            "description": "The issue's GLOBAL id, which is what Gitea's own project endpoints address a card by — not its per-repository number.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "column_id": {
+                    "description": "The column to move the card into.",
+                    "type": "integer"
+                  },
+                  "project_id": {
+                    "description": "The board the card is on.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "sorting": {
+                    "description": "Position within the column. Omit to append.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "column_id",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a card between the board's columns",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/cards/{issue_id}/lane": {
+      "post": {
+        "description": "The second and last of the board's writes (O4). A lane IS the grouping value, so moving between lanes edits the field itself: the type: label, the epic: label, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so (O4, A21). Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "operationId": "moveBoardCardLane",
+        "parameters": [
+          {
+            "description": "The issue's GLOBAL id, which is what Gitea's own project endpoints address a card by — not its per-repository number.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group_by": {
+                    "description": "The active grouping. A lane move is refused when this is none, because there is nothing to write (O4).",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "epic",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "lane": {
+                    "description": "The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.",
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "description": "The board the card is on.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "group_by",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a card between the board's lanes",
+        "tags": [
+          "board"
         ]
       }
     },
@@ -6192,6 +6606,114 @@
         "summary": "List Actions runs across every repository the caller can see",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/timeline": {
+      "get": {
+        "description": "Needs no Projects API, so it renders on a build the board cannot (O6, SC 38). Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start (O7). EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure (O8). Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing (O9, N9). An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar (O10). Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced (O11). Scoped by Gitea's own permission check on the Issues unit (E12, I13). The /delivery/timeline page is a client of this endpoint (E18, I14).",
+        "operationId": "getTimeline",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on epic. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "epic",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on milestone_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "milestone_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on state. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The delivery timeline: one bar per issue, with dependency arrows",
+        "tags": [
+          "timeline"
         ]
       }
     },
