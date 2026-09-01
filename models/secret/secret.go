@@ -10,6 +10,7 @@ import (
 
 	actions_model "gitea.dev/models/actions"
 	"gitea.dev/models/db"
+	delivery_model "gitea.dev/models/delivery" // delivery fork spoke (F2/F4)
 	actions_module "gitea.dev/modules/actions"
 	"gitea.dev/modules/actions/jobparser"
 	"gitea.dev/modules/json"
@@ -190,6 +191,7 @@ func GetSecretsOfTask(ctx context.Context, task *actions_model.ActionTask) (map[
 		baseSecrets[secret.Name] = v
 	}
 
+	baseSecrets = delivery_model.NarrowSecretsToJobEnvironment(ctx, task.Job, baseSecrets) // delivery fork spoke (F2/F4)
 	return getScopedSecretsForJob(ctx, task.Job, baseSecrets)
 }
 

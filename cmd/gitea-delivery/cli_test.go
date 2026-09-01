@@ -1,0 +1,300 @@
+// Copyright 2026 The Gitea Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package main
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// recorder is the recorded API every CLI test runs against. No test reaches a live server
+// (J13, J10): each asserts the request the CLI composed and the exit code it returned.
+type recorder struct {
+	requests []*http.Request
+	status   int
+	body     string
+}
+
+func (r *recorder) Do(req *http.Request) (*http.Response, error) {
+	r.requests = append(r.requests, req)
+	status := r.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(r.body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}, nil
+}
+
+func withRecorder(t *testing.T, rec *recorder) {
+	t.Helper()
+	previous := Transport
+	Transport = rec
+	t.Cleanup(func() { Transport = previous })
+	t.Setenv("GITEA_DELIVERY_SERVER", "https://gitea.example.invalid")
+	t.Setenv("GITEA_DELIVERY_TOKEN", "t0ken")
+	t.Setenv("FORGE_TOKEN", "")
+	t.Setenv("GITEA_TOKEN", "")
+}
+
+func exec(t *testing.T, rec *recorder, args ...string) (string, string, *Error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	err := run(args, &stdout, &stderr)
+	return stdout.String(), stderr.String(), err
+}
+
+// TestEveryCommandComposesItsRequest is one test per command (J13).
+func TestEveryCommandComposesItsRequest(t *testing.T) {
+	cases := map[string]struct {
+		args     []string
+		wantPath string
+	}{
+		"environments":             {[]string{"environments"}, "/api/delivery/v1/environments"},
+		"repos":                    {[]string{"repos"}, "/api/delivery/v1/repos"},
+		"repo-environments":        {[]string{"repo-environments", "acme", "web"}, "/api/delivery/v1/repos/acme/web/environments"},
+		"repo-environment":         {[]string{"repo-environment", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod"},
+		"repo-environment-secrets": {[]string{"repo-environment-secrets", "acme", "web", "prod"}, "/api/delivery/v1/repos/acme/web/environments/prod/secrets"},
+	}
+	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
+
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			cmd, ok := lookup(name)
+			require.True(t, ok)
+			body := "[]"
+			if !cmd.IsList {
+				body = "{}"
+			}
+			rec := &recorder{body: body}
+			withRecorder(t, rec)
+
+			_, _, err := exec(t, rec, c.args...)
+			require.Nil(t, err)
+			require.Len(t, rec.requests, 1)
+			req := rec.requests[0]
+			assert.Equal(t, http.MethodGet, req.Method)
+			assert.Equal(t, c.wantPath, req.URL.Path)
+			assert.Equal(t, "token t0ken", req.Header.Get("Authorization"))
+		})
+	}
+}
+
+// TestFlagsBecomeQueryParameters covers K4: the CLI does not filter client-side.
+func TestFlagsBecomeQueryParameters(t *testing.T) {
+	rec := &recorder{body: "[]"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "environments",
+		"--filter", "sort_order[gte]=20",
+		"--filter", "approval_policy=none",
+		"-q", "prod",
+		"--sort-by", "name",
+		"--order", "desc",
+		"--limit", "20",
+		"--offset", "40")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	q := rec.requests[0].URL.Query()
+	assert.Equal(t, "20", q.Get("sort_order[gte]"))
+	assert.Equal(t, "none", q.Get("approval_policy"))
+	assert.Equal(t, "prod", q.Get("q"))
+	assert.Equal(t, "name", q.Get("sort_by"))
+	assert.Equal(t, "desc", q.Get("order"))
+	assert.Equal(t, "20", q.Get("limit"))
+	assert.Equal(t, "3", q.Get("page"), "--offset 40 at --limit 20 is the third 1-based page")
+}
+
+func TestRepeatedFilterOnOneFieldIsSentTwice(t *testing.T) {
+	rec := &recorder{body: "[]"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "environments", "--filter", "sort_order[gte]=10", "--filter", "sort_order[lte]=40")
+	require.Nil(t, err)
+	q := rec.requests[0].URL.Query()
+	assert.Equal(t, []string{"10"}, q["sort_order[gte]"])
+	assert.Equal(t, []string{"40"}, q["sort_order[lte]"])
+}
+
+// TestJSONIsVerbatim covers K5.
+func TestJSONIsVerbatim(t *testing.T) {
+	payload := `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`
+	rec := &recorder{body: payload}
+	withRecorder(t, rec)
+
+	stdout, _, err := exec(t, rec, "environments", "--json")
+	require.Nil(t, err)
+	assert.Equal(t, payload+"\n", stdout, "--json emits the API response unshaped")
+}
+
+// TestTableIsTheDefaultAndNeverTheOnlyOutput covers K5's other half.
+func TestTableIsTheDefault(t *testing.T) {
+	rec := &recorder{body: `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`}
+	withRecorder(t, rec)
+
+	stdout, _, err := exec(t, rec, "environments")
+	require.Nil(t, err)
+	assert.Contains(t, stdout, "NAME")
+	assert.Contains(t, stdout, "prod")
+	assert.Contains(t, stdout, "APPROVAL_POLICY")
+}
+
+// TestServerRejectionSurfacesItsSuggestedAction covers A21 across the CLI boundary.
+func TestServerRejectionSurfacesItsSuggestedAction(t *testing.T) {
+	rec := &recorder{
+		status: http.StatusBadRequest,
+		body:   `{"code":"unknown_filter_field","message":"\"colour\" is not a filterable field of \"environments\"","suggested_action":"Remove \"colour\".","accepted":["id","name"]}`,
+	}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "environments", "--filter", "colour=red")
+	require.NotNil(t, err)
+	assert.Equal(t, 1, err.ExitCode)
+	assert.Contains(t, err.Message, "colour")
+	assert.Contains(t, err.SuggestedAction, "Remove")
+	assert.Contains(t, err.SuggestedAction, "id, name", "the accepted set reaches the operator")
+}
+
+func TestRefusalExitsThree(t *testing.T) {
+	rec := &recorder{status: http.StatusForbidden, body: `{"code":"forbidden","message":"no","suggested_action":"Ask an admin."}`}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "environments")
+	require.NotNil(t, err)
+	assert.Equal(t, 3, err.ExitCode, "a refusal is distinguishable from a failed request")
+}
+
+func TestUsageErrors(t *testing.T) {
+	rec := &recorder{body: "[]"}
+	withRecorder(t, rec)
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unknown command", []string{"deployments"}, "unknown command"},
+		{"missing positional", []string{"repo-environment", "acme"}, "positional"},
+		{"filter with no equals", []string{"environments", "--filter", "broken"}, "no '='"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, err := exec(t, rec, c.args...)
+			require.NotNil(t, err)
+			assert.Equal(t, 2, err.ExitCode)
+			assert.Contains(t, err.Message, c.want)
+			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action (A21)")
+		})
+	}
+}
+
+func TestMissingCredentialsNameWhatToSet(t *testing.T) {
+	previous := Transport
+	Transport = &recorder{body: "[]"}
+	t.Cleanup(func() { Transport = previous })
+	for _, name := range append(append([]string{}, tokenSources...), serverSources...) {
+		t.Setenv(name, "")
+	}
+
+	_, _, err := exec(t, nil, "environments")
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "server")
+	assert.Contains(t, err.SuggestedAction, "--server")
+
+	t.Setenv("GITEA_DELIVERY_SERVER", "https://gitea.example.invalid")
+	_, _, err = exec(t, nil, "environments")
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "token")
+	assert.Contains(t, err.SuggestedAction, "user/settings/applications")
+}
+
+// TestCredentialPrecedence covers K8/B4: one token serves the adapter and the CLI.
+func TestCredentialPrecedence(t *testing.T) {
+	env := func(pairs map[string]string) func(string) (string, bool) {
+		return func(name string) (string, bool) { v, ok := pairs[name]; return v, ok }
+	}
+	cases := []struct {
+		name       string
+		flag       string
+		env        map[string]string
+		wantValue  string
+		wantSource string
+	}{
+		{"flag wins", "flagged", map[string]string{"GITEA_DELIVERY_TOKEN": "a"}, "flagged", "--token"},
+		{"delivery variable", "", map[string]string{"GITEA_DELIVERY_TOKEN": "a", "FORGE_TOKEN": "b"}, "a", "$GITEA_DELIVERY_TOKEN"},
+		{"forge variable", "", map[string]string{"FORGE_TOKEN": "b", "GITEA_TOKEN": "c"}, "b", "$FORGE_TOKEN"},
+		{"gitea variable", "", map[string]string{"GITEA_TOKEN": "c"}, "c", "$GITEA_TOKEN"},
+		{"empty is not set", "", map[string]string{"GITEA_DELIVERY_TOKEN": "", "GITEA_TOKEN": "c"}, "c", "$GITEA_TOKEN"},
+		{"nothing", "", nil, "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			value, source := ResolveToken(c.flag, env(c.env))
+			assert.Equal(t, c.wantValue, value)
+			assert.Equal(t, c.wantSource, source, "the CLI must be able to report which credential source won (B4)")
+		})
+	}
+}
+
+func TestResolveServerTrimsTrailingSlash(t *testing.T) {
+	value, source := ResolveServer("https://gitea.example.invalid/", func(string) (string, bool) { return "", false })
+	assert.Equal(t, "https://gitea.example.invalid", value)
+	assert.Equal(t, "--server", source)
+}
+
+func TestListOperationsIsStable(t *testing.T) {
+	var stdout bytes.Buffer
+	require.Nil(t, run([]string{"--list-operations"}, &stdout, io.Discard))
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	assert.Len(t, lines, len(Commands))
+	for _, line := range lines {
+		id, name, found := strings.Cut(line, "\t")
+		require.True(t, found)
+		assert.NotEmpty(t, id)
+		assert.NotEmpty(t, name)
+	}
+}
+
+// TestUsageListsEveryCommand covers the root --help, which is also the source the generated
+// command reference is rendered from (K11).
+func TestUsageListsEveryCommand(t *testing.T) {
+	for _, args := range [][]string{{}, {"--help"}, {"-h"}, {"help"}} {
+		var stdout bytes.Buffer
+		require.Nil(t, run(args, &stdout, io.Discard))
+		body := stdout.String()
+		for _, cmd := range Commands {
+			assert.Contains(t, body, cmd.Name, "help must list every command")
+			assert.Contains(t, body, cmd.Summary)
+		}
+		assert.Contains(t, body, "--json")
+		assert.Contains(t, body, "--filter")
+		assert.Contains(t, body, "Exit codes:", "the help states what each exit code means")
+		for _, source := range tokenSources {
+			assert.Contains(t, body, source, "help names every credential source it consults (K8)")
+		}
+	}
+}
+
+// TestSubcommandHelpGoesToStdoutAndExitsZero: --help is a request for documentation, not a
+// usage error, and the generated reference depends on both.
+func TestSubcommandHelpGoesToStdoutAndExitsZero(t *testing.T) {
+	for _, cmd := range Commands {
+		t.Run(cmd.Name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			require.Nil(t, run([]string{cmd.Name, "--help"}, &stdout, &stderr))
+			assert.Contains(t, stdout.String(), cmd.Summary)
+			assert.Contains(t, stdout.String(), cmd.Path)
+			assert.Empty(t, stderr.String(), "help is not an error, so nothing goes to stderr")
+		})
+	}
+}

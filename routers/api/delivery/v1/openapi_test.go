@@ -1,0 +1,160 @@
+// Copyright 2026 The Gitea Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package v1
+
+import (
+	"bytes"
+	"testing"
+
+	"gitea.dev/modules/json"
+	"gitea.dev/services/delivery/query"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestEveryEndpointIsDocumentedAndHandled is I15/I16 at the source: Routes mounts the
+// operation list, so an endpoint that is not documented cannot be served, and a documented
+// operation with no handler is a defect rather than a 404 to discover in production.
+func TestEveryEndpointIsDocumentedAndHandled(t *testing.T) {
+	seen := map[string]bool{}
+	for _, e := range endpoints() {
+		require.NotNil(t, e.Op, "an endpoint without an Operation cannot be documented")
+		require.NotNil(t, e.Handler, "operation %q has no handler", e.Op.ID)
+		assert.NotEmpty(t, e.Op.ID)
+		assert.NotEmpty(t, e.Op.Method)
+		assert.NotEmpty(t, e.Op.Path)
+		assert.NotEmpty(t, e.Op.Summary, "operation %q must summarise itself; the summary is the CLI's help text", e.Op.ID)
+		assert.NotEmpty(t, e.Op.Description)
+		assert.NotEmpty(t, e.Op.Tag)
+		assert.NotEmpty(t, e.Op.Response, "operation %q must name a published schema", e.Op.ID)
+		assert.Contains(t, Schemas(), e.Op.Response, "operation %q names schema %q, which the document does not publish", e.Op.ID, e.Op.Response)
+		assert.False(t, seen[e.Op.ID], "operation id %q is used twice", e.Op.ID)
+		seen[e.Op.ID] = true
+	}
+	assert.NotEmpty(t, seen)
+}
+
+// TestEveryListSpecIsTieBroken is I5: without a primary key to tie-break on, pagination
+// repeats and skips rows.
+func TestEveryListSpecIsTieBroken(t *testing.T) {
+	for _, op := range Operations() {
+		if op.Query == nil {
+			continue
+		}
+		assert.NotEmpty(t, op.Query.PrimaryKey, "list operation %q declares no primary key to tie-break on", op.ID)
+		for _, name := range op.Query.SortFields {
+			found := false
+			for _, f := range op.Query.Fields {
+				if f.Name == name {
+					found = true
+				}
+			}
+			assert.True(t, found, "operation %q sorts by %q, which it does not declare as a field", op.ID, name)
+		}
+		assert.NotEmpty(t, op.Query.Resource)
+	}
+}
+
+// TestPathParamsAppearInThePath catches a documented parameter the route never binds.
+func TestPathParamsAppearInThePath(t *testing.T) {
+	for _, op := range Operations() {
+		for _, p := range op.PathParams {
+			assert.Contains(t, op.Path, "{"+p.Name+"}", "operation %q documents path parameter %q that its path does not carry", op.ID, p.Name)
+			assert.True(t, p.Required, "a path parameter is always required")
+		}
+	}
+}
+
+// TestOpenAPIIsDeterministic is what makes the diff gate of I16 meaningful: a generator
+// whose output moved between runs would fail CI for no reason and be turned off.
+func TestOpenAPIIsDeterministic(t *testing.T) {
+	first, err := OpenAPI()
+	require.NoError(t, err)
+	second, err := OpenAPI()
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(first, second), "regenerating an unchanged registry must be byte-identical")
+}
+
+func TestOpenAPIDeclaresEveryOperation(t *testing.T) {
+	raw, err := OpenAPI()
+	require.NoError(t, err)
+
+	var doc struct {
+		OpenAPI string `json:"openapi"`
+		Paths   map[string]map[string]struct {
+			OperationID string           `json:"operationId"`
+			Parameters  []map[string]any `json:"parameters"`
+			Responses   map[string]any   `json:"responses"`
+		} `json:"paths"`
+		Components struct {
+			Schemas map[string]any `json:"schemas"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	assert.Equal(t, "3.0.3", doc.OpenAPI)
+
+	documented := map[string]bool{}
+	for _, methods := range doc.Paths {
+		for _, op := range methods {
+			documented[op.OperationID] = true
+			assert.Contains(t, op.Responses, "400", "every endpoint documents the rejection of I4")
+			assert.Contains(t, op.Responses, "403", "every endpoint documents Gitea's own permission refusal (I13)")
+		}
+	}
+	for _, op := range Operations() {
+		assert.True(t, documented[op.ID], "operation %q is served but absent from the document", op.ID)
+	}
+	assert.Contains(t, doc.Components.Schemas, "Error")
+}
+
+// TestSecretSchemaHasNoValueField is I12: a secret value is never readable over any
+// endpoint at any scope, so there is no field to forget to strip.
+func TestSecretSchemaHasNoValueField(t *testing.T) {
+	schema, ok := Schemas()["SecretName"]
+	require.True(t, ok)
+	props, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	for _, forbidden := range []string{"value", "data", "secret", "plaintext"} {
+		assert.NotContains(t, props, forbidden, "the secret schema must expose no value field")
+	}
+
+	raw, err := OpenAPI()
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), `"value"`, "no published schema exposes a secret value")
+}
+
+// TestGrammarParamsCoverEveryOperator makes the document the contract the CLI builds
+// against: a filter the server accepts but the document omits would be undiscoverable.
+func TestGrammarParamsCoverEveryOperator(t *testing.T) {
+	op := &Operation{Query: &query.Spec{
+		Resource:   "example",
+		Fields:     []query.Field{{Name: "size", Column: "size", Kind: query.KindInt}},
+		SortFields: []string{"size"},
+		PrimaryKey: "id",
+		Paging:     query.PagingOffset,
+	}}
+	names := map[string]bool{}
+	for _, p := range op.GrammarParams() {
+		names[p.Name] = true
+		assert.NotEmpty(t, p.Description, "parameter %q must document itself", p.Name)
+	}
+	for _, want := range []string{"size", "size[ne]", "size[lt]", "size[lte]", "size[gt]", "size[gte]", "size[in]", "sort_by", "order", "limit", "page"} {
+		assert.True(t, names[want], "the document omits %q", want)
+	}
+	assert.False(t, names["cursor"], "an offset-paged resource documents page, not cursor (I8)")
+}
+
+func TestCursorResourcesDocumentCursorNotPage(t *testing.T) {
+	op := &Operation{Query: &query.Spec{
+		Resource: "audit", Fields: []query.Field{{Name: "id", Column: "id", Kind: query.KindInt}},
+		PrimaryKey: "id", Paging: query.PagingCursor,
+	}}
+	names := map[string]bool{}
+	for _, p := range op.GrammarParams() {
+		names[p.Name] = true
+	}
+	assert.True(t, names["cursor"])
+	assert.False(t, names["page"], "an append-only resource pages by cursor only (I6, I8)")
+}

@@ -27,6 +27,7 @@ import (
 	"gitea.dev/routers/common"
 	"gitea.dev/routers/web/admin"
 	"gitea.dev/routers/web/auth"
+	delivery_web "gitea.dev/routers/web/delivery" // delivery fork spoke (F2/F13)
 	"gitea.dev/routers/web/devtest"
 	"gitea.dev/routers/web/explore"
 	"gitea.dev/routers/web/feed"
@@ -575,6 +576,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 	m.Get("/pulls", reqSignIn, user.Pulls)
 	m.Get("/milestones", reqSignIn, reqMilestonesDashboardPageEnabled, user.Milestones)
+	delivery_web.RegisterRoutes(m, reqSignIn) // delivery fork spoke (F2/F13)
 
 	// ***** START: User *****
 	// "user/login" doesn't need signOut, then logged-in users can still access this route for redirection purposes by "/user/login?redirec_to=..."

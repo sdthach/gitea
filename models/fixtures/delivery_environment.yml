@@ -1,0 +1,48 @@
+# The instance-wide default environment set (repo_id 0), as models/delivery.Seed writes it
+# at hub mount. The fixture mirrors a booted instance so the fork's integration tests see the
+# state a real one has; the seeding itself is covered by the unit test in models/delivery.
+-
+  id: 1
+  repo_id: 0
+  name: dev
+  sort_order: 10
+  approval_policy: none
+  required_approvals: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 2
+  repo_id: 0
+  name: qa
+  sort_order: 20
+  approval_policy: none
+  required_approvals: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 3
+  repo_id: 0
+  name: uat
+  sort_order: 30
+  approval_policy: none
+  required_approvals: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 4
+  repo_id: 0
+  name: staging
+  sort_order: 40
+  approval_policy: none
+  required_approvals: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 5
+  repo_id: 0
+  name: prod
+  sort_order: 50
+  approval_policy: none
+  required_approvals: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800

@@ -1,0 +1,79 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard delivery">
+	<div class="ui container">
+		<h2 class="ui header">{{.Title}}</h2>
+		<p class="tw-text-14">
+			Every figure below is fetched from
+			<code>{{.DeliveryAPIBase}}/environments</code>. This page is a client of that endpoint and
+			reads nothing the API does not serve.
+		</p>
+
+		<div id="delivery-error" class="ui negative message tw-hidden">
+			<div class="header">Could not load environments</div>
+			<p id="delivery-error-message"></p>
+			<p><strong>Suggested action:</strong> <span id="delivery-error-action"></span></p>
+		</div>
+
+		<table class="ui table" id="delivery-environments">
+			<thead>
+				<tr>
+					<th>Name</th>
+					<th>Repository</th>
+					<th>Order</th>
+					<th>Approval policy</th>
+					<th>Required approvals</th>
+				</tr>
+			</thead>
+			<tbody id="delivery-environments-body">
+				<tr><td colspan="5">Loading…</td></tr>
+			</tbody>
+		</table>
+	</div>
+</div>
+<script type="module">
+const base = {{.DeliveryAPIBase}};
+const wanted = {{.EnvironmentName}};
+const body = document.querySelector('#delivery-environments-body');
+
+function fail(message, action) {
+	const box = document.querySelector('#delivery-error');
+	document.querySelector('#delivery-error-message').textContent = message;
+	document.querySelector('#delivery-error-action').textContent = action;
+	box.classList.remove('tw-hidden');
+	body.replaceChildren();
+}
+
+function cell(row, text) {
+	const td = document.createElement('td');
+	td.textContent = text;
+	row.append(td);
+}
+
+const params = new URLSearchParams({sort_by: 'sort_order', order: 'asc', limit: '200'});
+if (wanted) params.set('name', wanted);
+
+try {
+	const resp = await fetch(`${base}/environments?${params}`, {headers: {accept: 'application/json'}});
+	const payload = await resp.json();
+	if (!resp.ok) {
+		fail(payload.message ?? `the API returned ${resp.status}`,
+			payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
+	} else if (!payload.length) {
+		fail(`no environment named "${wanted}" is visible to you`,
+			'Check the name, or list every environment at /delivery/environments/ with no name.');
+	} else {
+		body.replaceChildren(...payload.map((env) => {
+			const row = document.createElement('tr');
+			cell(row, env.name);
+			cell(row, env.repo_id === 0 ? 'instance default' : `#${env.repo_id}`);
+			cell(row, env.sort_order);
+			cell(row, env.approval_policy);
+			cell(row, env.required_approvals);
+			return row;
+		}));
+	}
+} catch (err) {
+	fail(String(err), 'Check that you are signed in and that the delivery API is reachable at ' + base + '.');
+}
+</script>
+{{template "base/footer" .}}

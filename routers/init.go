@@ -11,6 +11,7 @@ import (
 
 	"gitea.dev/models"
 	authmodel "gitea.dev/models/auth"
+	delivery_model "gitea.dev/models/delivery" // delivery fork spoke (F2/F6/M5)
 	"gitea.dev/modules/cache"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
@@ -27,6 +28,7 @@ import (
 	"gitea.dev/modules/web"
 	"gitea.dev/modules/web/routing"
 	actions_router "gitea.dev/routers/api/actions"
+	deliveryv1 "gitea.dev/routers/api/delivery/v1" // delivery fork spoke (F2/F3)
 	packages_router "gitea.dev/routers/api/packages"
 	apiv1 "gitea.dev/routers/api/v1"
 	"gitea.dev/routers/common"
@@ -138,6 +140,7 @@ func InitWebInstalled(ctx context.Context) {
 	log.Info("ORM engine initialization successful!")
 	mustInit(system.Init)
 	mustInitCtx(ctx, oauth2.Init)
+	mustInitCtx(ctx, delivery_model.Init) // delivery fork spoke (F2/F6/M5)
 	mustInitCtx(ctx, oauth2_provider.Init)
 	mustInit(release_service.Init)
 
@@ -183,6 +186,7 @@ func NormalRoutes() *web.Router {
 	r.Mount("/", web_routers.Routes())
 	r.Mount("/api/v1", apiv1.Routes())
 	r.Mount("/api/internal", private.Routes())
+	r.Mount(deliveryv1.BasePath, deliveryv1.Routes()) // delivery fork spoke (F2/F3)
 
 	r.Post("/-/fetch-redirect", common.FetchRedirectDelegate)
 

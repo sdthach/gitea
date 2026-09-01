@@ -1,0 +1,1917 @@
+{
+  "components": {
+    "schemas": {
+      "Environment": {
+        "properties": {
+          "approval_policy": {
+            "description": "Approval policy. Defaults to none, so adding the fork changes no existing behaviour.",
+            "enum": [
+              "none",
+              "any_approver",
+              "others_only"
+            ],
+            "type": "string"
+          },
+          "created_unix": {
+            "description": "Creation time, unix seconds.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Primary key.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Environment name, lower-cased.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the environment belongs to; 0 is the instance-wide default set.",
+            "type": "integer"
+          },
+          "required_approvals": {
+            "description": "Approvals a held deploy needs. Defaults to 1.",
+            "type": "integer"
+          },
+          "sort_order": {
+            "description": "Render order. Order is configuration; the model expresses no sequence.",
+            "type": "integer"
+          },
+          "updated_unix": {
+            "description": "Last update, unix seconds.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "approval_policy",
+          "id",
+          "name",
+          "repo_id",
+          "required_approvals",
+          "sort_order"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "accepted": {
+            "description": "What the endpoint would have accepted instead.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "code": {
+            "description": "Machine-readable rejection code.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What went wrong.",
+            "type": "string"
+          },
+          "parameter": {
+            "description": "The offending parameter, when the rejection names one.",
+            "type": "string"
+          },
+          "suggested_action": {
+            "description": "What to do about it. Every error carries one (A21).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "suggested_action"
+        ],
+        "type": "object"
+      },
+      "Repository": {
+        "properties": {
+          "full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Repository id.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Repository name.",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Owner name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_name",
+          "id",
+          "name",
+          "owner"
+        ],
+        "type": "object"
+      },
+      "SecretName": {
+        "properties": {
+          "environment": {
+            "description": "Environment the secret is scoped to; empty means unscoped.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Secret name. A secret VALUE is never readable over any endpoint at any scope (I12).",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the secret belongs to.",
+            "type": "integer"
+          },
+          "scoped": {
+            "description": "Whether an environment scope is configured for this secret.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "environment",
+          "name",
+          "repo_id",
+          "scoped"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The fork's own namespace. Every view is a client of an endpoint here (E18, I14); Gitea's swagger group at /api/v1 is untouched (F3, I15).",
+    "title": "Gitea delivery API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/environments": {
+      "get": {
+        "description": "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). The /delivery/environments/{name} page is a client of this endpoint (E18, I14).",
+        "operationId": "listEnvironments",
+        "parameters": [
+          {
+            "description": "Filter on id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on name. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on sort_order. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on approval_policy. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "approval_policy",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on required_approvals. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "required_approvals",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on created_unix. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "created_unix",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on updated_unix. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "updated_unix",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Free-text search over name, approval_policy (I10).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field. Every sort is tie-broken on the primary key (I5).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "enum": [
+                "id",
+                "name",
+                "sort_order",
+                "created_unix",
+                "updated_unix"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (I5).",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Environment"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "List environments across every repository the caller can see",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/repos": {
+      "get": {
+        "description": "Scoped by Gitea's own permission filtering on the Actions unit, the same filter the cross-repository grid uses (E12, I13).",
+        "operationId": "listRepos",
+        "parameters": [
+          {
+            "description": "Filter on id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on owner_name. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "owner_name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter owner_name with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "owner_name[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter owner_name with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "owner_name[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter owner_name with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "owner_name[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on name. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on is_archived. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "is_archived",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Filter is_archived with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "is_archived[ne]",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Free-text search over owner_name, lower_name (I10).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field. Every sort is tie-broken on the primary key (I5).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "enum": [
+                "id",
+                "owner_name",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (I5).",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Repository"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "List the repositories the caller can see delivery data for",
+        "tags": [
+          "repos"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/environments": {
+      "get": {
+        "description": "Falls back to the instance-wide default set when the repository has declared none of its own.",
+        "operationId": "listRepoEnvironments",
+        "parameters": [
+          {
+            "description": "Repository owner.",
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Repository name.",
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on name. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on sort_order. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter sort_order with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "sort_order[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on approval_policy. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "approval_policy",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter approval_policy with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "approval_policy[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on required_approvals. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "required_approvals",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter required_approvals with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "required_approvals[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on created_unix. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "created_unix",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on updated_unix. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "updated_unix",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter updated_unix with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "updated_unix[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Free-text search over name, approval_policy (I10).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field. Every sort is tie-broken on the primary key (I5).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "enum": [
+                "id",
+                "name",
+                "sort_order",
+                "created_unix",
+                "updated_unix"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (I5).",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Environment"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "List one repository's environments",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/environments/{name}": {
+      "get": {
+        "description": "Reads the repository's own row, falling back to the instance-wide default of that name.",
+        "operationId": "getRepoEnvironment",
+        "parameters": [
+          {
+            "description": "Repository owner.",
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Repository name.",
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment name.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Read one environment",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/environments/{name}/secrets": {
+      "get": {
+        "description": "Returns names, environment scope and metadata only. A secret value is never readable over any endpoint at any scope (I12). Requires write on the repository's Actions unit.",
+        "operationId": "listRepoEnvironmentSecrets",
+        "parameters": [
+          {
+            "description": "Repository owner.",
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Repository name.",
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment name.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on name. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter name with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "name[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on environment. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Free-text search over secret_name, environment (I10).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field. Every sort is tie-broken on the primary key (I5).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "enum": [
+                "name",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (I5).",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SecretName"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "List the secret NAMES scoped to one environment",
+        "tags": [
+          "secrets"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/delivery/v1"
+    }
+  ]
+}
