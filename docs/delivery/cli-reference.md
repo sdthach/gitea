@@ -16,7 +16,11 @@ Commands:
   board-move-column         Move a card between the board's columns
   board-move-lane           Move a card between the board's lanes
   deploy                    Plan or dispatch a deploy of a release to an environment
+  deployment-summary        Deployment summary view
   deployments               List deployments across every repository the caller can see
+  environment-create        Create an environment
+  environment-delete        Delete an environment
+  environment-update        Update an environment
   environments              List environments across every repository the caller can see
   grid                      The release × environment grid
   overview                  The cross-repository CI summary and its comparison window
@@ -30,6 +34,8 @@ Commands:
   repos                     List the repositories the caller can see delivery data for
   rollback                  Plan or dispatch a deploy of a release to an environment
   runs                      List Actions runs across every repository the caller can see
+  secret-scope-create       Bind a secret to an environment
+  secret-scope-delete       Unbind a secret from an environment
   timeline                  The delivery timeline: one bar per issue, with dependency arrows
   workflows                 List workflows with their run counts, success rate and average duration
 
@@ -300,6 +306,38 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements (K8)
 ```
 
+## gitea-delivery deployment-summary
+
+```
+gitea-delivery deployment-summary — Deployment summary view
+
+  GET /deployment-summary
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
 ## gitea-delivery deployments
 
 ```
@@ -328,6 +366,150 @@ Flags:
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
     	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery environment-create
+
+```
+gitea-delivery environment-create — Create an environment
+
+  POST /environments
+
+Flags:
+  -approval-policy string
+    	Approval policy. Defaults to none.
+  -block-admin-override
+    	Block repo admin from bypassing the gate.
+  -bypass-allowlist-team-ids string
+    	Team IDs allowed to bypass.
+  -bypass-allowlist-user-ids string
+    	User IDs allowed to bypass.
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -enable-bypass-allowlist
+    	Enable bypass allowlist.
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -name string
+    	required. Environment name.
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -predecessor string
+    	Environment a release must pass through first (E17).
+  -q string
+    	free-text search (I10)
+  -repo-id string
+    	Repository id; 0 is the instance-wide default set.
+  -require-predecessor
+    	Gate when the predecessor hasn't held the release.
+  -required-approvals string
+    	Approvals needed. Defaults to 1.
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -sort-order string
+    	Render order.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery environment-delete
+
+```
+gitea-delivery environment-delete — Delete an environment
+
+  DELETE /environments/{id}
+
+Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery environment-update
+
+```
+gitea-delivery environment-update — Update an environment
+
+  PUT /environments/{id}
+
+Positional arguments: id
+
+Flags:
+  -approval-policy string
+    	Approval policy. Defaults to none.
+  -block-admin-override
+    	Block repo admin from bypassing the gate.
+  -bypass-allowlist-team-ids string
+    	Team IDs allowed to bypass.
+  -bypass-allowlist-user-ids string
+    	User IDs allowed to bypass.
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -enable-bypass-allowlist
+    	Enable bypass allowlist.
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -name string
+    	required. Environment name.
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -predecessor string
+    	Environment a release must pass through first (E17).
+  -q string
+    	free-text search (I10)
+  -repo-id string
+    	Repository id; 0 is the instance-wide default set.
+  -require-predecessor
+    	Gate when the predecessor hasn't held the release.
+  -required-approvals string
+    	Approvals needed. Defaults to 1.
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -sort-order string
+    	Render order.
   -token string
     	API token; resolved by the same precedence detect.sh implements (K8)
 ```
@@ -742,6 +924,78 @@ Flags:
 gitea-delivery runs — List Actions runs across every repository the caller can see
 
   GET /runs
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery secret-scope-create
+
+```
+gitea-delivery secret-scope-create — Bind a secret to an environment
+
+  POST /secret-scopes
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -environment string
+    	required. Environment to scope the secret to.
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -repo-id string
+    	required. Repository id.
+  -secret-name string
+    	required. Secret name as it appears in Gitea's Actions secrets.
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery secret-scope-delete
+
+```
+gitea-delivery secret-scope-delete — Unbind a secret from an environment
+
+  DELETE /secret-scopes/{id}
+
+Positional arguments: id
 
 Flags:
   -cursor string

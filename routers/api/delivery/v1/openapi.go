@@ -46,6 +46,8 @@ type Operation struct {
 	Query       *query.Spec // list endpoints derive their grammar parameters from this
 	Response    string      // component schema name
 	ResponseIs  string      // "array" or "object"
+	// QueryParams are non-grammar query parameters documented alongside the spec's own.
+	QueryParams []Param
 	// Body is the request body, one Param per member, for the operations that take one.
 	// The CLI's generated request layer renders each as a flag, so a body member cannot be
 	// published without a way to send it (K2, K7).
@@ -353,6 +355,31 @@ var componentSchemas = map[string]any{
 			"not manage has no start to draw and is listed rather than given a fabricated bar (O10)."),
 		"truncated": prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
 	}, "repo_id", "repo_full_name", "bars", "arrows", "spans", "unmanaged", "truncated"),
+	"SecretScope": objectSchema(map[string]any{
+		"id":           prop("integer", "Primary key."),
+		"repo_id":      prop("integer", "Repository the secret belongs to."),
+		"name":         prop("string", "Secret name."),
+		"environment":  prop("string", "Environment the secret is scoped to."),
+		"created_unix": prop("integer", "Creation time, unix seconds."),
+		"updated_unix": prop("integer", "Last update, unix seconds."),
+	}, "id", "repo_id", "name", "environment"),
+	"DeploymentSummary": objectSchema(map[string]any{
+		"id":               prop("integer", "Primary key."),
+		"repo_id":          prop("integer", "Repository the deployment belongs to."),
+		"repo_full_name":   prop("string", "owner/name."),
+		"environment":      prop("string", "Environment deployed to, lower-cased."),
+		"release_tag":      prop("string", "Release tag deployed."),
+		"status":           prop("string", "Run status at the moment the deployment was recorded."),
+		"branch":           prop("string", "Branch, when the run was not dispatched against a tag."),
+		"deployed_by":      prop("string", "Login of whoever requested the deploy."),
+		"deployed_at":      prop("integer", "When deployed, unix seconds."),
+		"sha":              prop("string", "Commit SHA, when ?fields=sha was asked for."),
+		"run_id":           prop("integer", "Actions run id, when ?fields=run was asked for."),
+		"run_url":          prop("string", "Link to the run, when ?fields=run was asked for."),
+		"approved_by":      prop("string", "Login of the approver, when ?fields=approved_by was asked for."),
+		"approved_at":      prop("integer", "When approved, unix seconds, when ?fields=approved_at was asked for."),
+		"duration_seconds": prop("integer", "Deploy duration in seconds, when ?fields=duration was asked for."),
+	}, "id", "repo_id", "environment", "release_tag", "status", "deployed_by", "deployed_at"),
 	"Error": objectSchema(map[string]any{
 		"code":             prop("string", "Machine-readable rejection code."),
 		"message":          prop("string", "What went wrong."),
@@ -387,7 +414,10 @@ func OpenAPI() ([]byte, error) {
 	for _, op := range Operations() {
 		params := make([]any, 0, 16)
 		for _, p := range op.PathParams {
-			params = append(params, paramObject(p, true))
+			params = append(params, paramObject(p, p.Required))
+		}
+		for _, p := range op.QueryParams {
+			params = append(params, paramObject(p, p.Required))
 		}
 		for _, p := range op.GrammarParams() {
 			params = append(params, paramObject(p, p.Required))

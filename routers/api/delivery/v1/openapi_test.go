@@ -5,6 +5,7 @@ package v1
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"gitea.dev/modules/json"
@@ -144,6 +145,30 @@ func TestGrammarParamsCoverEveryOperator(t *testing.T) {
 		assert.True(t, names[want], "the document omits %q", want)
 	}
 	assert.False(t, names["cursor"], "an offset-paged resource documents page, not cursor (I8)")
+}
+
+// TestMethodSwitchCoversAllEndpoints verifies that every endpoint's method is one the
+// switch in Routes handles. Without this, a new method would reach the default branch
+// and call log.Fatal — a crash discovered in production rather than in CI.
+func TestMethodSwitchCoversAllEndpoints(t *testing.T) {
+	supported := map[string]bool{
+		"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
+	}
+	for _, e := range endpoints() {
+		m := strings.ToUpper(e.Op.Method)
+		assert.True(t, supported[m],
+			"operation %q uses method %q which the switch does not handle", e.Op.ID, m)
+	}
+}
+
+// TestReadEndpointsDeclareNoBody catches a read endpoint that documents a request body,
+// which no client would send and no handler here reads.
+func TestReadEndpointsDeclareNoBody(t *testing.T) {
+	for _, e := range endpoints() {
+		if strings.EqualFold(e.Op.Method, "GET") {
+			assert.Empty(t, e.Op.Body, "operation %q is GET but declares a body", e.Op.ID)
+		}
+	}
 }
 
 func TestCursorResourcesDocumentCursorNotPage(t *testing.T) {

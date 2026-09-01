@@ -106,6 +106,28 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"board-move-lane", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--lane", "bug", "9042"},
 			"/api/delivery/v1/board/cards/9042/lane", http.MethodPost,
 		},
+		// phase 2: environment and secret-scope writes, and the denormalized summary view.
+		"environment-create": {
+			[]string{"environment-create", "--name", "staging"},
+			"/api/delivery/v1/environments", http.MethodPost,
+		},
+		"environment-update": {
+			[]string{"environment-update", "--name", "staging", "7"},
+			"/api/delivery/v1/environments/7", http.MethodPut,
+		},
+		"environment-delete": {
+			[]string{"environment-delete", "7"},
+			"/api/delivery/v1/environments/7", http.MethodDelete,
+		},
+		"secret-scope-create": {
+			[]string{"secret-scope-create", "--repo-id", "1", "--secret-name", "DEPLOY_KEY", "--environment", "prod"},
+			"/api/delivery/v1/secret-scopes", http.MethodPost,
+		},
+		"secret-scope-delete": {
+			[]string{"secret-scope-delete", "3"},
+			"/api/delivery/v1/secret-scopes/3", http.MethodDelete,
+		},
+		"deployment-summary": {[]string{"deployment-summary"}, "/api/delivery/v1/deployment-summary", ""},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

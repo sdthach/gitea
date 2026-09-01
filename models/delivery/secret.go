@@ -5,6 +5,7 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -171,4 +172,60 @@ func NarrowSecretsToJobEnvironment(ctx context.Context, job *actions_model.Actio
 		jobEnv = ""
 	}
 	return applyEnvironmentScope(secrets, scopes, jobEnv)
+}
+
+// GetSecretScopeByID reads one scope by primary key.
+func GetSecretScopeByID(ctx context.Context, id int64) (*SecretScope, error) {
+	scope := new(SecretScope)
+	has, err := db.GetEngine(ctx).ID(id).Get(scope)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, &Error{
+			Message:         fmt.Sprintf("no secret scope with id %d", id),
+			SuggestedAction: "List the repository's secret scopes to find the binding.",
+		}
+	}
+	return scope, nil
+}
+
+// BindSecretScope creates a scope binding between a secret name and an environment.
+func BindSecretScope(ctx context.Context, scope *SecretScope) error {
+	scope.SecretName = NormalizeSecretName(scope.SecretName)
+	scope.Environment = NormalizeEnvironmentName(scope.Environment)
+	if scope.SecretName == "" {
+		return &Error{
+			Message:         "secret name is empty",
+			SuggestedAction: "Name the secret as it appears in Gitea's Actions secrets.",
+		}
+	}
+	if scope.Environment == "" {
+		return &Error{
+			Message:         "environment is empty",
+			SuggestedAction: "Name the environment to scope the secret to.",
+		}
+	}
+	if scope.RepoID <= 0 {
+		return &Error{
+			Message:         "repo_id is required",
+			SuggestedAction: "Scope the secret to a repository.",
+		}
+	}
+	return db.Insert(ctx, scope)
+}
+
+// UnbindSecretScope removes one scope binding.
+func UnbindSecretScope(ctx context.Context, id int64) error {
+	affected, err := db.GetEngine(ctx).ID(id).Delete(new(SecretScope))
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return &Error{
+			Message:         fmt.Sprintf("no secret scope with id %d", id),
+			SuggestedAction: "List the repository's secret scopes to find the binding.",
+		}
+	}
+	return nil
 }

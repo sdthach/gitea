@@ -18,7 +18,7 @@ const (
 )
 
 // reserved parameter names are the grammar's own; everything else is a filter.
-var reserved = []string{"q", "sort_by", "order", "limit", "page", "cursor", "expand"}
+var reserved = []string{"q", "sort_by", "order", "limit", "page", "cursor", "expand", "fields"}
 
 // Filter is one parsed `field[op]=value` condition.
 type Filter struct {

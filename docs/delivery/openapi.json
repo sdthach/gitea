@@ -320,6 +320,80 @@
         ],
         "type": "object"
       },
+      "DeploymentSummary": {
+        "properties": {
+          "approved_at": {
+            "description": "When approved, unix seconds, when ?fields=approved_at was asked for.",
+            "type": "integer"
+          },
+          "approved_by": {
+            "description": "Login of the approver, when ?fields=approved_by was asked for.",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch, when the run was not dispatched against a tag.",
+            "type": "string"
+          },
+          "deployed_at": {
+            "description": "When deployed, unix seconds.",
+            "type": "integer"
+          },
+          "deployed_by": {
+            "description": "Login of whoever requested the deploy.",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "description": "Deploy duration in seconds, when ?fields=duration was asked for.",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "Environment deployed to, lower-cased.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Primary key.",
+            "type": "integer"
+          },
+          "release_tag": {
+            "description": "Release tag deployed.",
+            "type": "string"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the deployment belongs to.",
+            "type": "integer"
+          },
+          "run_id": {
+            "description": "Actions run id, when ?fields=run was asked for.",
+            "type": "integer"
+          },
+          "run_url": {
+            "description": "Link to the run, when ?fields=run was asked for.",
+            "type": "string"
+          },
+          "sha": {
+            "description": "Commit SHA, when ?fields=sha was asked for.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Run status at the moment the deployment was recorded.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployed_at",
+          "deployed_by",
+          "environment",
+          "id",
+          "release_tag",
+          "repo_id",
+          "status"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "approval_policy": {
@@ -801,6 +875,41 @@
           "name",
           "repo_id",
           "scoped"
+        ],
+        "type": "object"
+      },
+      "SecretScope": {
+        "properties": {
+          "created_unix": {
+            "description": "Creation time, unix seconds.",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "Environment the secret is scoped to.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Primary key.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Secret name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the secret belongs to.",
+            "type": "integer"
+          },
+          "updated_unix": {
+            "description": "Last update, unix seconds.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "environment",
+          "id",
+          "name",
+          "repo_id"
         ],
         "type": "object"
       },
@@ -2651,6 +2760,460 @@
         ]
       }
     },
+    "/deployment-summary": {
+      "get": {
+        "description": "A denormalized projection of deployments with audit data joined. Default columns (environment, release, status, branch, deployed_by, deployed_at) are always present; add optional ones with ?fields=sha,run,approved_by,approved_at,duration.",
+        "operationId": "getDeploymentSummary",
+        "parameters": [
+          {
+            "description": "Comma-separated optional columns: sha, run, approved_by, approved_at, duration.",
+            "in": "query",
+            "name": "fields",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter repo_id with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "repo_id[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on environment. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter environment with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "environment[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on release_tag. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "release_tag",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter release_tag with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "release_tag[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter release_tag with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "release_tag[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter release_tag with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "release_tag[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on status. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter status with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "status[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter status with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "status[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter status with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "status[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on branch. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "branch",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter branch with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "branch[ne]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter branch with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "branch[in]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter branch with the contains operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "branch[contains]",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on created_unix. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "created_unix",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[ne]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the lte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[lte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gt operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gt]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the gte operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[gte]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter created_unix with the in operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "created_unix[in]",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Free-text search over release_tag, environment (I10).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort field. Every sort is tie-broken on the primary key (I5).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "enum": [
+                "id",
+                "created_unix",
+                "environment",
+                "release_tag"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort direction (I5).",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200 (I7).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor from a previous response's next token. Append-only resources page by cursor, never by page (I6, I8).",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Deployment summary view",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
     "/deployments": {
       "get": {
         "description": "Append-only: deploying a release to an environment twice leaves two rows, never one upserted row, or the grid could not show that a version was deployed somewhere previously (E3). Pages by cursor; the continuation token is in the X-Next-Cursor header and in Link rel=next (I6). Scoped by Gitea's own permission filtering on the Actions unit (E10, E12, I13).",
@@ -3855,6 +4418,309 @@
           }
         },
         "summary": "List environments across every repository the caller can see",
+        "tags": [
+          "environments"
+        ]
+      },
+      "post": {
+        "description": "Site admin for instance-wide defaults (repo_id 0), repo admin for repository environments. Validates name, approval policy and predecessor.",
+        "operationId": "createEnvironment",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "approval_policy": {
+                    "description": "Approval policy. Defaults to none.",
+                    "enum": [
+                      "none",
+                      "any_approver",
+                      "others_only"
+                    ],
+                    "type": "string"
+                  },
+                  "block_admin_override": {
+                    "description": "Block repo admin from bypassing the gate.",
+                    "type": "boolean"
+                  },
+                  "bypass_allowlist_team_ids": {
+                    "description": "Team IDs allowed to bypass.",
+                    "type": "array"
+                  },
+                  "bypass_allowlist_user_ids": {
+                    "description": "User IDs allowed to bypass.",
+                    "type": "array"
+                  },
+                  "enable_bypass_allowlist": {
+                    "description": "Enable bypass allowlist.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "description": "Environment name.",
+                    "type": "string"
+                  },
+                  "predecessor": {
+                    "description": "Environment a release must pass through first (E17).",
+                    "type": "string"
+                  },
+                  "repo_id": {
+                    "description": "Repository id; 0 is the instance-wide default set.",
+                    "type": "integer"
+                  },
+                  "require_predecessor": {
+                    "description": "Gate when the predecessor hasn't held the release.",
+                    "type": "boolean"
+                  },
+                  "required_approvals": {
+                    "description": "Approvals needed. Defaults to 1.",
+                    "type": "integer"
+                  },
+                  "sort_order": {
+                    "description": "Render order.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an environment",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/environments/{id}": {
+      "delete": {
+        "description": "Same authorization as create and update.",
+        "operationId": "deleteEnvironment",
+        "parameters": [
+          {
+            "description": "Environment id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete an environment",
+        "tags": [
+          "environments"
+        ]
+      },
+      "put": {
+        "description": "Replaces the environment's configuration. Site admin for instance-wide defaults, repo admin for repository environments.",
+        "operationId": "updateEnvironment",
+        "parameters": [
+          {
+            "description": "Environment id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "approval_policy": {
+                    "description": "Approval policy. Defaults to none.",
+                    "enum": [
+                      "none",
+                      "any_approver",
+                      "others_only"
+                    ],
+                    "type": "string"
+                  },
+                  "block_admin_override": {
+                    "description": "Block repo admin from bypassing the gate.",
+                    "type": "boolean"
+                  },
+                  "bypass_allowlist_team_ids": {
+                    "description": "Team IDs allowed to bypass.",
+                    "type": "array"
+                  },
+                  "bypass_allowlist_user_ids": {
+                    "description": "User IDs allowed to bypass.",
+                    "type": "array"
+                  },
+                  "enable_bypass_allowlist": {
+                    "description": "Enable bypass allowlist.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "description": "Environment name.",
+                    "type": "string"
+                  },
+                  "predecessor": {
+                    "description": "Environment a release must pass through first (E17).",
+                    "type": "string"
+                  },
+                  "repo_id": {
+                    "description": "Repository id; 0 is the instance-wide default set.",
+                    "type": "integer"
+                  },
+                  "require_predecessor": {
+                    "description": "Gate when the predecessor hasn't held the release.",
+                    "type": "boolean"
+                  },
+                  "required_approvals": {
+                    "description": "Approvals needed. Defaults to 1.",
+                    "type": "integer"
+                  },
+                  "sort_order": {
+                    "description": "Render order.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Update an environment",
         "tags": [
           "environments"
         ]
@@ -6606,6 +7472,151 @@
         "summary": "List Actions runs across every repository the caller can see",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/secret-scopes": {
+      "post": {
+        "description": "Creates a scope row so the secret is only available to jobs declaring this environment. A secret value is never accepted or returned (I12). Authorized as repo admin.",
+        "operationId": "createSecretScope",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "environment": {
+                    "description": "Environment to scope the secret to.",
+                    "type": "string"
+                  },
+                  "repo_id": {
+                    "description": "Repository id.",
+                    "type": "integer"
+                  },
+                  "secret_name": {
+                    "description": "Secret name as it appears in Gitea's Actions secrets.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "environment",
+                  "repo_id",
+                  "secret_name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretScope"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Bind a secret to an environment",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/secret-scopes/{id}": {
+      "delete": {
+        "description": "Removes the scope row, making the secret available to all environments again. Authorized as repo admin.",
+        "operationId": "deleteSecretScope",
+        "parameters": [
+          {
+            "description": "Secret scope id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretScope"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Unbind a secret from an environment",
+        "tags": [
+          "secrets"
         ]
       }
     },

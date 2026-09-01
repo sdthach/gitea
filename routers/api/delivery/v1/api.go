@@ -49,19 +49,25 @@ func endpoints() []*endpoint {
 		listAuditEndpoint(),
 		listReleasesEndpoint(),
 		getGridEndpoint(),
-		createDeploymentEndpoint(),    // slice 5
-		listRunsEndpoint(),            // slice 8
-		listWorkflowsEndpoint(),       // slice 8
-		getOverviewEndpoint(),         // slice 8
-		getOverviewTrendsEndpoint(),   // slice 8
-		listOverviewReposEndpoint(),   // slice 8
-		listApprovalsEndpoint(),       // slice 6
-		approveEndpoint(),             // slice 6
-		rejectEndpoint(),              // slice 6
-		getBoardEndpoint(),            // slice 7
-		moveBoardCardColumnEndpoint(), // slice 7
-		moveBoardCardLaneEndpoint(),   // slice 7
-		getTimelineEndpoint(),         // slice 7
+		createDeploymentEndpoint(),     // slice 5
+		listRunsEndpoint(),             // slice 8
+		listWorkflowsEndpoint(),        // slice 8
+		getOverviewEndpoint(),          // slice 8
+		getOverviewTrendsEndpoint(),    // slice 8
+		listOverviewReposEndpoint(),    // slice 8
+		listApprovalsEndpoint(),        // slice 6
+		approveEndpoint(),              // slice 6
+		rejectEndpoint(),               // slice 6
+		getBoardEndpoint(),             // slice 7
+		moveBoardCardColumnEndpoint(),  // slice 7
+		moveBoardCardLaneEndpoint(),    // slice 7
+		getTimelineEndpoint(),          // slice 7
+		createEnvironmentEndpoint(),    // phase 2
+		updateEnvironmentEndpoint(),    // phase 2
+		deleteEnvironmentEndpoint(),    // phase 2
+		createSecretScopeEndpoint(),    // phase 2
+		deleteSecretScopeEndpoint(),    // phase 2
+		getDeploymentSummaryEndpoint(), // phase 2
 	}
 }
 
@@ -145,6 +151,12 @@ func Routes() *web.Router {
 			m.Get(e.Op.Path, handlers...)
 		case http.MethodPost:
 			m.Post(e.Op.Path, handlers...)
+		case http.MethodPut:
+			m.Put(e.Op.Path, handlers...)
+		case http.MethodPatch:
+			m.Patch(e.Op.Path, handlers...)
+		case http.MethodDelete:
+			m.Delete(e.Op.Path, handlers...)
 		default:
 			log.Fatal("delivery API operation %q uses unsupported method %q", e.Op.ID, e.Op.Method)
 		}

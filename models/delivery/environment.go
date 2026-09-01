@@ -146,3 +146,73 @@ func GetEnvironment(ctx context.Context, repoID int64, name string) (*Environmen
 	}
 	return GetEnvironment(ctx, DefaultsRepoID, name)
 }
+
+// GetEnvironmentByID reads one environment by primary key.
+func GetEnvironmentByID(ctx context.Context, id int64) (*Environment, error) {
+	env := new(Environment)
+	has, err := db.GetEngine(ctx).ID(id).Get(env)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, &Error{
+			Message:         fmt.Sprintf("no environment with id %d", id),
+			SuggestedAction: "List environments to see the ones that exist.",
+		}
+	}
+	return env, nil
+}
+
+// CreateEnvironment inserts one environment row after validation.
+func CreateEnvironment(ctx context.Context, env *Environment) error {
+	if env.ID != 0 {
+		return &Error{
+			Message:         "cannot create an environment with a preset id",
+			SuggestedAction: "Omit the id field; it is assigned by the database.",
+		}
+	}
+	env.Name = NormalizeEnvironmentName(env.Name)
+	NormalizePromotionPolicy(env)
+	if env.ApprovalPolicy == "" {
+		env.ApprovalPolicy = PolicyNone
+	}
+	if env.RequiredApprovals < 1 {
+		env.RequiredApprovals = 1
+	}
+	if err := ValidateEnvironment(env); err != nil {
+		return err
+	}
+	return db.Insert(ctx, env)
+}
+
+// UpdateEnvironment replaces one environment row after validation.
+func UpdateEnvironment(ctx context.Context, env *Environment) error {
+	if env.ID <= 0 {
+		return &Error{
+			Message:         "cannot update an environment without an id",
+			SuggestedAction: "Pass the environment's id from a previous GET.",
+		}
+	}
+	env.Name = NormalizeEnvironmentName(env.Name)
+	NormalizePromotionPolicy(env)
+	if err := ValidateEnvironment(env); err != nil {
+		return err
+	}
+	_, err := db.GetEngine(ctx).ID(env.ID).AllCols().Update(env)
+	return err
+}
+
+// DeleteEnvironment removes one environment row.
+func DeleteEnvironment(ctx context.Context, id int64) error {
+	affected, err := db.GetEngine(ctx).ID(id).Delete(new(Environment))
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return &Error{
+			Message:         fmt.Sprintf("no environment with id %d", id),
+			SuggestedAction: "List environments to see the ones that exist.",
+		}
+	}
+	return nil
+}
