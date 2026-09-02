@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The delivery timeline draws one bar per issue with dependency arrows (O6). It needs no
@@ -78,6 +79,14 @@ var effortLine = regexp.MustCompile(`(?i)^[-*\s]*(?:size|timebox|effort)\s*:\s*(
 
 // durationLiteral is a bare `3d` / `4h` / `90m` estimate.
 var durationLiteral = regexp.MustCompile(`^(\d+(?:\.\d+)?)([hdwm])$`)
+
+// StartedMarkerComment is the body of the comment a start-date write posts. It is the exact
+// inverse of ParseStartedMarker, so the chart reads back what the chart wrote: a start lives
+// on a comment because Gitea has nowhere else to keep one, and the progress file ccpm syncs
+// from is not something the forge can read.
+func StartedMarkerComment(startedUnix int64) string {
+	return "ccpm:started=" + time.Unix(startedUnix, 0).UTC().Format(time.RFC3339)
+}
 
 // ParseStartedMarker reads a ccpm:started marker out of a comment body, returning the
 // RFC 3339 text it carries. It returns "" when the comment carries none, which is the normal

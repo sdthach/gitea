@@ -68,6 +68,10 @@ func endpoints() []*endpoint {
 		createSecretScopeEndpoint(),    // phase 2
 		deleteSecretScopeEndpoint(),    // phase 2
 		getDeploymentSummaryEndpoint(), // phase 2
+		moveTimelineIssueMilestoneEndpoint(),
+		setTimelineIssueDatesEndpoint(),
+		createTimelineMilestoneEndpoint(),
+		createTimelineIssueEndpoint(),
 	}
 }
 

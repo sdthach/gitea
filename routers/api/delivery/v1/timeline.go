@@ -106,6 +106,13 @@ func GetTimeline(ctx *context.APIContext) {
 		opts.MilestoneIDs = []int64{milestoneID}
 	}
 
+	renderTimeline(ctx, repo, opts, q.Limit)
+}
+
+// renderTimeline projects one repository's issues and answers with the chart. Every write
+// endpoint replies through it, so a caller never has to re-fetch to see what its write did,
+// and the chart it gets back is the one GET would have produced.
+func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int) {
 	issues, err := issues_model.Issues(ctx, opts)
 	if err != nil {
 		ctx.APIErrorInternal(err)
@@ -126,7 +133,7 @@ func GetTimeline(ctx *context.APIContext) {
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		Bars: []delivery_service.Bar{}, Arrows: []delivery_service.Arrow{},
 		Spans: []delivery_service.SpanRow{}, Unmanaged: []delivery_service.Unmanaged{},
-		Truncated: len(issues) == q.Limit,
+		Truncated: len(issues) == limit,
 	}
 
 	byNumber := make(map[int64]int64, len(issues))

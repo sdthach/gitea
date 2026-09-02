@@ -325,6 +325,7 @@ func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
 type timelinePayload struct {
 	Bars []struct {
 		IssueID     int64  `json:"issue_id"`
+		MilestoneID int64  `json:"milestone_id"`
 		Number      int64  `json:"number"`
 		StartUnix   int64  `json:"start_unix"`
 		EndUnix     int64  `json:"end_unix"`

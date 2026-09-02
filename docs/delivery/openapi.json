@@ -7772,6 +7772,356 @@
         ]
       }
     },
+    "/timeline/issues": {
+      "post": {
+        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn (O10). Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "operationId": "createTimelineIssue",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Issue body.",
+                    "type": "string"
+                  },
+                  "epic": {
+                    "description": "Epic name; the issue is labelled epic:<name> so the chart draws it.",
+                    "type": "string"
+                  },
+                  "milestone_id": {
+                    "description": "Milestone row to file it under.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Issue title.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an issue on a row",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
+    "/timeline/issues/{issue_id}/dates": {
+      "post": {
+        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads (O7, O8) — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "operationId": "setTimelineIssueDates",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the timeline's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "end": {
+                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a bar's start and end",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
+    "/timeline/issues/{issue_id}/milestone": {
+      "post": {
+        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "operationId": "moveTimelineIssueMilestone",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the timeline's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "milestone_id": {
+                    "description": "Target milestone; 0 removes the issue from its row.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move an issue between the chart's milestone rows",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
+    "/timeline/milestones": {
+      "post": {
+        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "operationId": "createTimelineMilestone",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Milestone description.",
+                    "type": "string"
+                  },
+                  "end": {
+                    "description": "Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Milestone title.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a milestone row",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
     "/workflows": {
       "get": {
         "description": "One row per (repository, workflow file) over the selected window, so every figure the overview's tiles aggregate is independently queryable rather than reachable only through the composite (P8, P9). window_days selects the window and defaults to 7 days. Rows carry disabled, read from Gitea's own Actions unit configuration. Scoped by Gitea's own permission filtering on the Actions unit (P6, E12, I13).",

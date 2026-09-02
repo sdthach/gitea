@@ -128,6 +128,23 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			"/api/delivery/v1/secret-scopes/3", http.MethodDelete,
 		},
 		"deployment-summary": {[]string{"deployment-summary"}, "/api/delivery/v1/deployment-summary", ""},
+		// phase 4: the timeline's writes.
+		"timeline-move-milestone": {
+			[]string{"timeline-move-milestone", "--repo", "acme/widgets", "--milestone-id", "2", "9042"},
+			"/api/delivery/v1/timeline/issues/9042/milestone", http.MethodPost,
+		},
+		"timeline-set-dates": {
+			[]string{"timeline-set-dates", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
+			"/api/delivery/v1/timeline/issues/9042/dates", http.MethodPost,
+		},
+		"timeline-create-milestone": {
+			[]string{"timeline-create-milestone", "--repo", "acme/widgets", "--title", "Sprint 9"},
+			"/api/delivery/v1/timeline/milestones", http.MethodPost,
+		},
+		"timeline-create-issue": {
+			[]string{"timeline-create-issue", "--repo", "acme/widgets", "--title", "Wire it"},
+			"/api/delivery/v1/timeline/issues", http.MethodPost,
+		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 
