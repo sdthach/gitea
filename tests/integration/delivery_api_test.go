@@ -259,6 +259,18 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 	assert.False(t, repo4Row.CanWrite, "user4 has write on repo4, not admin")
 	assert.True(t, read("user5", envs[4].ID, http.StatusOK).CanWrite, "its owner may write it")
 
+	// A write answers with the same row shape a read does, can_write included.
+	writeToken := getTokenForLoggedInUser(t, loginUser(t, "user5"), auth_model.AccessTokenScopeAll)
+	body := map[string]any{"repo_id": 4, "name": "qa", "sort_order": 20, "approval_policy": "none", "required_approvals": 1}
+	var written deliveryEnvironmentRow
+	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/environments", body).AddTokenAuth(writeToken)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &written)
+	assert.True(t, written.CanWrite)
+	body["sort_order"] = 30
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, written.ID), body).AddTokenAuth(writeToken)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &written)
+	assert.True(t, written.CanWrite)
+
 	// A row in a repository the caller cannot see is answered exactly as one that does not
 	// exist, so the 404 never confirms the row is there. Its owner still reads it.
 	assert.Equal(t, int64(2), read("user2", envs[2].ID, http.StatusOK).RepoID)

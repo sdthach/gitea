@@ -159,7 +159,7 @@ func CreateEnvironmentHandler(ctx *context.APIContext) {
 		renderHubError(ctx, http.StatusBadRequest, err)
 		return
 	}
-	ctx.JSON(http.StatusCreated, env)
+	renderEnvironment(ctx, http.StatusCreated, env)
 }
 
 // UpdateEnvironmentHandler answers PUT /environments/{id}.
@@ -189,7 +189,7 @@ func UpdateEnvironmentHandler(ctx *context.APIContext) {
 		renderHubError(ctx, http.StatusBadRequest, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, env)
+	renderEnvironment(ctx, http.StatusOK, env)
 }
 
 // DeleteEnvironmentHandler answers DELETE /environments/{id}.

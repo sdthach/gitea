@@ -4,6 +4,7 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -133,13 +134,13 @@ func renderEnvironments(ctx *context.APIContext, q *query.Query, total int64, en
 	renderPage(ctx, q, total, rows)
 }
 
-func renderEnvironment(ctx *context.APIContext, env *delivery.Environment) {
+func renderEnvironment(ctx *context.APIContext, status int, env *delivery.Environment) {
 	rows, err := environmentRows(ctx, []*delivery.Environment{env})
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	ctx.JSON(http.StatusOK, rows[0])
+	ctx.JSON(status, rows[0])
 }
 
 // actionsReadableRepoIDs is the environment read rule: Gitea's own Actions-unit visibility.
@@ -180,24 +181,25 @@ func GetEnvironment(ctx *context.APIContext) {
 		return
 	}
 	env, err := delivery.GetEnvironmentByID(ctx, id)
-	if err == nil {
-		var visible bool
+	var hubErr *delivery.Error
+	if err != nil && !errors.As(err, &hubErr) {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	visible := false
+	if env != nil {
 		if visible, err = environmentIsVisible(ctx, env.RepoID); err != nil {
 			ctx.APIErrorInternal(err)
 			return
-		} else if !visible {
-			env = nil
 		}
 	}
-	if env == nil {
-		// One refusal for both causes: a row the caller cannot see must not be told apart
-		// from one that does not exist.
+	if !visible { // one refusal for a hidden row and a missing one, so a 404 confirms nothing
 		apiError(ctx, http.StatusNotFound, "environment_not_found",
 			"no environment with id "+strconv.FormatInt(id, 10)+" is visible to you",
 			"List "+BasePath+"/environments to see the environments you can read.")
 		return
 	}
-	renderEnvironment(ctx, env)
+	renderEnvironment(ctx, http.StatusOK, env)
 }
 
 func environmentIsVisible(ctx *context.APIContext, repoID int64) (bool, error) {
@@ -249,7 +251,7 @@ func GetRepoEnvironment(ctx *context.APIContext) {
 		renderHubError(ctx, http.StatusNotFound, err)
 		return
 	}
-	renderEnvironment(ctx, env)
+	renderEnvironment(ctx, http.StatusOK, env)
 }
 
 // repoWithActions resolves {owner}/{repo} and authorizes through Gitea's own permission
