@@ -114,7 +114,14 @@ var forkPages = []struct {
 	endpoints []string
 	fetch     string
 }{
-	{template: "environment.tmpl", endpoints: []string{"/environments"}, fetch: "/environments?"},
+	{
+		template: "environment.tmpl",
+		endpoints: []string{
+			"/environments", "/environments/{id}", "/secret-scopes", "/secret-scopes/{id}",
+			"/repos/{owner}/{repo}/environments/{name}/secrets",
+		},
+		fetch: "/environments?",
+	},
 	{
 		template:  "grid.tmpl",
 		endpoints: []string{"/grid", "/deployments", "/repos/{owner}/{repo}/releases"},
@@ -192,9 +199,12 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				assert.True(t, published[endpoint],
 					"the page's endpoint %s must be a published operation (E18, I14)", endpoint)
 				// The template has to name it, so an endpoint listed here but no longer
-				// fetched is caught rather than standing as a claim about a dead page.
-				probe := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
-				assert.Contains(t, body, probe, "the page fetches %s", endpoint)
+				// fetched is caught rather than standing as a claim about a dead page. A page
+				// may name the documented path verbatim, as board.tmpl does, or interpolate the
+				// repository into it, as grid.tmpl does; either one names the operation.
+				interpolated := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
+				assert.True(t, strings.Contains(body, endpoint) || strings.Contains(body, interpolated),
+					"the page fetches %s", endpoint)
 			}
 		})
 	}
@@ -223,7 +233,8 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	r := &recordingRouter{}
 	RegisterRoutes(r, "signin")
 	assert.Equal(t, []string{
-		"/delivery/environments", "/delivery/environments/{name}", "/delivery/grid",
+		"/delivery/environments", "/delivery/environments/{name}",
+		"/delivery/environments/{id}/edit", "/delivery/grid",
 		"/delivery/ci",                                                   // slice 8
 		"/delivery/promote",                                              // slice 5
 		"/delivery/approvals", "/delivery/environments/{name}/approvals", // slice 6

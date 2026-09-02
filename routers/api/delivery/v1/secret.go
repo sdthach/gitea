@@ -19,6 +19,7 @@ import (
 // A secret VALUE is never readable over any endpoint at any scope (I12), which is why this
 // type has no value field to forget to strip.
 type SecretName struct {
+	ID          int64  `json:"id"` // the row DELETE /secret-scopes/{id} takes; 0 when the name carries no scope
 	Name        string `json:"name"`
 	RepoID      int64  `json:"repo_id"`
 	Environment string `json:"environment"`
@@ -96,6 +97,7 @@ func ListRepoEnvironmentSecrets(ctx *context.APIContext) {
 	out := make([]*SecretName, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, &SecretName{
+			ID:          r.ID,
 			Name:        r.SecretName,
 			RepoID:      r.RepoID,
 			Environment: r.Environment,

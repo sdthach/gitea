@@ -197,10 +197,18 @@ try {
 			'Cut a release, or check your account can read the Actions unit of a repository that has one.');
 	} else {
 		// Environment headers open that environment's view (E8). Column order is the order
-		// the API returned the cells in, which is the configured order (E7).
-		for (const cell of payload[0].cells) {
+		// the API returned the cells in, which is the configured order (E7). The set is the
+		// union over every row: cells are per repository, so a header taken from one row
+		// renders another repository's cells under a column naming a different environment.
+		const columns = [];
+		for (const row of payload) {
+			for (const cell of row.cells) {
+				if (!columns.includes(cell.environment)) columns.push(cell.environment);
+			}
+		}
+		for (const environment of columns) {
 			const th = document.createElement('th');
-			th.append(link(cell.environment, `${subURL}/delivery/environments/${encodeURIComponent(cell.environment)}`,
+			th.append(link(environment, `${subURL}/delivery/environments/${encodeURIComponent(environment)}`,
 				'Open this environment'));
 			head.append(th);
 		}
@@ -221,8 +229,14 @@ try {
 			toggle.addEventListener('click', () => showHistory(row, tr));
 			release.append(toggle);
 			tr.append(release);
-			for (const cell of row.cells) {
+			const cells = new Map(row.cells.map((cell) => [cell.environment, cell]));
+			for (const environment of columns) {
 				const td = document.createElement('td');
+				const cell = cells.get(environment);
+				if (!cell) { // this repository has not declared this environment at all
+					tr.append(td);
+					continue;
+				}
 				// A cell opens its run; a cell with no run opens Gitea's run list filtered
 				// by that environment's workflow file, which is the same history (E8, D4).
 				const href = cell.run_url ||

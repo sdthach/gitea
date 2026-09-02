@@ -1,7 +1,7 @@
 import {env} from 'node:process';
 import {test, expect} from '@playwright/test';
 import type {APIRequestContext} from '@playwright/test';
-import {login, apiCreateRepo, apiHeaders, baseUrl, randomString} from './utils.ts';
+import {login, loginUser, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
 
 // The delivery pages authenticate with a token, not the browser session, and mint one per
 // page render. These tests are what proves that: a signed-in user reaches the data without
@@ -15,12 +15,13 @@ async function apiRepoID(request: APIRequestContext, owner: string, name: string
 
 // A fresh instance seeds no environment — the names are the operator's — so a test that
 // needs one creates it, over the endpoint an operator would use.
-async function apiCreateEnvironment(request: APIRequestContext, repoID: number, name: string) {
+async function apiCreateEnvironment(request: APIRequestContext, repoID: number, name: string): Promise<number> {
   const response = await request.post(`${baseUrl()}/api/delivery/v1/environments`, {
     headers: apiHeaders(),
     data: {repo_id: repoID, name, sort_order: 10, approval_policy: 'none', required_approvals: 1},
   });
   expect(response.ok(), `create environment ${name}: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
 }
 
 async function apiCreateRelease(request: APIRequestContext, owner: string, name: string, tag: string) {
@@ -78,4 +79,76 @@ test('delivery promote page plans a deploy and offers to confirm it', async ({pa
   // With no runner attached the dispatch may fail; what must never happen is a press that
   // reports nothing. Either the deploy is recorded or the refusal states its next action.
   await expect(page.locator('#delivery-done:visible, #delivery-error:visible')).toHaveCount(1);
+});
+
+test('delivery environment editor creates an environment and gates it', async ({page}) => {
+  const repoName = `e2e-delivery-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+  const tag = 'release-v1.0.0';
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  await apiCreateRelease(page.request, owner, repoName, tag);
+
+  await page.goto('/delivery/environments');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+
+  await page.getByLabel('Environment name').fill('staging');
+  await page.getByLabel('Repository').fill(`${owner}/${repoName}`);
+  await page.getByRole('button', {name: 'New environment'}).click();
+
+  // A name-only create lands on the detail page with nothing gating a deploy yet.
+  await expect(page).toHaveURL(/\/delivery\/environments\/\d+\/edit$/);
+  await expect(page.locator('#delivery-heading')).toContainText('staging');
+  await expect(page.locator('#delivery-checks')).toContainText('Nothing gates a deploy here');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+
+  // Sequence needs somewhere to have been first, and this scope holds one environment.
+  await page.getByLabel('Add check').selectOption('sequence');
+  await expect(page.locator('[data-check="sequence"]')).toContainText('No other environment shares this scope');
+
+  await page.getByLabel('Add check').selectOption('release_kind');
+  const releaseKind = page.locator('[data-check="release_kind"]');
+  await releaseKind.getByRole('button', {name: 'Save'}).click();
+  await expect(releaseKind).toContainText('prereleases are refused here');
+
+  await page.reload();
+  await expect(page.locator('[data-check="release_kind"]')).toContainText('prereleases are refused here');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+
+  await page.goto('/delivery/environments');
+  await expect(page.locator('tr', {hasText: `${owner}/${repoName}`})).toContainText('Release kind');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+
+  await page.goto('/delivery/grid');
+  await expect(page.locator('#delivery-grid-head')).toContainText('staging');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+});
+
+test('delivery environment detail offers a reader no control', async ({page}) => {
+  const reader = `e2ereader${randomString(8)}`;
+  const envName = `readonly-${randomString(6)}`;
+
+  // An instance-wide environment is writable by site administrators alone, so any other
+  // signed-in account reaches the detail page as a reader.
+  const environmentID = await apiCreateEnvironment(page.request, 0, envName);
+  await apiCreateUser(page.request, reader);
+
+  try {
+    await loginUser(page, reader);
+    await page.goto(`/delivery/environments/${environmentID}/edit`);
+
+    const detail = page.locator('#delivery-detail');
+    await expect(page.locator('#delivery-heading')).toContainText(envName);
+    for (const name of ['Save', 'Remove', 'Edit', 'Delete this environment', 'Bind a secret', 'Unbind']) {
+      await expect(detail.getByRole('button', {name})).toHaveCount(0);
+    }
+    await expect(detail.getByLabel('Add check')).toHaveCount(0);
+    await expect(page.locator('#delivery-name')).toHaveJSProperty('readOnly', true);
+    await expect(page.locator('#delivery-danger')).toBeHidden();
+    await expect(page.locator('#delivery-token-box')).toBeHidden();
+    await expect(page.locator('#delivery-error')).toBeHidden();
+  } finally {
+    await apiDeleteUser(page.request, reader);
+  }
 });

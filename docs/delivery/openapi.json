@@ -862,6 +862,10 @@
             "description": "Environment the secret is scoped to; empty means unscoped.",
             "type": "string"
           },
+          "id": {
+            "description": "Scope row id, which is what DELETE /secret-scopes/{id} takes. 0 when the name carries no scope row.",
+            "type": "integer"
+          },
           "name": {
             "description": "Secret name. A secret VALUE is never readable over any endpoint at any scope (I12).",
             "type": "string"
@@ -877,6 +881,7 @@
         },
         "required": [
           "environment",
+          "id",
           "name",
           "repo_id",
           "scoped"

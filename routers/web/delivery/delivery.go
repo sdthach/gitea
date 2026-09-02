@@ -31,13 +31,32 @@ func PagesEnabled(ctx *context.Context) {
 	}
 }
 
-// Environment renders /delivery/environments/{name}.
+// Environment renders the environment list, filtered to one name at
+// /delivery/environments/{name}.
 func Environment(ctx *context.Context) {
 	name := ctx.PathParam("name")
-	ctx.Data["Title"] = "Environment: " + name
+	ctx.Data["Title"] = "Environments"
+	if name != "" {
+		ctx.Data["Title"] = "Environment: " + name
+	}
 	ctx.Data["PageIsDelivery"] = true
 	ctx.Data["EnvironmentName"] = name
+	ctx.Data["EnvironmentID"] = ""
 	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
+	ctx.Data["AppSubURL"] = setting.AppSubURL
+	setPageToken(ctx)
+	ctx.HTML(http.StatusOK, tplEnvironment)
+}
+
+// EnvironmentEdit renders /delivery/environments/{id}/edit. Identity is the id, because a
+// name is ambiguous across repositories and may itself be all digits.
+func EnvironmentEdit(ctx *context.Context) {
+	ctx.Data["Title"] = "Environment"
+	ctx.Data["PageIsDelivery"] = true
+	ctx.Data["EnvironmentName"] = ""
+	ctx.Data["EnvironmentID"] = ctx.PathParam("id")
+	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deliveryv1.BasePath
+	ctx.Data["AppSubURL"] = setting.AppSubURL
 	setPageToken(ctx)
 	ctx.HTML(http.StatusOK, tplEnvironment)
 }
@@ -83,6 +102,7 @@ type RouteRegistrar interface {
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/delivery/environments", reqSignIn, PagesEnabled, Environment)
 	m.Get("/delivery/environments/{name}", reqSignIn, PagesEnabled, Environment)
+	m.Get("/delivery/environments/{id}/edit", reqSignIn, PagesEnabled, EnvironmentEdit)
 	m.Get("/delivery/grid", reqSignIn, PagesEnabled, Grid)
 	m.Get("/delivery/ci", reqSignIn, PagesEnabled, CI)                                   // slice 8
 	m.Get("/delivery/promote", reqSignIn, PagesEnabled, Promote)                         // slice 5

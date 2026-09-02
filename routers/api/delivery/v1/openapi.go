@@ -161,11 +161,12 @@ var componentSchemas = map[string]any{
 		"can_write":          prop("boolean", "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true."),
 	}, "id", "repo_id", "name", "sort_order", "approval_policy", "required_approvals", "can_write"),
 	"SecretName": objectSchema(map[string]any{
+		"id":          prop("integer", "Scope row id, which is what DELETE /secret-scopes/{id} takes. 0 when the name carries no scope row."),
 		"name":        prop("string", "Secret name. A secret VALUE is never readable over any endpoint at any scope (I12)."),
 		"repo_id":     prop("integer", "Repository the secret belongs to."),
 		"environment": prop("string", "Environment the secret is scoped to; empty means unscoped."),
 		"scoped":      prop("boolean", "Whether an environment scope is configured for this secret."),
-	}, "name", "repo_id", "environment", "scoped"),
+	}, "id", "name", "repo_id", "environment", "scoped"),
 	"Repository": objectSchema(map[string]any{
 		"id":        prop("integer", "Repository id."),
 		"owner":     prop("string", "Owner name."),

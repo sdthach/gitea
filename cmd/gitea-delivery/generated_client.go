@@ -338,7 +338,7 @@ var Commands = []Command{
 		RequiredBody: nil,
 		BoolBody:     nil,
 		BodyHelp:     nil,
-		Columns:      []string{"environment", "name", "repo_id", "scoped"},
+		Columns:      []string{"environment", "id", "name", "repo_id", "scoped"},
 		IsList:       true,
 	},
 	{

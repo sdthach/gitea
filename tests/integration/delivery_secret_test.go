@@ -170,9 +170,17 @@ func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	assert.Equal(t, "prod", created.Environment)
 	require.Positive(t, created.ID)
 
-	body := MakeRequest(t, NewRequest(t, "GET", deliveryv1.BasePath+
-		"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(ownerToken), http.StatusOK).Body.String()
-	assert.Contains(t, body, "DEPLOY_KEY", "the bound name is listed against its environment")
+	listing := MakeRequest(t, NewRequest(t, "GET", deliveryv1.BasePath+
+		"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(ownerToken), http.StatusOK)
+	var listed []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	DecodeJSON(t, listing, &listed)
+	require.Len(t, listed, 1)
+	assert.Equal(t, "DEPLOY_KEY", listed[0].Name, "the bound name is listed against its environment")
+	assert.Equal(t, created.ID, listed[0].ID,
+		"the listing carries the id the unbind endpoint takes, so a page can offer Unbind after a reload")
 
 	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deliveryv1.BasePath, created.ID)).
 		AddTokenAuth(outsiderToken)

@@ -127,6 +127,28 @@ func TestDeliveryPageIsBehindSignIn(t *testing.T) {
 	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint (E18, I14)")
 }
 
+// TestDeliveryEnvironmentPagesAreClientsOfTheAPI covers the editor's two screens: the list
+// and the per-row detail, both behind reqSignIn, both reading the row over the API.
+func TestDeliveryEnvironmentPagesAreClientsOfTheAPI(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, path := range []string{"/delivery/environments", "/delivery/environments/1/edit"} {
+		MakeRequest(t, NewRequest(t, "GET", path), http.StatusSeeOther)
+	}
+
+	session := loginUser(t, "user2")
+
+	resp := session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments"), http.StatusOK)
+	body := resp.Body.String()
+	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the list is a client of the documented endpoint (E18, I14)")
+	assert.Contains(t, body, `const envID = "";`, "the list screen names no single row")
+
+	resp = session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments/1/edit"), http.StatusOK)
+	body = resp.Body.String()
+	assert.Contains(t, body, `const envID = "1";`, "the detail screen reads the row the path names, not one resolved by name")
+	assert.Contains(t, body, "Danger zone")
+}
+
 // The tests below cover the repository-scoped endpoints and, with them, repoWithActions —
 // the authorization helper that resolves permission through Gitea's own check on the
 // Actions unit rather than a second model of permissions (E10, I13).
