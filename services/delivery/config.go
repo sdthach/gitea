@@ -29,3 +29,18 @@ func PagesEnabled() bool {
 	}
 	return setting.CfgProvider.Section(SettingSection).Key("ENABLE_PAGES").MustBool(true)
 }
+
+// SwimlanesEnabled reports whether Gitea's own repository project page offers the fork's
+// lane grouping:
+//
+//	[delivery]
+//	ENABLE_SWIMLANES = true
+//
+// It defaults to FALSE, unlike the pages: this one changes a page the fork does not own, so
+// a build that has not asked for it renders the project board exactly as upstream does.
+func SwimlanesEnabled() bool {
+	if setting.CfgProvider == nil {
+		return false
+	}
+	return setting.CfgProvider.Section(SettingSection).Key("ENABLE_SWIMLANES").MustBool(false)
+}

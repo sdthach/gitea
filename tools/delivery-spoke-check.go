@@ -35,6 +35,8 @@ var spokes = map[string]spoke{
 	"routers/web/web.go":              {2, "web route registration beside /milestones (F13), one call plus its import"},
 	"models/secret/secret.go":         {2, "secret narrowing tail call in GetSecretsOfTask (F4), one call plus its import"},
 	"templates/base/head_navbar.tmpl": {1, "one navigation entry delegating to a hub template (F13)"},
+	"templates/projects/view.tmpl":    {2, "one swimlane block delegating to a hub template (D2), plus the blank line separating it"},
+	"routers/web/repo/projects.go":    {2, "the swimlane feature flag in the project page's data (D2), one assignment plus its import"},
 	"models/unit/unit.go":             {1, "at most one unit enum entry (F2); unused at slice 3"},
 	// The other spokes are tail calls, which are one statement and so one line. This one is
 	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
