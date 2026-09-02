@@ -13,6 +13,7 @@ import (
 	runnerv1 "gitea.dev/actionslib/runner/v1"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
+	"gitea.dev/models/delivery/approvalgate" // delivery fork spoke
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/actions/jobparser"
 	"gitea.dev/modules/globallock"
@@ -283,6 +284,9 @@ func CreateTaskForRunner(ctx context.Context, runner *ActionRunner) (*ActionTask
 
 		for _, v := range jobs {
 			if !runner.CanMatchLabels(v.RunsOn) {
+				continue
+			}
+			if approvalgate.Held(ctx, v.RepoID, v.ID) { // delivery fork spoke
 				continue
 			}
 			task, ok, err := claimJobForRunner(ctx, runner, v)

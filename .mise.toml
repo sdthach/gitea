@@ -1,0 +1,10 @@
+# Toolchain pins for the delivery-platform fork (G1).
+# forge is 0.x: its CLI surface moves between minors, so never "latest".
+# scripts/forge-update-check.sh reads the version below as the single source of the pin.
+
+[tools]
+"go:github.com/git-pkgs/forge/cmd/forge" = "0.9.0"
+
+[tasks.forge-update-check]
+description = "Diff the forge CLI surface between the pinned version and the newest tag (G2)"
+run = "scripts/forge-update-check.sh"

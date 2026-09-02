@@ -1,0 +1,49 @@
+# Copyright 2026 The Gitea Authors. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# One workflow file per environment (D4). The file name is what makes workflow_id a proxy
+# for the environment, so Gitea's own filtered run list at
+# /{owner}/{repo}/actions?workflow=deploy-qa.yaml IS the qa deployment history, and
+# services/delivery's notifier reads the environment straight out of it.
+#
+# Dispatch it with the release tag as Ref (D5), authenticated as the logged-in user and
+# never a shared service token, so Gitea's own trigger_actor names the human (D6):
+#
+#   POST /repos/{owner}/{repo}/actions/workflows/deploy-qa.yaml/dispatches  {"ref": "v1.2.3"}
+
+name: deploy-qa
+
+on:
+  workflow_dispatch:
+
+# Two deploys to one environment queue rather than race (D7).
+concurrency:
+  group: deploy-qa
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # A LITERAL, never an expression. The fork re-reads this out of the workflow file to
+    # narrow environment-scoped secrets (F4); an unevaluated expression resolves to no
+    # environment and every scoped secret is withheld.
+    environment: qa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pointer tag is force-pushed from this checkout, and the release tag has to
+          # be resolvable locally.
+          fetch-depth: 0
+
+      - name: Deploy qa
+        run: |
+          echo "Deploying ${{ github.ref_name }} to qa"
+          # The deployment itself belongs here. It is the only repository-specific step;
+          # everything below it is the same for every environment.
+
+      # Posts the deploy/qa commit status against the release's own commit and moves the
+      # deployed/qa pointer tag (D2, D3).
+      - uses: ./.gitea/actions/deploy
+        with:
+          environment: qa
+          token: ${{ secrets.GITEA_TOKEN }}

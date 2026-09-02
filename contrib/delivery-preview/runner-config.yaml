@@ -1,0 +1,13 @@
+log:
+  level: info
+runner:
+  capacity: 4
+  timeout: 5m
+  # Small images: the seeded workflows only echo, so no toolchain is needed.
+  labels:
+    - "ubuntu-latest:docker://node:22-alpine"
+    - "ubuntu-22.04:docker://node:22-alpine"
+container:
+  network: gitea-preview_default
+  privileged: false
+  valid_volumes: []

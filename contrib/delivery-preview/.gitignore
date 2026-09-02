@@ -1,0 +1,6 @@
+gitea
+app.ini
+.secret_key
+.internal_token
+jar.txt
+__pycache__/
