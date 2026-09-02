@@ -351,7 +351,11 @@ var componentSchemas = map[string]any{
 			strings.Join(delivery_service.StartSources, ", ")+" and end_source one of "+
 			strings.Join(delivery_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record."),
 		"arrows": arrayProp("object", "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of "+
-			strings.Join(delivery_service.ArrowKinds, ", ")+" — a hard gate the forge acts on, or a sequencing hint it does not."),
+			strings.Join(delivery_service.ArrowKinds, ", ")+" — a hard gate the forge acts on, or a sequencing hint it does not. "+
+			"At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_span and to_span "+
+			"carry the span keys as kind:key, while from_issue_id and to_issue_id keep naming the child issues, and an edge with "+
+			"both ends in one bracket is dropped because it says nothing about the order of the brackets. Both span fields are "+
+			"absent at issue zoom, where an edge already joins two drawn bars."),
 		"spans": arrayProp("object", "Epic and milestone rows spanning earliest start to latest end of their children, with "+
 			"ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than "+
 			"from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row "+

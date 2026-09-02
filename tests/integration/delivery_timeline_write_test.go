@@ -590,3 +590,93 @@ func TestAPIDeliveryTimelineAtMilestoneZoomPagesOverMilestonesNotOverIssues(t *t
 	assert.Equal(t, strconv.FormatInt(sprint.ID, 10), one.Spans[0].Key)
 	assert.False(t, one.Truncated)
 }
+
+// TestAPIDeliveryTimelineAttachesAnArrowToTheBracketItsEndFallsIn: at a rolled-up zoom the
+// bar an edge pointed at is not drawn, so the edge attaches to the bracket holding it rather
+// than vanishing. The gate/sequence distinction survives the re-keying, and an edge with both
+// ends in one bracket is dropped: it says nothing about the order of the brackets.
+func TestAPIDeliveryTimelineAttachesAnArrowToTheBracketItsEndFallsIn(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	typeEpic := labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic)
+	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"checkout"), typeEpic,
+		9500, []int64{1000, 1001}, 1002)
+	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"billing"), typeEpic,
+		9600, []int64{2000}, 2001)
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	// checkout's first child blocks billing's child: an edge across two brackets.
+	require.NoError(t, db.Insert(t.Context(), &issues_model.IssueDependency{
+		UserID: doer.ID, IssueID: 9600, DependencyID: 9500,
+	}))
+	// checkout's two children block each other: an edge inside one bracket.
+	require.NoError(t, db.Insert(t.Context(), &issues_model.IssueDependency{
+		UserID: doer.ID, IssueID: 9501, DependencyID: 9500,
+	}))
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	payload := getTimeline(t, token, "repo_id=1&zoom=epic&limit=200")
+
+	require.Len(t, payload.Arrows, 1, "the edge inside one bracket is dropped, the one across two is kept")
+	arrow := payload.Arrows[0]
+	assert.Equal(t, "epic:checkout", arrow.FromSpan, "the edge attaches to the bracket its end falls in")
+	assert.Equal(t, "epic:billing", arrow.ToSpan)
+	assert.EqualValues(t, 9500, arrow.FromIssueID, "the child issues are still named")
+	assert.EqualValues(t, 9600, arrow.ToIssueID)
+	assert.Equal(t, "depends_on", arrow.Kind)
+	assert.True(t, arrow.Enforced, "the forge itself refuses the close, whatever zoom it is read at")
+
+	// A sequencing hint between the same pair keeps its own kind: it is enforced by nothing,
+	// and a chart that flattened the two would read a hint as a gate.
+	billingChild := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 9600})
+	billingChild.Content = "### Relations\n\nPredecessor #9501\n"
+	_, err := db.GetEngine(t.Context()).ID(billingChild.ID).Cols("content").Update(billingChild)
+	require.NoError(t, err)
+
+	payload = getTimeline(t, token, "repo_id=1&zoom=epic&limit=200")
+	kinds := map[string]bool{}
+	for _, a := range payload.Arrows {
+		require.Equal(t, "epic:checkout", a.FromSpan)
+		require.Equal(t, "epic:billing", a.ToSpan)
+		kinds[a.Kind] = a.Enforced
+	}
+	enforced, hasGate := kinds["depends_on"]
+	require.True(t, hasGate)
+	assert.True(t, enforced)
+	sequencing, hasHint := kinds["predecessor"]
+	require.True(t, hasHint, "the rendered cross-reference still draws a sequencing hint between the brackets")
+	assert.False(t, sequencing, "sequencing is enforced by nothing")
+}
+
+// TestAPIDeliveryTimelineAtMilestoneZoomNarrowsChildrenNotMilestones: state names the state of
+// the ISSUES, here as at every other zoom. Filtering the milestones by their own open/closed
+// flag instead would hide an open milestone holding finished work.
+func TestAPIDeliveryTimelineAtMilestoneZoomNarrowsChildrenNotMilestones(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"paged")
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	timelineWrite(t, token, "/timeline/milestones", map[string]any{"repo": "user2/repo1", "title": "Sprint 9"})
+	sprint, err := issues_model.GetMilestoneByRepoIDANDName(t.Context(), 1, "Sprint 9")
+	require.NoError(t, err)
+	require.False(t, sprint.IsClosed, "the milestone itself is open; only the issue under it is closed")
+
+	require.NoError(t, db.Insert(t.Context(), &issues_model.Issue{
+		ID: 9700, RepoID: 1, Index: 9700, PosterID: 2, Title: "finished", MilestoneID: sprint.ID,
+		IsClosed: true, ClosedUnix: timeutil.TimeStamp(1_700_000_000),
+		CreatedUnix: timeutil.TimeStamp(1_600_000_000), UpdatedUnix: timeutil.TimeStamp(1_700_000_000),
+	}))
+	require.NoError(t, db.Insert(t.Context(), &issues_model.IssueLabel{IssueID: 9700, LabelID: epic.ID}))
+
+	key := strconv.FormatInt(sprint.ID, 10)
+	closed := getTimeline(t, token, "repo_id=1&zoom=milestone&limit=200&state=closed")
+	row := closed.Spans[spanOf(t, closed, "milestone", key)]
+	assert.Equal(t, 1, row.Children, "an open milestone holding closed work is listed at state=closed")
+	assert.Equal(t, 100, row.Progress)
+
+	// Its only issue is closed, so the same milestone has no open work and yields no row.
+	open := getTimeline(t, token, "repo_id=1&zoom=milestone&limit=200&state=open")
+	for _, span := range open.Spans {
+		assert.NotEqual(t, key, span.Key, "a milestone whose children all fall outside the state is no row")
+	}
+}

@@ -353,6 +353,8 @@ type timelinePayload struct {
 		ToIssueID   int64  `json:"to_issue_id"`
 		Kind        string `json:"kind"`
 		Enforced    bool   `json:"enforced"`
+		FromSpan    string `json:"from_span"`
+		ToSpan      string `json:"to_span"`
 	} `json:"arrows"`
 	Spans []struct {
 		Kind             string `json:"kind"`

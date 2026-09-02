@@ -338,6 +338,7 @@ function descend(row) {
 // makeDraggable: the left sixth moves the start, the right sixth the end, the middle both; a
 // drag past the threshold is sideways (dates) or vertical (lane), and always writes a whole day.
 function makeDraggable(drawn, container, span, item, readout, lane) {
+	drawn.dataset.drag = 'true'; // the handle is the claim; a chart with none is checkable
 	drawn.style.cursor = 'grab';
 	drawn.style.touchAction = 'none';
 	drawn.addEventListener('pointerdown', (down) => {
@@ -447,12 +448,27 @@ function sourceNote(item) {
 	return `${item.start_source} → ${item.end_source}${item.end_inferred ? ' (inferred)' : ' (recorded)'}`;
 }
 
+// spanKey names a rollup the way the response keys an arrow onto it.
+function spanKey(row) {
+	return `${row.kind}:${row.key}`;
+}
+
 // A hard gate the forge acts on and a sequencing hint it does not are labelled differently,
-// because they do not read the same on a schedule.
+// because they do not read the same on a schedule, at any zoom.
 function arrowsCell(tr, payload, arrows) {
 	return cell(tr, arrows.length
-		? arrows.map((a) => `${arrowLabel(payload, a.from_issue_id)} ${a.enforced ? '(gate)' : '(sequence)'}`).join(', ')
+		? arrows.map((a) => `${arrowFrom(payload, a)} ${a.enforced ? '(gate)' : '(sequence)'}`).join(', ')
 		: '—');
+}
+
+// arrowFrom names the other end of an edge by the row the chart is actually drawing it as:
+// the bracket the child falls in at a rolled-up zoom, its own bar at issue zoom.
+function arrowFrom(payload, arrow) {
+	if (arrow.from_span) {
+		const span = payload.spans.find((row) => spanKey(row) === arrow.from_span);
+		return span ? `${span.kind} ${span.label}` : arrow.from_span;
+	}
+	return arrowLabel(payload, arrow.from_issue_id);
 }
 
 // arrowLabel names the other end of an edge by what the chart is actually showing, never by
@@ -507,7 +523,7 @@ function bracketRow(payload, span, row, blockers) {
 	td.append(container);
 	tr.append(td);
 
-	arrowsCell(tr, payload, blockers.get(row.issue_id) ?? []);
+	arrowsCell(tr, payload, blockers.get(spanKey(row)) ?? []);
 	warningCell(tr, row);
 	return tr;
 }
@@ -599,11 +615,14 @@ function render(payload) {
 	const span = chartSpan(payload);
 	drawRuler(payload, span);
 
+	// An edge lands on a bracket at a rolled-up zoom and on a bar at issue zoom, so it is
+	// indexed by whichever of the two the response attached it to.
 	const blockers = new Map();
 	for (const arrow of payload.arrows) {
-		const list = blockers.get(arrow.to_issue_id) ?? [];
+		const key = arrow.to_span || arrow.to_issue_id;
+		const list = blockers.get(key) ?? [];
 		list.push(arrow);
-		blockers.set(arrow.to_issue_id, list);
+		blockers.set(key, list);
 	}
 
 	if (zoom === 'issue') {

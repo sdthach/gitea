@@ -299,6 +299,10 @@ type Arrow struct {
 	// Enforced is whether the forge itself acts on the edge, which is the whole
 	// difference between the two kinds.
 	Enforced bool `json:"enforced"`
+	// FromSpan and ToSpan name the brackets an edge joins at a rolled-up zoom, as
+	// kind:key. Empty at issue zoom, where the edge already joins two drawn bars.
+	FromSpan string `json:"from_span,omitempty"`
+	ToSpan   string `json:"to_span,omitempty"`
 }
 
 // NewArrow builds an edge, filling in whether the forge enforces it.
@@ -469,6 +473,10 @@ func BuildSpans(bars []Bar) []SpanRow {
 	}
 	return rows
 }
+
+// SpanKey names a rollup as kind:key, which is what an arrow attaches to when the row it
+// points at is a bracket rather than a bar.
+func (r SpanRow) SpanKey() string { return r.Kind + ":" + r.Key }
 
 // MarkPartial withdraws the progress figure: a fraction of an unknown denominator is not a
 // measurement.

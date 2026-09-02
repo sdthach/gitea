@@ -978,7 +978,7 @@
       "Timeline": {
         "properties": {
           "arrows": {
-            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not.",
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_span and to_span carry the span keys as kind:key, while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both span fields are absent at issue zoom, where an edge already joins two drawn bars.",
             "items": {
               "type": "object"
             },

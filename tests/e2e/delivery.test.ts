@@ -44,6 +44,16 @@ async function apiCreateManagedIssue(request: APIRequestContext, owner: string, 
   return (await response.json()).number;
 }
 
+// A reader has to be able to see the repository at all, so it is made public explicitly
+// rather than relying on whatever the instance default happens to be.
+async function apiMakeRepoPublic(request: APIRequestContext, owner: string, name: string) {
+  const response = await request.patch(`${baseUrl()}/api/v1/repos/${owner}/${name}`, {
+    headers: apiHeaders(),
+    data: {private: false},
+  });
+  expect(response.ok(), `publish repo ${name}: ${await response.text()}`).toBe(true);
+}
+
 async function apiCreateRelease(request: APIRequestContext, owner: string, name: string, tag: string) {
   const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/releases`, {
     headers: apiHeaders(),
@@ -231,13 +241,58 @@ test('delivery timeline reads an epic as a bracket and its children as bars', as
   await expect(chart.locator('tr')).toHaveCount(1);
   await expect(chart.locator('tr.warning')).toHaveCount(1);
 
+  // A bracket's window is derived from its children, so dragging one would edit a projection:
+  // it carries no handle even for a writer.
+  await expect(chart.locator('.delivery-bracket')).toHaveCount(1);
+  await expect(chart.locator('[data-drag]')).toHaveCount(0);
+
   // The axis is the server's: the page states the unit it was handed and never picks one.
   await expect(page.locator('#delivery-ruler-unit')).toContainText('ruler');
 
   await page.getByLabel('Zoom').selectOption('issue');
   await expect(chart).toContainText('checkout story two');
   await expect(chart.locator('tr')).toHaveCount(3);
+  await expect(chart.locator('[data-drag]')).toHaveCount(3);
 
   await expect(page.locator('#delivery-token-box')).toBeHidden();
   await expect(page.locator('#delivery-error')).toBeHidden();
+});
+
+test('delivery timeline offers a reader no handle and no drop target', async ({page}) => {
+  const repoName = `e2e-delivery-${randomString(8)}`;
+  const reader = `e2ereader${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  // Every setup call authenticates with the instance token, so the browser session stays
+  // free for the reader: signing in over an existing session leaves the first user in place.
+  await apiCreateRepo(page.request, {name: repoName});
+  await apiMakeRepoPublic(page.request, owner, repoName);
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const epicLabel = await apiCreateLabel(page.request, owner, repoName, 'epic:checkout');
+  const typeLabel = await apiCreateLabel(page.request, owner, repoName, 'type:epic');
+  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic',
+    [epicLabel, typeLabel], '2030-03-11T00:00:00Z');
+  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', [epicLabel], '2030-03-20T00:00:00Z');
+  await apiCreateUser(page.request, reader);
+
+  try {
+    await page.context().clearCookies(); // the reader's session has to be the only one
+    await loginUser(page, reader);
+    await page.goto('/delivery/timeline');
+    await page.getByLabel('Repository id').fill(String(repoID));
+    await page.getByLabel('Group by').selectOption('type');
+
+    // The reader sees the whole chart and every lane it is grouped into...
+    const chart = page.locator('#delivery-timeline-body');
+    await expect(chart).toContainText('checkout story one');
+    await expect(chart.locator('tr.delivery-lane').first()).toBeVisible();
+
+    // ...and no way to move anything: no bar is a handle and no lane is a drop target.
+    await expect(chart.locator('[data-drag]')).toHaveCount(0);
+    await expect(chart.locator('tr[data-lane]')).toHaveCount(0);
+    await expect(page.locator('#delivery-token-box')).toBeHidden();
+    await expect(page.locator('#delivery-error')).toBeHidden();
+  } finally {
+    await apiDeleteUser(page.request, reader);
+  }
 });

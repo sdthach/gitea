@@ -226,7 +226,12 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 	}
 
 	if view.zoom == delivery_service.ZoomMilestone {
-		if out.Spans, out.Truncated, err = timelineMilestoneRollups(ctx, repo, opts, limit); err != nil {
+		children := newRolledChildren("milestone")
+		if out.Spans, out.Truncated, err = timelineMilestoneRollups(ctx, repo, opts, limit, children); err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		if out.Arrows, err = timelineRolledArrows(ctx, children); err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
@@ -253,11 +258,9 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 	}
 
 	bars := make([]delivery_service.Bar, 0, len(issues))
-	byNumber := make(map[int64]int64, len(issues))
 	drawn := make(map[int64]bool, len(issues))
 	for _, issue := range issues {
 		in := barInputFor(issue, starts[issue.ID])
-		byNumber[issue.Index] = issue.ID
 		if bar, ok := delivery_service.ResolveBar(in); ok {
 			bars = append(bars, bar)
 			drawn[issue.ID] = true
@@ -271,24 +274,26 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		bars = slices.DeleteFunc(bars, func(bar delivery_service.Bar) bool { return bar.Epic != view.epic })
 	}
 
-	out.Arrows, err = timelineArrows(ctx, issues, byNumber, drawn)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
-
-	spans, err := timelineRollups(ctx, repo, bars)
+	children := newRolledChildren("epic")
+	spans, err := timelineRollups(ctx, repo, bars, opts.IsClosed, children)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 
 	// A rolled-up row is a bracket over a set its children define, so epic zoom lists the
-	// brackets alone: drawing the children beside them is the issue zoom.
+	// brackets alone: drawing the children beside them is the issue zoom. Its arrows are the
+	// children's edges re-keyed onto the brackets, so an edge does not vanish with the bar.
 	if view.zoom == delivery_service.ZoomEpic {
 		out.Spans = spansOfKind(spans, "epic")
+		out.Arrows, err = timelineRolledArrows(ctx, children)
 	} else {
 		out.Bars, out.Spans = bars, spans
+		out.Arrows, err = timelineArrows(ctx, issues, drawn)
+	}
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
 	}
 	// Lanes group the bars the response publishes, so a zoom that publishes none carries none.
 	if view.grouping != delivery_service.GroupNone && len(out.Bars) > 0 {
@@ -338,7 +343,7 @@ func rulerOver(bars []delivery_service.Bar, spans []delivery_service.SpanRow) Ti
 
 // timelineRollups folds each parent from its own fetch: over the drawn bars the containment
 // check goes vacuous at zoom=epic, where no child is drawn at all.
-func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []delivery_service.Bar) ([]delivery_service.SpanRow, error) {
+func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []delivery_service.Bar, state optional.Option[bool], children *rolledChildren) ([]delivery_service.SpanRow, error) {
 	epics := make([]string, 0, 8)
 	milestones := make([]int64, 0, 8)
 	seenEpic, seenMilestone := map[string]bool{}, map[int64]bool{}
@@ -357,7 +362,7 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 
 	rows := make([]delivery_service.SpanRow, 0, len(epics)+len(milestones))
 	for _, epic := range epics {
-		row, ok, err := timelineRollup(ctx, repo, "epic", epic, func(opts *issues_model.IssuesOptions) {
+		row, held, ok, err := timelineRollup(ctx, repo, state, "epic", epic, func(opts *issues_model.IssuesOptions) {
 			opts.IncludedLabelNames = []string{delivery_service.EpicLabelPrefix + epic}
 		})
 		if err != nil {
@@ -365,16 +370,18 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 		}
 		if ok {
 			rows = append(rows, row)
+			children.collect(row, held)
 		}
 	}
 	for _, milestoneID := range milestones {
-		row, ok, err := timelineRollup(ctx, repo, "milestone", strconv.FormatInt(milestoneID, 10),
+		row, held, ok, err := timelineRollup(ctx, repo, state, "milestone", strconv.FormatInt(milestoneID, 10),
 			func(opts *issues_model.IssuesOptions) { opts.MilestoneIDs = []int64{milestoneID} })
 		if err != nil {
 			return nil, err
 		}
 		if ok {
 			rows = append(rows, row)
+			children.collect(row, held)
 		}
 	}
 	return rows, nil
@@ -382,9 +389,12 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 
 // timelineMilestoneRollups pages over the repository's milestones rather than its issues, so a
 // page of N holds N milestone rows and truncated means more milestones than the page holds.
-func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int) ([]delivery_service.SpanRow, bool, error) {
+func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, children *rolledChildren) ([]delivery_service.SpanRow, bool, error) {
+	// The milestone's OWN open/closed state is not the state filter: state narrows the
+	// ISSUES, here as everywhere else, so an open milestone holding closed work is listed
+	// at state=closed and a milestone whose children all fall outside it yields no row.
 	find := issues_model.FindMilestoneOptions{
-		RepoID: repo.ID, IsClosed: opts.IsClosed, SortType: "id",
+		RepoID: repo.ID, SortType: "id",
 		ListOptions: db.ListOptions{Page: opts.Paginator.Page, PageSize: limit},
 	}
 	milestones, err := db.Find[issues_model.Milestone](ctx, find)
@@ -398,13 +408,14 @@ func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Reposito
 		if len(opts.MilestoneIDs) > 0 && !slices.Contains(opts.MilestoneIDs, milestone.ID) {
 			continue
 		}
-		row, ok, err := timelineRollup(ctx, repo, "milestone", strconv.FormatInt(milestone.ID, 10),
+		row, held, ok, err := timelineRollup(ctx, repo, opts.IsClosed, "milestone", strconv.FormatInt(milestone.ID, 10),
 			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestone.ID} })
 		if err != nil {
 			return nil, false, err
 		}
 		if ok {
 			rows = append(rows, row)
+			children.collect(row, held)
 		}
 	}
 	return rows, len(opts.MilestoneIDs) == 0 && len(milestones) == limit, nil
@@ -412,10 +423,11 @@ func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Reposito
 
 // timelineRollup folds one parent's children into its row, one query per parent because a
 // child's window cannot be resolved in SQL. ok=false for a parent whose children draw no bar.
-func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, kind, key string, narrow func(*issues_model.IssuesOptions)) (delivery_service.SpanRow, bool, error) {
+func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], kind, key string, narrow func(*issues_model.IssuesOptions)) (delivery_service.SpanRow, issues_model.IssueList, bool, error) {
 	opts := &issues_model.IssuesOptions{
 		RepoIDs:   []int64{repo.ID},
 		IsPull:    optional.Some(false),
+		IsClosed:  state,
 		Paginator: &db.ListOptions{Page: 1, PageSize: query.MaxLimit},
 		SortType:  "oldest",
 	}
@@ -423,14 +435,14 @@ func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, kind, 
 
 	issues, err := issues_model.Issues(ctx, opts)
 	if err != nil {
-		return delivery_service.SpanRow{}, false, err
+		return delivery_service.SpanRow{}, nil, false, err
 	}
 	if err := issues.LoadAttributes(ctx); err != nil {
-		return delivery_service.SpanRow{}, false, err
+		return delivery_service.SpanRow{}, nil, false, err
 	}
 	starts, err := ccpmStarts(ctx, issues)
 	if err != nil {
-		return delivery_service.SpanRow{}, false, err
+		return delivery_service.SpanRow{}, nil, false, err
 	}
 	children := make([]delivery_service.Bar, 0, len(issues))
 	for _, issue := range issues {
@@ -446,9 +458,9 @@ func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, kind, 
 		if len(issues) >= query.MaxLimit {
 			row.MarkPartial()
 		}
-		return row, true, nil
+		return row, issues, true, nil
 	}
-	return delivery_service.SpanRow{}, false, nil
+	return delivery_service.SpanRow{}, nil, false, nil
 }
 
 // timelineRepo resolves and authorizes the repository the chart covers.
@@ -578,46 +590,42 @@ func ccpmStarts(ctx *context.APIContext, issues issues_model.IssueList) (map[int
 	return starts, nil
 }
 
-// timelineArrows builds the dependency edges, from the two sources they actually live in
-// (N8): issue_dependency for the enforced ones, and the rendered cross-reference lines in
-// the body for the sequencing ones.
-//
-// An edge whose other end is not drawn is dropped: an arrow to a bar that is not on the
-// chart would point at nothing.
-func timelineArrows(ctx *context.APIContext, issues issues_model.IssueList, byNumber map[int64]int64, drawn map[int64]bool) ([]delivery_service.Arrow, error) {
-	arrows := make([]delivery_service.Arrow, 0, 8)
-	seen := map[string]bool{}
-	add := func(from, to int64, kind delivery_service.ArrowKind) {
-		if from == 0 || to == 0 || from == to || !drawn[from] || !drawn[to] {
-			return
-		}
-		key := strconv.FormatInt(from, 10) + ">" + strconv.FormatInt(to, 10) + ":" + string(kind)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		arrows = append(arrows, delivery_service.NewArrow(from, to, kind))
-	}
+// arrowEdge is one dependency edge between two issues, before it is attached to whatever the
+// chart is drawing them as.
+type arrowEdge struct {
+	from, to int64
+	kind     delivery_service.ArrowKind
+}
 
+// readArrowEdges reads an issue set's edges from the two sources they live in:
+// issue_dependency for the enforced ones, and the rendered cross-reference lines in the body
+// for the sequencing ones. It reads a SET of issues, not the drawn ones, so a rolled-up zoom
+// can read the edges among children none of which is drawn.
+func readArrowEdges(ctx *context.APIContext, issues issues_model.IssueList) ([]arrowEdge, error) {
+	edges := make([]arrowEdge, 0, 8)
 	ids := make([]int64, 0, len(issues))
+	byNumber := make(map[int64]int64, len(issues))
 	for _, issue := range issues {
 		ids = append(ids, issue.ID)
+		byNumber[issue.Index] = issue.ID
 	}
-	if len(ids) > 0 {
-		deps := make([]*issues_model.IssueDependency, 0, len(ids))
-		if err := db.GetEngine(ctx).In("issue_id", ids).Find(&deps); err != nil {
-			return nil, err
-		}
-		// A row in issue_dependency IS the depends_on relation (N1, N3), so its arrow kind
-		// comes from the same mapping the body-derived words go through.
-		gate, ok := delivery_service.ArrowKindFor("depends_on")
-		if !ok {
-			return nil, errors.New("depends_on is not a relation the timeline can draw")
-		}
-		for _, dep := range deps {
-			// DependencyID blocks IssueID, so the blocker comes first on a schedule.
-			add(dep.DependencyID, dep.IssueID, gate)
-		}
+	if len(ids) == 0 {
+		return edges, nil
+	}
+
+	deps := make([]*issues_model.IssueDependency, 0, len(ids))
+	if err := db.GetEngine(ctx).In("issue_id", ids).Find(&deps); err != nil {
+		return nil, err
+	}
+	// A row in issue_dependency IS the depends_on relation, so its arrow kind comes from the
+	// same mapping the body-derived words go through.
+	gate, ok := delivery_service.ArrowKindFor("depends_on")
+	if !ok {
+		return nil, errors.New("depends_on is not a relation the timeline can draw")
+	}
+	for _, dep := range deps {
+		// DependencyID blocks IssueID, so the blocker comes first on a schedule.
+		edges = append(edges, arrowEdge{dep.DependencyID, dep.IssueID, gate})
 	}
 
 	for _, issue := range issues {
@@ -626,19 +634,96 @@ func timelineArrows(ctx *context.APIContext, issues issues_model.IssueList, byNu
 			if err != nil {
 				continue
 			}
-			// The word decides the arrow: a vocabulary word that carries no ordering
-			// draws nothing at all (N2, O9).
+			// The word decides the arrow: a vocabulary word that carries no ordering draws
+			// nothing at all.
 			kind, ok := delivery_service.ArrowKindFor(rel[0])
 			if !ok {
 				continue
 			}
 			other := byNumber[number]
 			if rel[0] == "predecessor" {
-				add(other, issue.ID, kind)
+				edges = append(edges, arrowEdge{other, issue.ID, kind})
 			} else {
-				add(issue.ID, other, kind)
+				edges = append(edges, arrowEdge{issue.ID, other, kind})
 			}
 		}
+	}
+	return edges, nil
+}
+
+// timelineArrows attaches the page's edges to the bars it drew. An edge whose other end is
+// not drawn is dropped: an arrow to a bar that is not on the chart would point at nothing.
+func timelineArrows(ctx *context.APIContext, issues issues_model.IssueList, drawn map[int64]bool) ([]delivery_service.Arrow, error) {
+	edges, err := readArrowEdges(ctx, issues)
+	if err != nil {
+		return nil, err
+	}
+	arrows := make([]delivery_service.Arrow, 0, len(edges))
+	seen := map[string]bool{}
+	for _, edge := range edges {
+		if edge.from == 0 || edge.to == 0 || edge.from == edge.to || !drawn[edge.from] || !drawn[edge.to] {
+			continue
+		}
+		key := strconv.FormatInt(edge.from, 10) + ">" + strconv.FormatInt(edge.to, 10) + ":" + string(edge.kind)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		arrows = append(arrows, delivery_service.NewArrow(edge.from, edge.to, edge.kind))
+	}
+	return arrows, nil
+}
+
+// rolledChildren records which bracket each of a page's rollup children falls in, so an edge
+// between two children can be re-keyed onto the brackets that hold them.
+type rolledChildren struct {
+	kind   string // only rows of this kind are on the page, so only they collect
+	span   map[int64]string
+	issues issues_model.IssueList
+}
+
+func newRolledChildren(kind string) *rolledChildren {
+	return &rolledChildren{kind: kind, span: map[int64]string{}}
+}
+
+func (c *rolledChildren) collect(row delivery_service.SpanRow, issues issues_model.IssueList) {
+	if c == nil || row.Kind != c.kind {
+		return
+	}
+	for _, issue := range issues {
+		if _, seen := c.span[issue.ID]; seen {
+			continue
+		}
+		c.span[issue.ID] = row.SpanKey()
+		c.issues = append(c.issues, issue)
+	}
+}
+
+// timelineRolledArrows re-keys the edges among a page's rollup children onto the brackets
+// that hold them, so an edge whose end is inside a bracket attaches to the bracket instead of
+// vanishing with the bar it pointed at. The gate/sequence distinction survives the re-keying.
+func timelineRolledArrows(ctx *context.APIContext, children *rolledChildren) ([]delivery_service.Arrow, error) {
+	edges, err := readArrowEdges(ctx, children.issues)
+	if err != nil {
+		return nil, err
+	}
+	arrows := make([]delivery_service.Arrow, 0, len(edges))
+	seen := map[string]bool{}
+	for _, edge := range edges {
+		from, to := children.span[edge.from], children.span[edge.to]
+		// An edge inside one bracket says nothing about the order of the brackets, and an
+		// end with no bracket on this page has nothing to attach to.
+		if from == "" || to == "" || from == to {
+			continue
+		}
+		key := from + ">" + to + ":" + string(edge.kind)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		arrow := delivery_service.NewArrow(edge.from, edge.to, edge.kind)
+		arrow.FromSpan, arrow.ToSpan = from, to
+		arrows = append(arrows, arrow)
 	}
 	return arrows, nil
 }
