@@ -345,18 +345,31 @@ var componentSchemas = map[string]any{
 	"Timeline": objectSchema(map[string]any{
 		"repo_id":        prop("integer", "Repository the chart covers."),
 		"repo_full_name": prop("string", "owner/name."),
-		"bars": arrayProp("object", "One bar per issue ccpm manages. Each carries issue_id, number, title, url, epic, milestone, "+
-			"start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of "+
+		"bars": arrayProp("object", "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, "+
+			"title, url, epic, type, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, "+
+			"end_inferred and is_closed. start_source is one of "+
 			strings.Join(delivery_service.StartSources, ", ")+" and end_source one of "+
-			strings.Join(delivery_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record (O8)."),
+			strings.Join(delivery_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record."),
 		"arrows": arrayProp("object", "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of "+
-			strings.Join(delivery_service.ArrowKinds, ", ")+" — a hard gate the forge acts on, or a sequencing hint it does not (O9, N9)."),
+			strings.Join(delivery_service.ArrowKinds, ", ")+" — a hard gate the forge acts on, or a sequencing hint it does not."),
 		"spans": arrayProp("object", "Epic and milestone rows spanning earliest start to latest end of their children, with "+
-			"ccpm's own task-close percentage as progress (O11)."),
+			"ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than "+
+			"from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row "+
+			"also carries issue_id, declared_start_unix and declared_end_unix — the epic issue's OWN bar — and "+
+			"contains_children, warning and suggested_action when the declared window does not contain the derived one. "+
+			"partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown "+
+			"denominator is not a measurement."),
 		"unmanaged": arrayProp("object", "Issues with no bar, each with the reason and a suggested action. An issue ccpm does "+
-			"not manage has no start to draw and is listed rather than given a fabricated bar (O10)."),
+			"not manage has no start to draw and is listed rather than given a fabricated bar."),
+		"group_by": enumProp("The active lane grouping, reusing the board's own. A view setting, never stored.", delivery_service.Groupings),
+		"zoom":     enumProp("The depth the chart is read at. At epic or milestone only rollup rows are listed and no bar is drawn.", delivery_service.Zooms),
+		"lanes": arrayProp("object", "The bars grouped by the board's own lane definition, empty when grouping is off. Each lane "+
+			"carries key, label, is_empty_value, cards and one column holding its bars."),
+		"ruler": prop("object", "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows "+
+			"the span drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while "+
+			"the write granularity stays a day at every unit."),
 		"truncated": prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
-	}, "repo_id", "repo_full_name", "bars", "arrows", "spans", "unmanaged", "truncated"),
+	}, "repo_id", "repo_full_name", "bars", "arrows", "spans", "unmanaged", "group_by", "zoom", "lanes", "ruler", "truncated"),
 	"SecretScope": objectSchema(map[string]any{
 		"id":           prop("integer", "Primary key."),
 		"repo_id":      prop("integer", "Repository the secret belongs to."),

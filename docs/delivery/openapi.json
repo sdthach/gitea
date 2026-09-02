@@ -978,14 +978,31 @@
       "Timeline": {
         "properties": {
           "arrows": {
-            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not (O9, N9).",
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "bars": {
-            "description": "One bar per issue ccpm manages. Each carries issue_id, number, title, url, epic, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of ccpm_started, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record (O8).",
+            "description": "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, title, url, epic, type, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of ccpm_started, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "group_by": {
+            "description": "The active lane grouping, reusing the board's own. A view setting, never stored.",
+            "enum": [
+              "type",
+              "assignee",
+              "epic",
+              "none"
+            ],
+            "type": "string"
+          },
+          "lanes": {
+            "description": "The bars grouped by the board's own lane definition, empty when grouping is off. Each lane carries key, label, is_empty_value, cards and one column holding its bars.",
             "items": {
               "type": "object"
             },
@@ -999,8 +1016,12 @@
             "description": "Repository the chart covers.",
             "type": "integer"
           },
+          "ruler": {
+            "description": "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows the span drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while the write granularity stays a day at every unit.",
+            "type": "object"
+          },
           "spans": {
-            "description": "Epic and milestone rows spanning earliest start to latest end of their children, with ccpm's own task-close percentage as progress (O11).",
+            "description": "Epic and milestone rows spanning earliest start to latest end of their children, with ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row also carries issue_id, declared_start_unix and declared_end_unix — the epic issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
             "items": {
               "type": "object"
             },
@@ -1011,21 +1032,34 @@
             "type": "boolean"
           },
           "unmanaged": {
-            "description": "Issues with no bar, each with the reason and a suggested action. An issue ccpm does not manage has no start to draw and is listed rather than given a fabricated bar (O10).",
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue ccpm does not manage has no start to draw and is listed rather than given a fabricated bar.",
             "items": {
               "type": "object"
             },
             "type": "array"
+          },
+          "zoom": {
+            "description": "The depth the chart is read at. At epic or milestone only rollup rows are listed and no bar is drawn.",
+            "enum": [
+              "issue",
+              "epic",
+              "milestone"
+            ],
+            "type": "string"
           }
         },
         "required": [
           "arrows",
           "bars",
+          "group_by",
+          "lanes",
           "repo_full_name",
           "repo_id",
+          "ruler",
           "spans",
           "truncated",
-          "unmanaged"
+          "unmanaged",
+          "zoom"
         ],
         "type": "object"
       },
@@ -7737,7 +7771,7 @@
     },
     "/timeline": {
       "get": {
-        "description": "Needs no Projects API, so it renders on a build the board cannot (O6, SC 38). Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start (O7). EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure (O8). Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing (O9, N9). An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar (O10). Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced (O11). Scoped by Gitea's own permission check on the Issues unit (E12, I13). The /delivery/timeline page is a client of this endpoint (E18, I14).",
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the lane dimension, reusing the board's own lanes. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /delivery/timeline page is a client of this endpoint.",
         "operationId": "getTimeline",
         "parameters": [
           {
@@ -7771,6 +7805,24 @@
             "description": "Filter on state. Bare form means the eq operator (I3).",
             "in": "query",
             "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on group_by. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on zoom. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "zoom",
             "required": false,
             "schema": {
               "type": "string"
@@ -7845,7 +7897,7 @@
     },
     "/timeline/issues": {
       "post": {
-        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn (O10). Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "createTimelineIssue",
         "parameters": [],
         "requestBody": {
@@ -7934,7 +7986,7 @@
     },
     "/timeline/issues/{issue_id}/dates": {
       "post": {
-        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads (O7, O8) — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "setTimelineIssueDates",
         "parameters": [
           {
@@ -8022,9 +8074,106 @@
         ]
       }
     },
+    "/timeline/issues/{issue_id}/lane": {
+      "post": {
+        "description": "The chart's vertical drag. A lane IS the grouping value, so moving between lanes edits the field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanLaneMove the board's lane move goes through, so a vertical drag on the chart and a lane move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveTimelineIssueLane",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the timeline's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group_by": {
+                    "description": "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "epic",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "lane": {
+                    "description": "The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "group_by",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a bar between the chart's lanes",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
     "/timeline/issues/{issue_id}/milestone": {
       "post": {
-        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "moveTimelineIssueMilestone",
         "parameters": [
           {
@@ -8110,7 +8259,7 @@
     },
     "/timeline/milestones": {
       "post": {
-        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "createTimelineMilestone",
         "parameters": [],
         "requestBody": {

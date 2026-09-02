@@ -131,6 +131,10 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"timeline-move-milestone", "--repo", "acme/widgets", "--milestone-id", "2", "9042"},
 			"/api/delivery/v1/timeline/issues/9042/milestone", http.MethodPost,
 		},
+		"timeline-move-lane": {
+			[]string{"timeline-move-lane", "--repo", "acme/widgets", "--group-by", "type", "--lane", "bug", "9042"},
+			"/api/delivery/v1/timeline/issues/9042/lane", http.MethodPost,
+		},
 		"timeline-set-dates": {
 			[]string{"timeline-set-dates", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
 			"/api/delivery/v1/timeline/issues/9042/dates", http.MethodPost,

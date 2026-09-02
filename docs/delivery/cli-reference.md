@@ -40,6 +40,7 @@ Commands:
   timeline                   The delivery timeline: one bar per issue, with dependency arrows
   timeline-create-issue      Create an issue on a row
   timeline-create-milestone  Create a milestone row
+  timeline-move-lane         Move a bar between the chart's lanes
   timeline-move-milestone    Move an issue between the chart's milestone rows
   timeline-set-dates         Set a bar's start and end
   workflows                  List workflows with their run counts, success rate and average duration
@@ -1175,6 +1176,46 @@ Flags:
     	sort field (I5)
   -title string
     	required. Milestone title.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery timeline-move-lane
+
+```
+gitea-delivery timeline-move-lane — Move a bar between the chart's lanes
+
+  POST /timeline/issues/{issue_id}/lane
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -group-by string
+    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write.
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -lane string
+    	The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
   -token string
     	API token; resolved by the same precedence detect.sh implements (K8)
 ```

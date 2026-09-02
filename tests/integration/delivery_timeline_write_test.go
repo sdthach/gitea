@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/timeutil"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
 	delivery_service "gitea.dev/services/delivery"
 	issue_service "gitea.dev/services/issue"
@@ -264,4 +266,254 @@ func TestDeliveryTimelineStartCanBeDraggedInBothDirections(t *testing.T) {
 		map[string]any{"repo": "user2/repo1", "start": "2026-03-20"})
 	_, startUnix, _, _, _ = timelineBar(t, after, issue.ID)
 	assert.EqualValues(t, 1773964800, startUnix, "dragging the start edge right moves the bar right")
+}
+
+// getTimeline reads the chart the same way every client does, so the assertions below are
+// over the published shape rather than over an internal one.
+func getTimeline(t *testing.T, token, query string) timelinePayload {
+	t.Helper()
+	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?"+query).AddTokenAuth(token)
+	var payload timelinePayload
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &payload)
+	return payload
+}
+
+// labelIssue puts one existing label on an issue, which is how a fixture issue is given the
+// type and epic ccpm would have written onto it.
+func labelIssue(t *testing.T, issueID int64, label *issues_model.Label) {
+	t.Helper()
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: issueID})
+	require.NoError(t, issue_service.AddLabel(t.Context(), issue, doer, label))
+}
+
+// spanOf finds one rollup row on the chart.
+func spanOf(t *testing.T, payload timelinePayload, kind, key string) int {
+	t.Helper()
+	for i, span := range payload.Spans {
+		if span.Kind == kind && span.Key == key {
+			return i
+		}
+	}
+	t.Fatalf("the chart has no %s rollup for %q", kind, key)
+	return -1
+}
+
+// TestAPIDeliveryTimelineFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom is the check the
+// chart is the only place to see, and the filter it is most needed under.
+//
+// At zoom=epic no child bar is drawn at all, so a rollup folded from the drawn bars would
+// contain a set of nothing and the warning could never fire. The rows come from their own
+// fetch, so the same epic is flagged with no child on screen.
+func TestAPIDeliveryTimelineFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"checkout")
+	labelIssue(t, 1, epic)
+	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic))
+	labelIssue(t, 5, epic)
+	labelIssue(t, 5, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"story"))
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	// The epic declares 2026-03-01 to 2026-03-11; the story filed under it runs to 2026-03-25.
+	timelineWrite(t, token, "/timeline/issues/1/dates",
+		map[string]any{"repo": "user2/repo1", "start": "2026-03-01", "end": "2026-03-11"})
+	timelineWrite(t, token, "/timeline/issues/5/dates",
+		map[string]any{"repo": "user2/repo1", "start": "2026-03-01", "end": "2026-03-25"})
+
+	atIssue := getTimeline(t, token, "repo_id=1&limit=200")
+	row := atIssue.Spans[spanOf(t, atIssue, "epic", "checkout")]
+	assert.Equal(t, 1, row.Children, "the epic issue is not one of its own children")
+	assert.False(t, row.ContainsChildren)
+	assert.EqualValues(t, 1773187200, row.DeclaredEndUnix, "2026-03-11, the epic's own deadline")
+	assert.EqualValues(t, 1774396800, row.EndUnix, "2026-03-25, the story's")
+	assert.Equal(t, "epic checkout (#1) ends 14 days before the work filed under it", row.Warning)
+	assert.Equal(t, "Move the epic's deadline to 2026-03-25, or move story #4 earlier.", row.SuggestedAction)
+	assert.EqualValues(t, 1, row.IssueID, "the row names the epic issue, so a bracket can be opened")
+
+	atEpic := getTimeline(t, token, "repo_id=1&limit=200&zoom=epic")
+	assert.Empty(t, atEpic.Bars, "a rolled-up zoom lists brackets, not the bars under them")
+	assert.Equal(t, "epic", atEpic.Zoom)
+	same := atEpic.Spans[spanOf(t, atEpic, "epic", "checkout")]
+	assert.Equal(t, row.Warning, same.Warning, "the same epic is flagged where no child is drawn")
+	assert.Equal(t, row.SuggestedAction, same.SuggestedAction)
+	assert.Equal(t, 1, same.Children)
+
+	// The ruler follows what is drawn: three weeks and a bit is a week ruler.
+	assert.Equal(t, "week", atEpic.Ruler.Unit)
+	require.NotEmpty(t, atEpic.Ruler.Ticks)
+	assert.Equal(t, "w/c 23 Feb", atEpic.Ruler.Ticks[0].Label, "the axis starts on a unit boundary in UTC")
+
+	// Moving the epic's deadline past its children clears the warning; it is a warning, not
+	// a refusal, and it goes away when the plan stops contradicting itself.
+	timelineWrite(t, token, "/timeline/issues/1/dates",
+		map[string]any{"repo": "user2/repo1", "end": "2026-03-25"})
+	fixed := getTimeline(t, token, "repo_id=1&limit=200&zoom=epic")
+	contained := fixed.Spans[spanOf(t, fixed, "epic", "checkout")]
+	assert.True(t, contained.ContainsChildren)
+	assert.Empty(t, contained.Warning)
+}
+
+// TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites is what makes the chart's
+// vertical drag and the board's lane move one operation: both go through PlanLaneMove, so
+// both leave the same field on the issue.
+func TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	labelForLane(t, 1, delivery_service.TypeLabelPrefix+"bug")
+	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"task"))
+	manageIssue(t, 1, "checkout")
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	after := timelineWrite(t, token, "/timeline/issues/1/lane",
+		map[string]any{"repo": "user2/repo1", "group_by": "type", "lane": "bug"})
+	assert.Equal(t, "type", after.GroupBy)
+	require.NotEmpty(t, after.Lanes)
+	assert.Equal(t, "bug", after.Lanes[0].Key, "the chart answers with the lane the bar landed in")
+
+	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
+	require.NoError(t, reloaded.LoadLabels(t.Context()))
+	names := make([]string, 0, len(reloaded.Labels))
+	for _, label := range reloaded.Labels {
+		names = append(names, label.Name)
+	}
+	assert.Contains(t, names, "type:bug", "the lane IS the label, so the move rewrote it")
+	assert.NotContains(t, names, "type:task", "a bar never carries two labels of the same grouping")
+
+	// The same request against the board's own lane endpoint reaches the same field, which
+	// is the point of there being one definition rather than two.
+	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/board/cards/1/lane",
+		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "task"}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusOK)
+	reloaded = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
+	require.NoError(t, reloaded.LoadLabels(t.Context()))
+	names = names[:0]
+	for _, label := range reloaded.Labels {
+		names = append(names, label.Name)
+	}
+	assert.Contains(t, names, "type:task")
+	assert.NotContains(t, names, "type:bug")
+
+	// Grouping off leaves no field to write, so the move is refused rather than guessed at.
+	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/1/lane",
+		map[string]any{"repo": "user2/repo1", "group_by": "none", "lane": "bug"}).AddTokenAuth(token)
+	var refusal deliveryRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
+	assert.Contains(t, refusal.Message, "not grouped")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
+}
+
+// TestAPIDeliveryTimelineRefusesALaneMoveWithoutIssueWrite asserts the refusal AND that
+// nothing was written: a 403 that had already written would be a worse defect than no guard.
+// user4 can read user2/repo1, which is public, and cannot write its Issues unit.
+func TestAPIDeliveryTimelineRefusesALaneMoveWithoutIssueWrite(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	labelForLane(t, 1, delivery_service.TypeLabelPrefix+"bug")
+	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"task"))
+	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+
+	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/1/lane",
+		map[string]any{"repo": "user2/repo1", "group_by": "type", "lane": "bug"}).AddTokenAuth(outsiderToken)
+	var refusal deliveryRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
+	assert.Equal(t, "forbidden", refusal.Code)
+	assert.Contains(t, refusal.Message, "Issues")
+	assert.Contains(t, refusal.Message, "user2/repo1")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
+
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
+	require.NoError(t, issue.LoadLabels(t.Context()))
+	names := make([]string, 0, len(issue.Labels))
+	for _, label := range issue.Labels {
+		names = append(names, label.Name)
+	}
+	assert.Contains(t, names, "type:task", "the refused move left the lane where it was")
+	assert.NotContains(t, names, "type:bug", "the refused move wrote no label")
+}
+
+// TestAPIDeliveryTimelineMarksARollupPartialPastThePageLimit is the shipped defect the second
+// fetch also fixes: a rollup over more children than one page holds is a floor, and printing
+// a progress percentage over it would present a prefix as a measurement.
+func TestAPIDeliveryTimelineMarksARollupPartialPastThePageLimit(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	label := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"wide")
+	const children = 205
+	issues := make([]*issues_model.Issue, 0, children)
+	links := make([]*issues_model.IssueLabel, 0, children)
+	for i := range children {
+		id := int64(9000 + i)
+		issues = append(issues, &issues_model.Issue{
+			ID: id, RepoID: 1, Index: int64(9000 + i), PosterID: 2, Title: "wide",
+			CreatedUnix: timeutil.TimeStamp(1772323200), UpdatedUnix: timeutil.TimeStamp(1772323200),
+			IsClosed: i%2 == 0,
+		})
+		links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: label.ID})
+	}
+	require.NoError(t, db.Insert(t.Context(), issues))
+	require.NoError(t, db.Insert(t.Context(), links))
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	payload := getTimeline(t, token, "repo_id=1&epic=wide&limit=200")
+
+	assert.True(t, payload.Truncated, "the chart itself is a prefix and says so")
+	row := payload.Spans[spanOf(t, payload, "epic", "wide")]
+	assert.True(t, row.Partial, "the rollup hit its own cap")
+	assert.Zero(t, row.Progress, "a fraction of an unknown denominator is not a measurement")
+	assert.Equal(t, 200, row.Children)
+}
+
+// insertEpicIssues creates one epic issue and its children directly, so their creation order
+// is controllable: oldest-first paging is what decides which of them a short page holds.
+func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, firstID int64, childUnix []int64, epicUnix int64) {
+	t.Helper()
+	rows := make([]*issues_model.Issue, 0, len(childUnix)+1)
+	links := make([]*issues_model.IssueLabel, 0, 2*len(childUnix)+2)
+	add := func(id, at int64, epic bool) {
+		rows = append(rows, &issues_model.Issue{
+			ID: id, RepoID: 1, Index: id, PosterID: 2, Title: "paged",
+			CreatedUnix: timeutil.TimeStamp(at), UpdatedUnix: timeutil.TimeStamp(at),
+		})
+		links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: epicLabel.ID})
+		if epic {
+			links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: typeLabel.ID})
+		}
+	}
+	for i, at := range childUnix {
+		add(firstID+int64(i), at, false)
+	}
+	add(firstID+int64(len(childUnix)), epicUnix, true)
+	require.NoError(t, db.Insert(t.Context(), rows))
+	require.NoError(t, db.Insert(t.Context(), links))
+}
+
+// TestAPIDeliveryTimelineAtEpicZoomPagesOverEpicsNotOverIssues: at zoom=epic the fetch selects
+// epic issues, so a page of N holds N epics. Paging over every issue instead would drop an
+// epic whose issues all sit past the limit, and truncated would be about issues, not epics.
+func TestAPIDeliveryTimelineAtEpicZoomPagesOverEpicsNotOverIssues(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	typeEpic := labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic)
+	// Four children created before their epic issue, so oldest-first fills a short page with
+	// them alone; the second epic is created after all of them.
+	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"wideearly"), typeEpic,
+		9100, []int64{1000, 1001, 1002, 1003}, 1004)
+	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"latecomer"), typeEpic,
+		9200, []int64{2001}, 2000)
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	payload := getTimeline(t, token, "repo_id=1&zoom=epic&limit=3")
+
+	assert.Empty(t, payload.Bars, "a rolled-up zoom lists brackets, not the bars under them")
+	assert.False(t, payload.Truncated, "two epics fit in a page of three")
+	late := payload.Spans[spanOf(t, payload, "epic", "latecomer")]
+	assert.Equal(t, 1, late.Children, "the epic every issue-paged page would have missed")
+	early := payload.Spans[spanOf(t, payload, "epic", "wideearly")]
+	assert.Equal(t, 4, early.Children, "its rollup still counts every child, page or no page")
+
+	// The epic filter still narrows the chart to one epic at this zoom.
+	one := getTimeline(t, token, "repo_id=1&zoom=epic&limit=3&epic=latecomer")
+	require.Len(t, one.Spans, 1)
+	assert.Equal(t, "latecomer", one.Spans[0].Key)
 }

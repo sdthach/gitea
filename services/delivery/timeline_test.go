@@ -187,3 +187,125 @@ func TestDeliveryBuildSpansEmitsEpicsThenMilestones(t *testing.T) {
 	assert.Equal(t, 100, rows[0].Progress)
 	assert.Equal(t, 0, rows[1].Progress)
 }
+
+// TestDeliveryBuildSpansExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
+// check meaningful: ccpm puts epic:<name> on the epic's own issue beside type:epic, so
+// without the exclusion the parent counts among its own children and its declared window has
+// nothing left to be compared against.
+func TestDeliveryBuildSpansExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
+	bars := []Bar{
+		{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 100, EndUnix: 5000},
+		{IssueID: 1, Number: 57, Epic: "checkout", Type: "story", StartUnix: 300, EndUnix: 900, IsClosed: true},
+		{IssueID: 2, Number: 58, Epic: "checkout", Type: "task", StartUnix: 200, EndUnix: 400},
+	}
+	rows := BuildSpans(bars)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 2, rows[0].Children, "the epic issue is not one of its own children")
+	assert.Equal(t, 50, rows[0].Progress, "progress is over the children, not over the parent too")
+	assert.Equal(t, int64(200), rows[0].StartUnix, "the derived window is the children's")
+	assert.Equal(t, int64(900), rows[0].EndUnix)
+	assert.EqualValues(t, 42, rows[0].IssueID, "the row names the epic issue, so a bracket can be opened")
+
+	// The same epic issue filed under a milestone is genuinely one of that milestone's
+	// issues, so milestone rollups are unchanged.
+	for i := range bars {
+		bars[i].MilestoneID, bars[i].Milestone = 4, "beta"
+	}
+	rows = BuildSpans(bars)
+	require.Len(t, rows, 2)
+	assert.Equal(t, 3, rows[1].Children, "a milestone counts every issue filed under it")
+}
+
+// TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren is the warning the chart is the
+// only place to see, and the case it must NOT fire on: children running in parallel past no
+// deadline at all.
+func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
+	// 2026-03-11 declared, 2026-03-25 derived: a fortnight of overhang.
+	declared := Bar{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 1772323200, EndUnix: 1773187200}
+	child := Bar{IssueID: 7, Number: 57, Epic: "checkout", Type: "story", StartUnix: 1772323200, EndUnix: 1774396800}
+
+	rows := BuildSpans([]Bar{declared, child})
+	require.Len(t, rows, 1)
+	row := rows[0]
+	assert.False(t, row.ContainsChildren)
+	assert.EqualValues(t, 1773187200, row.DeclaredEndUnix)
+	assert.EqualValues(t, 1774396800, row.EndUnix)
+	assert.Equal(t, "epic checkout (#42) ends 14 days before the work filed under it", row.Warning)
+	assert.Equal(t, "Move the epic's deadline to 2026-03-25, or move story #57 earlier.", row.SuggestedAction)
+
+	// A declared window that contains its children is not flagged, however many of them run
+	// in parallel: the check is containment, not a sum of effort.
+	declared.EndUnix = 1774396800
+	second := child
+	second.IssueID, second.Number = 8, 58
+	rows = BuildSpans([]Bar{declared, child, second})
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].ContainsChildren)
+	assert.Empty(t, rows[0].Warning)
+	assert.Empty(t, rows[0].SuggestedAction)
+
+	// Work that starts before the epic it belongs to is the other half of containment.
+	declared.StartUnix = 1772928000 // 2026-03-08
+	rows = BuildSpans([]Bar{declared, child})
+	require.Len(t, rows, 1)
+	assert.False(t, rows[0].ContainsChildren)
+	assert.Equal(t, "epic checkout (#42) starts 7 days after the work filed under it", rows[0].Warning)
+	assert.Contains(t, rows[0].SuggestedAction, "Move the epic's start to 2026-03-01")
+
+	// An epic label naming no epic issue has no declared window to contradict.
+	rows = BuildSpans([]Bar{child})
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].ContainsChildren)
+	assert.Zero(t, rows[0].IssueID)
+}
+
+// TestDeliverySpanRowPartialWithdrawsItsProgress: a fraction of an unknown denominator is not
+// a measurement, so a capped rollup publishes no percentage.
+func TestDeliverySpanRowPartialWithdrawsItsProgress(t *testing.T) {
+	row, ok := BuildSpan("epic", "checkout", "checkout", []Bar{
+		{IssueID: 1, StartUnix: 100, EndUnix: 200, IsClosed: true},
+		{IssueID: 2, StartUnix: 100, EndUnix: 200},
+	})
+	require.True(t, ok)
+	require.Equal(t, 50, row.Progress)
+
+	row.MarkPartial()
+	assert.True(t, row.Partial)
+	assert.Zero(t, row.Progress)
+}
+
+// TestDeliveryResolveBarReadsItsTypeOffTheLabels: the chart cannot tell a story from a bug
+// from an epic without it, and the epic self-exclusion depends on the answer.
+func TestDeliveryResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
+	bar, ok := ResolveBar(managed(BarInput{
+		Labels: []string{"epic:checkout", "type:story"}, Assignees: []string{"jo"},
+	}))
+	require.True(t, ok)
+	assert.Equal(t, "story", bar.Type)
+	assert.Equal(t, []string{"epic:checkout", "type:story"}, bar.Labels)
+	assert.Equal(t, []string{"jo"}, bar.Assignees)
+	assert.Equal(t, "story", LaneKeyFor(bar.Labels, bar.Assignees, GroupType),
+		"the chart's lanes and the board's are one definition")
+
+	bar, ok = ResolveBar(managed(BarInput{Labels: []string{"epic:checkout"}}))
+	require.True(t, ok)
+	assert.Empty(t, bar.Type, "an issue with no type: label has no type, rather than a guessed one")
+}
+
+// TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest mirrors the grouping parser: an
+// unknown value is refused rather than silently becoming the default.
+func TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want Zoom
+	}{
+		{"", ZoomIssue}, {"issue", ZoomIssue}, {"epic", ZoomEpic}, {" MILESTONE ", ZoomMilestone},
+	} {
+		zoom, ok := ParseZoom(tc.raw)
+		require.True(t, ok, tc.raw)
+		assert.Equal(t, tc.want, zoom, tc.raw)
+	}
+	zoom, ok := ParseZoom("initiative")
+	assert.False(t, ok, "a level that does not ship yet is refused, not silently downgraded")
+	assert.Equal(t, ZoomIssue, zoom)
+}

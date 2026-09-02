@@ -4,6 +4,7 @@
 package delivery
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -11,18 +12,18 @@ import (
 	"time"
 )
 
-// The delivery timeline draws one bar per issue with dependency arrows (O6). It needs no
-// Projects API, so it renders on a build the board cannot (SC 38).
+// The delivery timeline draws one bar per issue with dependency arrows. It needs no
+// Projects API, so it renders on a build the board cannot.
 //
 // Gitea stores NO start date: models/issues/issue.go declares DeadlineUnix and ClosedUnix
 // and no started field, and models/issues/milestone.go the same. A bar therefore needs a
 // start from somewhere else, and every bar states which source produced each of its
-// endpoints (O7, O8). Presenting an estimated bar as a measured one is this view's
+// endpoints. Presenting an estimated bar as a measured one is this view's
 // characteristic failure, so an inferred end is flagged rather than merely rendered.
 //
 // Everything in this file is pure. The API handler reads the rows; this decides the shape.
 
-// StartSource names where a bar's start came from (O8).
+// StartSource names where a bar's start came from.
 type StartSource string
 
 const (
@@ -32,11 +33,11 @@ const (
 	StartFromProgress StartSource = "ccpm_started"
 	// StartFromCreated is the issue's creation time, the fallback O7 names.
 	StartFromCreated StartSource = "issue_created"
-	// StartNone is an issue ccpm does not manage: it has no start to draw (O10).
+	// StartNone is an issue ccpm does not manage: it has no start to draw.
 	StartNone StartSource = "none"
 )
 
-// EndSource names where a bar's end came from (O8).
+// EndSource names where a bar's end came from.
 type EndSource string
 
 const (
@@ -55,7 +56,7 @@ var (
 	EndSources   = []string{string(EndFromClosed), string(EndFromDeadline), string(EndFromEstimate)}
 )
 
-// Inferred reports whether an end source is an estimate rather than a record (O8).
+// Inferred reports whether an end source is an estimate rather than a record.
 func (s EndSource) Inferred() bool { return s == EndFromEstimate }
 
 // daySeconds is the unit effort sizes are expressed in.
@@ -141,9 +142,16 @@ type BarInput struct {
 	Title   string
 	URL     string
 	// Managed is whether ccpm manages the issue: it carries an epic:<name> label. An
-	// unmanaged issue gets no bar and one stated reason (O10).
+	// unmanaged issue gets no bar and one stated reason.
 	Managed bool
 	Epic    string
+	// Type is ccpm's type:<t> value. Empty means the caller has not resolved one and
+	// ResolveBar reads it off Labels.
+	Type string
+	// Labels and Assignees are what lane assignment reads, so the chart groups by the same
+	// definition the board does.
+	Labels    []string
+	Assignees []string
 	// StartedUnix is the ccpm:started marker, 0 when the issue carries none.
 	StartedUnix  int64
 	CreatedUnix  int64
@@ -163,12 +171,17 @@ type Bar struct {
 	Title       string `json:"title"`
 	URL         string `json:"url"`
 	Epic        string `json:"epic,omitempty"`
+	Type        string `json:"type,omitempty"`
 	Milestone   string `json:"milestone,omitempty"`
 	MilestoneID int64  `json:"milestone_id,omitempty"`
 	StartUnix   int64  `json:"start_unix"`
 	EndUnix     int64  `json:"end_unix"`
-	// StartSource and EndSource are on every bar, because O8 makes declaring them the
-	// point of the view rather than a detail of it.
+	// Labels and Assignees carry lane assignment onto the chart, so a vertical drag and a
+	// board lane move write the same field.
+	Labels    []string `json:"labels,omitempty"`
+	Assignees []string `json:"assignees,omitempty"`
+	// StartSource and EndSource are on every bar: declaring where an endpoint came from is
+	// the point of the view rather than a detail of it.
 	StartSource StartSource `json:"start_source"`
 	EndSource   EndSource   `json:"end_source"`
 	// EndInferred is EndSource.Inferred(), published so a client renders the distinction
@@ -177,21 +190,21 @@ type Bar struct {
 	IsClosed    bool `json:"is_closed"`
 }
 
-// Unmanaged is an issue with no bar, listed beside the chart with the reason (O10).
+// Unmanaged is an issue with no bar, listed beside the chart with the reason.
 type Unmanaged struct {
 	IssueID int64  `json:"issue_id"`
 	Number  int64  `json:"number"`
 	Title   string `json:"title"`
 	URL     string `json:"url"`
 	Reason  string `json:"reason"`
-	// SuggestedAction is what to do about it, like every other refusal (A21).
+	// SuggestedAction is what to do about it, like every other refusal.
 	SuggestedAction string `json:"suggested_action"`
 }
 
-// ResolveBar decides one bar's endpoints and names the source of each (O7, O8).
+// ResolveBar decides one bar's endpoints and names the source of each.
 //
 // It returns ok=false for an issue ccpm does not manage: that issue has no start to draw and
-// is listed with its reason instead of being given a fabricated bar (O10).
+// is listed with its reason instead of being given a fabricated bar.
 func ResolveBar(in BarInput) (Bar, bool) {
 	if !in.Managed {
 		return Bar{}, false
@@ -200,7 +213,11 @@ func ResolveBar(in BarInput) (Bar, bool) {
 	bar := Bar{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Epic: in.Epic, Milestone: in.Milestone, MilestoneID: in.MilestoneID,
+		Type: in.Type, Labels: in.Labels, Assignees: in.Assignees,
 		IsClosed: in.IsClosed,
+	}
+	if bar.Type == "" {
+		bar.Type = labelValue(in.Labels, TypeLabelPrefix)
 	}
 
 	switch {
@@ -210,8 +227,8 @@ func ResolveBar(in BarInput) (Bar, bool) {
 		bar.StartUnix, bar.StartSource = in.CreatedUnix, StartFromCreated
 	}
 
-	// O7's order: the close time when closed, the deadline when set, otherwise the effort
-	// estimate applied to the start.
+	// The close time when closed, the deadline when set, otherwise the effort estimate
+	// applied to the start.
 	switch {
 	case in.IsClosed && in.ClosedUnix > 0:
 		bar.EndUnix, bar.EndSource = in.ClosedUnix, EndFromClosed
@@ -234,7 +251,7 @@ func ResolveBar(in BarInput) (Bar, bool) {
 	return bar, true
 }
 
-// UnmanagedFor states why an issue has no bar (O10, A21).
+// UnmanagedFor states why an issue has no bar, and what to do about it.
 func UnmanagedFor(in BarInput) Unmanaged {
 	return Unmanaged{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
@@ -244,16 +261,16 @@ func UnmanagedFor(in BarInput) Unmanaged {
 	}
 }
 
-// ArrowKind distinguishes a hard gate from a sequencing hint (O9, N2). They do not read the
+// ArrowKind distinguishes a hard gate from a sequencing hint. They do not read the
 // same on a schedule: one is enforced by the forge, the other is advice.
 type ArrowKind string
 
 const (
 	// ArrowGate is depends_on / blocked-by: written to issue_dependency, and Gitea itself
-	// refuses to close the blocked issue (N1, N3).
+	// refuses to close the blocked issue.
 	ArrowGate ArrowKind = "depends_on"
 	// ArrowSequence is predecessor / successor: recorded as a rendered cross-reference and
-	// enforced by nothing (N9, N10).
+	// enforced by nothing.
 	ArrowSequence ArrowKind = "predecessor"
 )
 
@@ -262,7 +279,7 @@ var ArrowKinds = []string{string(ArrowGate), string(ArrowSequence)}
 
 // ArrowKindFor maps a relation word onto the arrow it draws. A word in the vocabulary that
 // carries no ordering — related, duplicate-of, caused-by, parent — draws no arrow at all,
-// because it says nothing about a schedule (N2).
+// because it says nothing about a schedule.
 func ArrowKindFor(relation string) (ArrowKind, bool) {
 	switch strings.TrimSpace(strings.ToLower(relation)) {
 	case "depends_on", "blocked-by", "blocked_by", "blocks":
@@ -290,12 +307,12 @@ func NewArrow(from, to int64, kind ArrowKind) Arrow {
 }
 
 // relationLine matches the cross-reference lines ccpm renders into an issue body under its
-// Relations heading: "Predecessor #12", "Successor #13" (N4).
+// Relations heading: "Predecessor #12", "Successor #13".
 var relationLine = regexp.MustCompile(`(?i)^(predecessor|successor)\s+#(\d+)\s*$`)
 
 // ParseSequenceRelations reads the sequencing edges out of an issue body. The enforced edges
 // are deliberately NOT read from here: they live in issue_dependency, and reading them from
-// the body too would make the timeline unable to say which source an edge came from (N8).
+// the body too would make the timeline unable to say which source an edge came from.
 //
 // It returns (word, number) pairs in the order they appear.
 func ParseSequenceRelations(body string) [][2]string {
@@ -309,8 +326,8 @@ func ParseSequenceRelations(body string) [][2]string {
 }
 
 // SpanRow is an epic or milestone row: it spans the earliest start to the latest end of its
-// children, and its progress is ccpm's existing task-close percentage (O11). No second
-// definition of progress is introduced.
+// children, and its progress is ccpm's existing task-close percentage. No second definition
+// of progress is introduced.
 type SpanRow struct {
 	Kind      string `json:"kind"` // "epic" or "milestone"
 	Key       string `json:"key"`
@@ -319,11 +336,60 @@ type SpanRow struct {
 	EndUnix   int64  `json:"end_unix"`
 	Children  int    `json:"children"`
 	Closed    int    `json:"closed"`
-	// Progress is closed children over all children, as a whole percentage.
+	// Progress is closed children over all children, as a whole percentage. It is 0 on a
+	// partial row: a fraction of an unknown denominator is not a measurement.
 	Progress int `json:"progress"`
 	// EndInferred is true when ANY child's end is inferred, so a span is never drawn as
-	// firmer than the bars it is made of (O8).
+	// firmer than the bars it is made of.
 	EndInferred bool `json:"end_inferred"`
+	// Partial is true when the fetch behind this row hit its cap, so the row covers a
+	// prefix of the parent's children rather than all of them.
+	Partial bool `json:"partial"`
+	// IssueID is the type:epic issue the key names, so a bracket can be opened. 0 for a
+	// milestone, which is not an issue.
+	IssueID int64 `json:"issue_id,omitempty"`
+	// DeclaredStartUnix and DeclaredEndUnix are the epic issue's OWN bar, which is a
+	// different window from the one its children derive.
+	DeclaredStartUnix int64 `json:"declared_start_unix,omitempty"`
+	DeclaredEndUnix   int64 `json:"declared_end_unix,omitempty"`
+	// ContainsChildren is whether the declared window contains the derived one. A row with
+	// no declared window contains its children vacuously and carries no warning.
+	ContainsChildren bool   `json:"contains_children"`
+	Warning          string `json:"warning,omitempty"`
+	SuggestedAction  string `json:"suggested_action,omitempty"`
+}
+
+// Zoom is the depth the chart is read at. It is a view setting, never stored.
+type Zoom string
+
+const (
+	// ZoomIssue draws one bar per issue, which is the chart's own level.
+	ZoomIssue Zoom = "issue"
+	// ZoomEpic draws only epic rollups.
+	ZoomEpic Zoom = "epic"
+	// ZoomMilestone draws only milestone rollups.
+	ZoomMilestone Zoom = "milestone"
+)
+
+// Zooms is the accepted set. The API refuses anything else naming this list.
+var Zooms = []string{string(ZoomIssue), string(ZoomEpic), string(ZoomMilestone)}
+
+// TypeEpic is the type: value ccpm puts on an epic's own issue, beside the epic:<name>
+// label it also puts there.
+const TypeEpic = "epic"
+
+// ParseZoom resolves a caller's word. An empty string means issue, so a chart with no zoom
+// parameter draws bars rather than being refused.
+func ParseZoom(s string) (Zoom, bool) {
+	switch Zoom(strings.TrimSpace(strings.ToLower(s))) {
+	case "", ZoomIssue:
+		return ZoomIssue, true
+	case ZoomEpic:
+		return ZoomEpic, true
+	case ZoomMilestone:
+		return ZoomMilestone, true
+	}
+	return ZoomIssue, false
 }
 
 // BuildSpan folds a set of bars into one row. A span over no bars is not a row: it returns
@@ -352,14 +418,19 @@ func BuildSpan(kind, key, label string, bars []Bar) (SpanRow, bool) {
 	return row, true
 }
 
-// BuildSpans folds bars into the epic and milestone rows of O11, epics first and each set
-// ordered by its own start.
+// BuildSpans folds bars into epic and milestone rows, epics first, each set ordered by key.
+// An epic's own issue is its declared window, not one of its children; milestones count it.
 func BuildSpans(bars []Bar) []SpanRow {
 	byEpic := map[string][]Bar{}
+	declared := map[string]Bar{}
 	byMilestone := map[string][]Bar{}
 	milestoneLabel := map[string]string{}
 	for _, bar := range bars {
-		if bar.Epic != "" {
+		switch {
+		case bar.Epic == "":
+		case bar.Type == TypeEpic:
+			declared[bar.Epic] = bar
+		default:
 			byEpic[bar.Epic] = append(byEpic[bar.Epic], bar)
 		}
 		if bar.MilestoneID > 0 {
@@ -372,16 +443,86 @@ func BuildSpans(bars []Bar) []SpanRow {
 	rows := make([]SpanRow, 0, len(byEpic)+len(byMilestone))
 	for _, key := range sortedKeys(byEpic) {
 		if row, ok := BuildSpan("epic", key, key, byEpic[key]); ok {
+			applyContainment(&row, declared[key], byEpic[key])
 			rows = append(rows, row)
 		}
 	}
 	for _, key := range sortedKeys(byMilestone) {
 		if row, ok := BuildSpan("milestone", key, milestoneLabel[key], byMilestone[key]); ok {
+			row.ContainsChildren = true
 			rows = append(rows, row)
 		}
 	}
 	return rows
 }
+
+// MarkPartial withdraws the progress figure: a fraction of an unknown denominator is not a
+// measurement.
+func (r *SpanRow) MarkPartial() {
+	r.Partial, r.Progress = true, 0
+}
+
+// applyContainment warns when an epic's declared window does not contain its children's.
+// Containment, not a sum of effort: children run in parallel, so a sum warns on every plan.
+func applyContainment(row *SpanRow, declared Bar, children []Bar) {
+	row.ContainsChildren = true
+	if declared.IssueID == 0 || len(children) == 0 {
+		return
+	}
+	row.IssueID = declared.IssueID
+	row.DeclaredStartUnix, row.DeclaredEndUnix = declared.StartUnix, declared.EndUnix
+
+	var warnings, actions []string
+	if declared.EndUnix < row.EndUnix {
+		warnings = append(warnings, fmt.Sprintf("epic %s (#%d) ends %s before the work filed under it",
+			row.Key, declared.Number, days(row.EndUnix-declared.EndUnix)))
+		actions = append(actions, fmt.Sprintf("Move the epic's deadline to %s, or move %s earlier.",
+			utcDay(row.EndUnix), nameOf(latest(children, func(bar Bar) int64 { return -bar.EndUnix }))))
+	}
+	if declared.StartUnix > row.StartUnix {
+		warnings = append(warnings, fmt.Sprintf("epic %s (#%d) starts %s after the work filed under it",
+			row.Key, declared.Number, days(declared.StartUnix-row.StartUnix)))
+		actions = append(actions, fmt.Sprintf("Move the epic's start to %s, or move %s later.",
+			utcDay(row.StartUnix), nameOf(latest(children, func(bar Bar) int64 { return bar.StartUnix }))))
+	}
+	if len(warnings) == 0 {
+		return
+	}
+	row.ContainsChildren = false
+	row.Warning = strings.Join(warnings, "; ")
+	row.SuggestedAction = strings.Join(actions, " ")
+}
+
+// latest returns the bar with the smallest rank: the one child a warning names.
+func latest(bars []Bar, rank func(Bar) int64) Bar {
+	pick := bars[0]
+	for _, bar := range bars[1:] {
+		if rank(bar) < rank(pick) {
+			pick = bar
+		}
+	}
+	return pick
+}
+
+// nameOf points the suggested action at one issue to move.
+func nameOf(bar Bar) string {
+	kind := bar.Type
+	if kind == "" {
+		kind = "issue"
+	}
+	return kind + " #" + strconv.FormatInt(bar.Number, 10)
+}
+
+// days rounds up, so an overhang shorter than a day still reads as one rather than none.
+func days(seconds int64) string {
+	count := (seconds + daySeconds - 1) / daySeconds
+	if count == 1 {
+		return "1 day"
+	}
+	return strconv.FormatInt(count, 10) + " days"
+}
+
+func utcDay(unix int64) string { return time.Unix(unix, 0).UTC().Format(time.DateOnly) }
 
 func sortedKeys(m map[string][]Bar) []string {
 	keys := make([]string, 0, len(m))

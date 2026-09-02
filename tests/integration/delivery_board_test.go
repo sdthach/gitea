@@ -340,15 +340,41 @@ type timelinePayload struct {
 		Enforced    bool   `json:"enforced"`
 	} `json:"arrows"`
 	Spans []struct {
-		Kind     string `json:"kind"`
-		Key      string `json:"key"`
-		Progress int    `json:"progress"`
+		Kind             string `json:"kind"`
+		Key              string `json:"key"`
+		Progress         int    `json:"progress"`
+		Children         int    `json:"children"`
+		Partial          bool   `json:"partial"`
+		IssueID          int64  `json:"issue_id"`
+		StartUnix        int64  `json:"start_unix"`
+		EndUnix          int64  `json:"end_unix"`
+		DeclaredEndUnix  int64  `json:"declared_end_unix"`
+		ContainsChildren bool   `json:"contains_children"`
+		Warning          string `json:"warning"`
+		SuggestedAction  string `json:"suggested_action"`
 	} `json:"spans"`
 	Rows []struct {
 		MilestoneID int64  `json:"milestone_id"`
 		Title       string `json:"title"`
 	} `json:"rows"`
+	GroupBy string `json:"group_by"`
+	Zoom    string `json:"zoom"`
+	Lanes   []struct {
+		Key   string `json:"key"`
+		Label string `json:"label"`
+		Cards int    `json:"cards"`
+	} `json:"lanes"`
+	Ruler struct {
+		Unit      string `json:"unit"`
+		StartUnix int64  `json:"start_unix"`
+		EndUnix   int64  `json:"end_unix"`
+		Ticks     []struct {
+			Unix  int64  `json:"unix"`
+			Label string `json:"label"`
+		} `json:"ticks"`
+	} `json:"ruler"`
 	CanWrite  bool `json:"can_write"`
+	Truncated bool `json:"truncated"`
 	Unmanaged []struct {
 		Number          int64  `json:"number"`
 		Reason          string `json:"reason"`

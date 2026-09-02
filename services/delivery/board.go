@@ -14,19 +14,19 @@ import (
 // dimension Gitea does not model: project.Column carries ID, Title, Default, Sorting,
 // Color, ProjectID, CreatorID and timestamps and no lane, row or group field (verified in
 // models/project/column.go). Lanes are therefore a RENDERING over rows the Projects API
-// already returns — no schema change, no migration and no fork change (O1).
+// already returns — no schema change, no migration and no fork change.
 //
 // Everything in this file is pure: it takes reduced structs and returns reduced structs, so
-// lane assignment is tested with no database and no server (J5, J10).
+// lane assignment is tested with no database and no server.
 
 // Grouping is the lane dimension, chosen at view time. It is never stored on the project,
-// so two people may group the same board differently (O2).
+// so two people may group the same board differently.
 type Grouping string
 
 const (
 	// GroupNone renders the board with a single lane, which is Gitea's own board.
 	GroupNone Grouping = "none"
-	// GroupType groups by ccpm's type:<t> label (H1).
+	// GroupType groups by ccpm's type:<t> label.
 	GroupType Grouping = "type"
 	// GroupAssignee groups by the issue's assignee.
 	GroupAssignee Grouping = "assignee"
@@ -38,13 +38,13 @@ const (
 // naming this list, so an unknown grouping is refused rather than silently treated as none.
 var Groupings = []string{string(GroupType), string(GroupAssignee), string(GroupEpic), string(GroupNone)}
 
-// The label prefixes ccpm writes (H1, slice 2). They are spelled once here.
+// The label prefixes ccpm writes. They are spelled once here.
 const (
 	TypeLabelPrefix = "type:"
 	EpicLabelPrefix = "epic:"
 )
 
-// Lane keys and labels for the explicit empty-value lane of O3. An issue with no value for
+// Lane keys and labels for the explicit empty-value lane. An issue with no value for
 // the active grouping lands here; nothing disappears from a board because a field is unset.
 const emptyLaneKey = ""
 
@@ -75,7 +75,7 @@ type Card struct {
 	URL      string `json:"url"`
 	ColumnID int64  `json:"column_id"`
 	Sorting  int64  `json:"sorting"`
-	// Labels and Assignees are the grouping fields. A lane move edits one of them (O4).
+	// Labels and Assignees are the grouping fields. A lane move edits one of them.
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
 	IsClosed  bool     `json:"is_closed"`
@@ -97,13 +97,13 @@ type LaneColumn struct {
 	Cards    []Card `json:"cards"`
 }
 
-// Lane is one horizontal row of the board (O1).
+// Lane is one horizontal row of the board.
 type Lane struct {
 	// Key is the grouping value itself — the text a lane move writes. Empty is the
 	// empty-value lane.
 	Key   string `json:"key"`
 	Label string `json:"label"`
-	// IsEmptyValue marks the lane O3 requires: the issues with no value for the active
+	// IsEmptyValue marks the issues with no value for the active
 	// grouping, shown rather than dropped.
 	IsEmptyValue bool         `json:"is_empty_value"`
 	Columns      []LaneColumn `json:"columns"`
@@ -141,24 +141,27 @@ func labelValue(labels []string, prefix string) string {
 	return matched[0]
 }
 
-// LaneKeyFor is the whole of lane assignment (O2, O3). A card with no value for the active
-// grouping returns the empty key, which BuildLanes renders as the explicit empty-value lane.
+// LaneKeyFor is the whole of lane assignment. A row with no value for the active grouping
+// returns the empty key, which BuildLanes renders as the explicit empty-value lane.
 //
-// A card with more than one candidate value lands in the lexicographically first, so the
-// board does not reshuffle between two renders of the same data.
-func LaneKeyFor(card Card, grouping Grouping) string {
+// It takes the two slices rather than a Card so the chart's bars and the board's cards reach
+// one definition of a lane.
+//
+// A row with more than one candidate value lands in the lexicographically first, so neither
+// view reshuffles between two renders of the same data.
+func LaneKeyFor(labels, assignees []string, grouping Grouping) string {
 	switch grouping {
 	case GroupType:
-		return labelValue(card.Labels, TypeLabelPrefix)
+		return labelValue(labels, TypeLabelPrefix)
 	case GroupEpic:
-		return labelValue(card.Labels, EpicLabelPrefix)
+		return labelValue(labels, EpicLabelPrefix)
 	case GroupAssignee:
-		if len(card.Assignees) == 0 {
+		if len(assignees) == 0 {
 			return emptyLaneKey
 		}
-		assignees := append([]string(nil), card.Assignees...)
-		sort.Strings(assignees)
-		return assignees[0]
+		sorted := append([]string(nil), assignees...)
+		sort.Strings(sorted)
+		return sorted[0]
 	}
 	return emptyLaneKey
 }
@@ -172,7 +175,7 @@ func BuildLanes(columns []BoardColumn, cards []Card, grouping Grouping) []Lane {
 	byLane := map[string][]Card{}
 	order := make([]string, 0, 8)
 	for _, card := range cards {
-		key := LaneKeyFor(card, grouping)
+		key := LaneKeyFor(card.Labels, card.Assignees, grouping)
 		if _, seen := byLane[key]; !seen {
 			order = append(order, key)
 		}
@@ -224,6 +227,24 @@ func BuildLanes(columns []BoardColumn, cards []Card, grouping Grouping) []Lane {
 	return lanes
 }
 
+// timelineLaneColumn is the one column the chart's lanes carry. A chart has no columns of its
+// own, so BuildLanes lays every bar of a lane into a single cell and the result is still the
+// rectangle a template can walk.
+const timelineLaneColumn = "bars"
+
+// TimelineLanes groups the chart's bars through the board's own lane definition, so a lane on
+// the chart and a lane on the board are the same value read the same way.
+func TimelineLanes(bars []Bar, grouping Grouping) []Lane {
+	cards := make([]Card, 0, len(bars))
+	for _, bar := range bars {
+		cards = append(cards, Card{
+			IssueID: bar.IssueID, Number: bar.Number, Title: bar.Title, URL: bar.URL,
+			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
+		})
+	}
+	return BuildLanes([]BoardColumn{{Title: timelineLaneColumn}}, cards, grouping)
+}
+
 // LaneWriteKind is what a lane move edits.
 type LaneWriteKind string
 
@@ -234,7 +255,7 @@ const (
 	LaneWriteAssignee LaneWriteKind = "assignee"
 )
 
-// LaneWrite is the single edit a lane move performs (O4). It names the field itself — the
+// LaneWrite is the single edit a lane move performs. It names the field itself — the
 // grouping value is not stored anywhere else, so moving between lanes IS editing it.
 type LaneWrite struct {
 	Kind LaneWriteKind
@@ -250,8 +271,8 @@ type LaneWrite struct {
 
 // PlanLaneMove resolves a lane move into the one field edit it performs, or refuses it.
 //
-// O4: a lane move is REFUSED when grouping is off, because there is nothing to write. The
-// refusal carries what to do about it (A21).
+// A lane move is REFUSED when grouping is off, because there is nothing to write. The
+// refusal carries what to do about it.
 func PlanLaneMove(grouping Grouping, laneKey string) (LaneWrite, error) {
 	switch grouping {
 	case GroupType:

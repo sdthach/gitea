@@ -45,6 +45,8 @@ type timelineWriteBody struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Epic        string `json:"epic"`
+	GroupBy     string `json:"group_by"`
+	Lane        string `json:"lane"`
 }
 
 var timelineRepoParam = []Param{
@@ -62,7 +64,7 @@ func moveTimelineIssueMilestoneEndpoint() *endpoint {
 			Summary: "Move an issue between the chart's milestone rows",
 			Description: "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records " +
 				"the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. " +
-				"Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "timeline", PathParams: timelineIssueParam,
 			Body: append(append([]Param{}, timelineRepoParam...),
 				Param{Name: "milestone_id", In: "body", Type: "integer", Description: "Target milestone; 0 removes the issue from its row."}),
@@ -80,8 +82,8 @@ func setTimelineIssueDatesEndpoint() *endpoint {
 			Summary: "Set a bar's start and end",
 			Description: "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline " +
 				"comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads " +
-				"(O7, O8) — no file in the repository is touched. Send either field empty to leave it as it stands. " +
-				"Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+				"— no file in the repository is touched. Send either field empty to leave it as it stands. " +
+				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "timeline", PathParams: timelineIssueParam,
 			Body: append(append([]Param{}, timelineRepoParam...),
 				Param{Name: "start", In: "body", Type: "string", Description: "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date."},
@@ -93,12 +95,41 @@ func setTimelineIssueDatesEndpoint() *endpoint {
 	}
 }
 
+func moveTimelineIssueLaneEndpoint() *endpoint {
+	return &endpoint{
+		Op: &Operation{
+			ID: "moveTimelineIssueLane", Method: http.MethodPost, Path: "/timeline/issues/{issue_id}/lane",
+			Summary: "Move a bar between the chart's lanes",
+			Description: "The chart's vertical drag. A lane IS the grouping value, so moving between lanes edits the " +
+				"field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanLaneMove " +
+				"the board's lane move goes through, so a vertical drag on the chart and a lane move on the board are one " +
+				"operation with one definition rather than two that can drift. Dragging vertically writes the grouping " +
+				"field and dragging horizontally writes dates; the two are independent. " +
+				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
+				"Authorized by Gitea's own write check on the Issues unit.",
+			Tag: "timeline", PathParams: timelineIssueParam,
+			Body: append(append([]Param{}, timelineRepoParam...),
+				Param{
+					Name: "group_by", In: "body", Type: "string", Required: true, Enum: delivery_service.Groupings,
+					Description: "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
+				},
+				Param{
+					Name: "lane", In: "body", Type: "string",
+					Description: "The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.",
+				}),
+			CLINames: []string{"timeline-move-lane"},
+			Response: "Timeline", ResponseIs: "object",
+		},
+		Handler: MoveTimelineIssueLane,
+	}
+}
+
 func createTimelineMilestoneEndpoint() *endpoint {
 	return &endpoint{
 		Op: &Operation{
 			ID: "createTimelineMilestone", Method: http.MethodPost, Path: "/timeline/milestones",
 			Summary:     "Create a milestone row",
-			Description: "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+			Description: "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
 			Tag:         "timeline",
 			Body: append(append([]Param{}, timelineRepoParam...),
 				Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Milestone title."},
@@ -117,8 +148,8 @@ func createTimelineIssueEndpoint() *endpoint {
 			ID: "createTimelineIssue", Method: http.MethodPost, Path: "/timeline/issues",
 			Summary: "Create an issue on a row",
 			Description: "Creates the issue and files it under the milestone row and, when epic is given, the epic: label " +
-				"the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn (O10). " +
-				"Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+				"the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. " +
+				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "timeline",
 			Body: append(append([]Param{}, timelineRepoParam...),
 				Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Issue title."},
@@ -149,7 +180,7 @@ func MoveTimelineIssueMilestone(ctx *context.APIContext) {
 			return
 		}
 	}
-	renderTimelineAfterWrite(ctx, repo)
+	renderTimelineAfterWrite(ctx, repo, timelineView{})
 }
 
 // SetTimelineIssueDates answers POST /timeline/issues/{issue_id}/dates.
@@ -188,7 +219,40 @@ func SetTimelineIssueDates(ctx *context.APIContext) {
 			return
 		}
 	}
-	renderTimelineAfterWrite(ctx, repo)
+	renderTimelineAfterWrite(ctx, repo, timelineView{})
+}
+
+// MoveTimelineIssueLane answers POST /timeline/issues/{issue_id}/lane. It delegates to the
+// same PlanLaneMove the board's lane move delegates to, so there is one definition of what a
+// lane move writes rather than one per view.
+func MoveTimelineIssueLane(ctx *context.APIContext) {
+	body, repo, issue, ok := timelineIssueTarget(ctx)
+	if !ok {
+		return
+	}
+	grouping, ok := parseGrouping(ctx, body.GroupBy)
+	if !ok {
+		return
+	}
+	write, err := delivery_service.PlanLaneMove(grouping, body.Lane)
+	if err != nil {
+		// With grouping off there is no field to write, and the message says which write
+		// does still work.
+		renderHubError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	switch write.Kind {
+	case delivery_service.LaneWriteLabel:
+		if !applyLaneLabel(ctx, repo, issue, write) {
+			return
+		}
+	case delivery_service.LaneWriteAssignee:
+		if !applyLaneAssignee(ctx, issue, write) {
+			return
+		}
+	}
+	renderTimelineAfterWrite(ctx, repo, timelineView{grouping: grouping, zoom: delivery_service.ZoomIssue})
 }
 
 // CreateTimelineMilestone answers POST /timeline/milestones.
@@ -215,7 +279,7 @@ func CreateTimelineMilestone(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	renderTimelineAfterWrite(ctx, repo)
+	renderTimelineAfterWrite(ctx, repo, timelineView{})
 }
 
 // CreateTimelineIssue answers POST /timeline/issues.
@@ -252,7 +316,7 @@ func CreateTimelineIssue(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	renderTimelineAfterWrite(ctx, repo)
+	renderTimelineAfterWrite(ctx, repo, timelineView{})
 }
 
 // timelineEpicLabel finds or creates the epic:<name> label the chart groups by, so creating
@@ -392,12 +456,12 @@ func readTimelineWriteBody(ctx *context.APIContext) (*timelineWriteBody, bool) {
 
 // renderTimelineAfterWrite answers with the chart the write produced, over the same
 // projection GET serves, so a client never has to guess what its write did.
-func renderTimelineAfterWrite(ctx *context.APIContext, repo *repo_model.Repository) {
+func renderTimelineAfterWrite(ctx *context.APIContext, repo *repo_model.Repository, view timelineView) {
 	const limit = 200
 	renderTimeline(ctx, repo, &issues_model.IssuesOptions{
 		RepoIDs:   []int64{repo.ID},
 		IsPull:    optional.Some(false),
 		Paginator: &db.ListOptions{Page: 1, PageSize: limit},
 		SortType:  "oldest",
-	}, limit, true) // every caller here has already passed the write check
+	}, limit, true, view) // every caller here has already passed the write check
 }
