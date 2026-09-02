@@ -25,6 +25,27 @@ func withDeliveryConfig(t *testing.T, ini string) {
 	setting.CfgProvider = cfg
 }
 
+// TestDeliveryReleasePageBadgesTheEnvironmentsHoldingARelease is SC13: the release page says
+// where a release is running. The badges are drawn from the grid endpoint, so the page
+// introduces no second answer to what is live where.
+func TestDeliveryReleasePageBadgesTheEnvironmentsHoldingARelease(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, "user2")
+	req := NewRequest(t, "GET", "/user2/repo1/releases")
+	body := session.MakeRequest(t, req, http.StatusOK).Body.String()
+
+	assert.Contains(t, body, "data-delivery-release-environments",
+		"the release page carries the fork's one delegation")
+	assert.Contains(t, body, `data-repo-id="1"`, "which names the repository the grid is asked about")
+	assert.Contains(t, body, "/api/delivery/v1", "and reads the grid over the documented endpoint")
+
+	// Signed out, the page is Gitea's alone: the grid is not readable, so nothing is offered.
+	req = NewRequest(t, "GET", "/user2/repo1/releases")
+	anonymous := MakeRequest(t, req, http.StatusOK).Body.String()
+	assert.NotContains(t, anonymous, "data-delivery-release-environments")
+}
+
 // TestDeliverySwimlanesAreGatedOnTheFlag is D2's constraint: the project page is Gitea's, so
 // a build that has not asked for lanes renders it carrying nothing of the fork's.
 func TestDeliverySwimlanesAreGatedOnTheFlag(t *testing.T) {

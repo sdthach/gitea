@@ -116,8 +116,9 @@ var forkPages = []struct {
 // forkFragments are the templates a spoke embeds in an upstream page rather than the fork
 // serving as a page of its own. They have no route and no API of their own to be a client of.
 var forkFragments = map[string]bool{
-	"navbar_entry.tmpl": true,
-	"swimlanes.tmpl":    true,
+	"navbar_entry.tmpl":         true,
+	"release_environments.tmpl": true,
+	"swimlanes.tmpl":            true,
 }
 
 func TestEveryPageIsListed(t *testing.T) {
