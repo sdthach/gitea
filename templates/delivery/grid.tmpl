@@ -196,19 +196,18 @@ try {
 		fail('no release is visible to you yet',
 			'Cut a release, or check your account can read the Actions unit of a repository that has one.');
 	} else {
-		// Environment headers open that environment's view (E8). Column order is the order
-		// the API returned the cells in, which is the configured order (E7). The set is the
-		// union over every row: cells are per repository, so a header taken from one row
-		// renders another repository's cells under a column naming a different environment.
+		// Environment headers open that environment's view (E8). Columns are the union over every
+		// row, ordered by configured sort_order (E7): cells are per repository, so no one row orders a grid.
 		const columns = [];
 		for (const row of payload) {
 			for (const cell of row.cells) {
-				if (!columns.includes(cell.environment)) columns.push(cell.environment);
+				if (!columns.some((column) => column.environment === cell.environment)) columns.push(cell);
 			}
 		}
-		for (const environment of columns) {
+		columns.sort((a, b) => a.sort_order - b.sort_order); // a stable sort leaves ties in first-seen order
+		for (const column of columns) {
 			const th = document.createElement('th');
-			th.append(link(environment, `${subURL}/delivery/environments/${encodeURIComponent(environment)}`,
+			th.append(link(column.environment, `${subURL}/delivery/environments/${encodeURIComponent(column.environment)}`,
 				'Open this environment'));
 			head.append(th);
 		}
@@ -230,9 +229,9 @@ try {
 			release.append(toggle);
 			tr.append(release);
 			const cells = new Map(row.cells.map((cell) => [cell.environment, cell]));
-			for (const environment of columns) {
+			for (const column of columns) {
 				const td = document.createElement('td');
-				const cell = cells.get(environment);
+				const cell = cells.get(column.environment);
 				if (!cell) { // this repository has not declared this environment at all
 					tr.append(td);
 					continue;

@@ -148,6 +148,18 @@ func TestDeliveryGridColumnsFollowConfiguredOrder(t *testing.T) {
 	assert.Equal(t, "✔ now", cells["v1"][2].Symbol)
 }
 
+// TestDeliveryGridCellsCarryTheConfiguredOrder covers what a grid spanning repositories
+// needs: the column order travels on the cell, not on its position in one row.
+func TestDeliveryGridCellsCarryTheConfiguredOrder(t *testing.T) {
+	events := []Event{event(1, "v1", "prod", delivery_model.AuditSucceeded)}
+	cells := applySortOrders(ProjectCells([]string{"dev", "prod"}, []string{"v1"}, events, nil),
+		map[string]int64{"dev": 40, "prod": 10})
+
+	require.Len(t, cells["v1"], 2)
+	assert.Equal(t, int64(40), cells["v1"][0].SortOrder, "dev carries its own configured order")
+	assert.Equal(t, int64(10), cells["v1"][1].SortOrder, "prod sorts ahead of dev however the row lists them")
+}
+
 func TestDeliveryGridEnvironmentsAreIndependent(t *testing.T) {
 	events := []Event{
 		event(10, "v1", "qa", delivery_model.AuditSucceeded),

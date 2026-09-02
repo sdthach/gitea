@@ -37,6 +37,7 @@ const (
 // Cell is one grid cell.
 type Cell struct {
 	Environment string    `json:"environment"`
+	SortOrder   int64     `json:"sort_order"` // the configured column order, so a grid spanning repositories can merge columns (E7)
 	State       CellState `json:"state"`
 	// Symbol is the rendering E7 tabulates. It is computed here rather than in the
 	// template so the CLI, the page and the tests all read the same string.
@@ -267,7 +268,7 @@ func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error)
 	cellsOf := map[int64]map[string][]Cell{}
 	repos := map[int64]*repo_model.Repository{}
 	for repoID, tags := range byRepo {
-		environments, policies, err := environmentsOf(ctx, repoID, opts.Environment)
+		environments, policies, orders, err := environmentsOf(ctx, repoID, opts.Environment)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -275,7 +276,7 @@ func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error)
 		if err != nil {
 			return nil, 0, err
 		}
-		cellsOf[repoID] = ProjectCellsHeld(ctx, repoID, environments, tags, events, policies)
+		cellsOf[repoID] = applySortOrders(ProjectCellsHeld(ctx, repoID, environments, tags, events, policies), orders)
 		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 		if err != nil {
 			return nil, 0, err
@@ -300,28 +301,40 @@ func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error)
 
 // environmentsOf reads a repository's environment column order, falling back to the
 // instance-wide default set when the repository has declared none of its own (E7).
-func environmentsOf(ctx context.Context, repoID int64, only string) ([]string, map[string]string, error) {
+func environmentsOf(ctx context.Context, repoID int64, only string) ([]string, map[string]string, map[string]int64, error) {
 	envs, _, err := delivery_model.FindEnvironments(ctx, builder.Eq{"repo_id": repoID}, "sort_order ASC, id ASC", 0, 0)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(envs) == 0 {
 		envs, _, err = delivery_model.FindEnvironments(ctx,
 			builder.Eq{"repo_id": delivery_model.DefaultsRepoID}, "sort_order ASC, id ASC", 0, 0)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	names := make([]string, 0, len(envs))
 	policies := make(map[string]string, len(envs))
+	orders := make(map[string]int64, len(envs))
 	for _, env := range envs {
 		if only != "" && env.Name != delivery_model.NormalizeEnvironmentName(only) {
 			continue
 		}
 		names = append(names, env.Name)
 		policies[env.Name] = env.ApprovalPolicy
+		orders[env.Name] = env.SortOrder
 	}
-	return names, policies, nil
+	return names, policies, orders, nil
+}
+
+// applySortOrders stamps each cell with its configured column order, which a grid spanning repositories needs (E7).
+func applySortOrders(cells map[string][]Cell, orders map[string]int64) map[string][]Cell {
+	for _, row := range cells {
+		for i := range row {
+			row[i].SortOrder = orders[row[i].Environment]
+		}
+	}
+	return cells
 }
 
 // eventsOf reads the audit rows the projection needs for one repository's releases.

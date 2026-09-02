@@ -485,7 +485,7 @@
       "GridRow": {
         "properties": {
           "cells": {
-            "description": "One cell per environment, in configured order (E7). Each carries environment, state, symbol, successes, run_id, run_url and occurred_unix; a cell opens its run (E8).",
+            "description": "One cell per environment, in configured order (E7). Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run (E8).",
             "items": {
               "type": "object"
             },

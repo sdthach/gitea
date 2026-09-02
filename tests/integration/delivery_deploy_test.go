@@ -68,6 +68,7 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 		ReleaseTag   string `json:"release_tag"`
 		Cells        []struct {
 			Environment string `json:"environment"`
+			SortOrder   int64  `json:"sort_order"`
 			State       string `json:"state"`
 			Symbol      string `json:"symbol"`
 			Successes   int    `json:"successes"`
@@ -84,8 +85,10 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 		require.NotEmpty(t, row.Cells, "every row carries one cell per environment, in configured order (E7)")
 		byTag[row.ReleaseTag] = map[string]string{}
 		columns := make([]string, 0, len(row.Cells))
+		orders := make([]int64, 0, len(row.Cells))
 		for _, cell := range row.Cells {
 			columns = append(columns, cell.Environment)
+			orders = append(orders, cell.SortOrder)
 			byTag[row.ReleaseTag][cell.Environment] = cell.Symbol
 			if cell.Environment == "qa" {
 				successes[row.ReleaseTag] = cell.Successes
@@ -93,6 +96,8 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 		}
 		assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, columns,
 			"environment sequence is configuration; nothing in Gitea expresses it (E7)")
+		assert.Equal(t, []int64{10, 20, 30, 40, 50}, orders,
+			"each cell carries its environment's configured order, which is what orders a grid spanning repositories (E7)")
 	}
 
 	require.Contains(t, byTag, "v1.0")

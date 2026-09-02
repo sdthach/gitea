@@ -223,7 +223,7 @@ var componentSchemas = map[string]any{
 		"release_tag":    prop("string", "The release this row renders."),
 		"release_url":    prop("string", "Link to the release; a release row opens the release (E8)."),
 		"created_unix":   prop("integer", "Release creation time, unix seconds."),
-		"cells":          arrayProp("object", "One cell per environment, in configured order (E7). Each carries environment, state, symbol, successes, run_id, run_url and occurred_unix; a cell opens its run (E8)."),
+		"cells":          arrayProp("object", "One cell per environment, in configured order (E7). Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run (E8)."),
 	}, "repo_id", "repo_full_name", "release_tag", "cells"),
 	"Promotion": objectSchema(map[string]any{
 		"repo_id":                  prop("integer", "Repository the deploy targets."),

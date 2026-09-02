@@ -517,7 +517,7 @@ if (envID) {
 		if (!body) return false;
 		state.env = normalize(body);
 		state.editing = null;
-		await loadSiblings();
+		await Promise.all([loadSiblings(), loadSecrets()]); // a rename moves the secrets path
 		render();
 		return true;
 	}
@@ -770,7 +770,12 @@ if (envID) {
 		const full = document.querySelector('#delivery-new-repo').value.trim();
 		let repoID = 0;
 		if (full) {
-			const repo = await probe(`${gitea}/repos/${full}`);
+			const cut = full.indexOf('/');
+			if (cut < 1 || cut === full.length - 1 || full.includes('/', cut + 1)) {
+				fail(`"${full}" does not name a repository`, 'Write the repository as owner/name, or leave it blank for an instance-wide environment.');
+				return;
+			}
+			const repo = await probe(`${gitea}/repos/${encodeURIComponent(full.slice(0, cut))}/${encodeURIComponent(full.slice(cut + 1))}`);
 			if (!repo) {
 				fail(`no repository ${full} is visible to you`, 'Check the owner and repository name, or leave it blank for an instance-wide environment.');
 				return;
