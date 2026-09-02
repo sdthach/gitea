@@ -276,7 +276,6 @@ test('delivery timeline offers a reader no handle and no drop target', async ({p
   await apiCreateUser(page.request, reader);
 
   try {
-    await page.context().clearCookies(); // the reader's session has to be the only one
     await loginUser(page, reader);
     await page.goto('/delivery/timeline');
     await page.getByLabel('Repository id').fill(String(repoID));

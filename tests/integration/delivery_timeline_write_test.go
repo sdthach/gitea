@@ -626,6 +626,10 @@ func TestAPIDeliveryTimelineAttachesAnArrowToTheBracketItsEndFallsIn(t *testing.
 	assert.Equal(t, "depends_on", arrow.Kind)
 	assert.True(t, arrow.Enforced, "the forge itself refuses the close, whatever zoom it is read at")
 
+	narrowed := getTimeline(t, token, "repo_id=1&zoom=epic&limit=200&epic=billing")
+	require.Len(t, narrowed.Spans, 1)
+	assert.Empty(t, narrowed.Arrows, "an edge whose other end has no bracket on the page has nothing to attach to")
+
 	// A sequencing hint between the same pair keeps its own kind: it is enforced by nothing,
 	// and a chart that flattened the two would read a hint as a gate.
 	billingChild := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 9600})
