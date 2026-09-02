@@ -238,3 +238,30 @@ func TestDeliveryTimelineRefusesEveryWriteWithoutIssueWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, issueCount, issuesAfter, "the refused create made no issue")
 }
+
+// TestDeliveryTimelineStartCanBeDraggedInBothDirections is the drag the chart offers: an
+// edge moved right must move the bar's start right. The marker is append-only, so the read
+// path decides which of an issue's markers the bar draws.
+func TestDeliveryTimelineStartCanBeDraggedInBothDirections(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	issue := manageIssue(t, 5, "checkout")
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	after := timelineWrite(t, token, "/timeline/issues/5/dates",
+		map[string]any{"repo": "user2/repo1", "start": "2026-03-10"})
+	_, startUnix, _, _, _ := timelineBar(t, after, issue.ID)
+	require.EqualValues(t, 1773100800, startUnix, "2026-03-10T00:00:00Z")
+
+	// Drag the edge left: an earlier start.
+	after = timelineWrite(t, token, "/timeline/issues/5/dates",
+		map[string]any{"repo": "user2/repo1", "start": "2026-03-05"})
+	_, startUnix, _, _, _ = timelineBar(t, after, issue.ID)
+	assert.EqualValues(t, 1772668800, startUnix, "dragging the start edge left moves the bar left")
+
+	// Drag the edge right: a later start.
+	after = timelineWrite(t, token, "/timeline/issues/5/dates",
+		map[string]any{"repo": "user2/repo1", "start": "2026-03-20"})
+	_, startUnix, _, _, _ = timelineBar(t, after, issue.ID)
+	assert.EqualValues(t, 1773964800, startUnix, "dragging the start edge right moves the bar right")
+}

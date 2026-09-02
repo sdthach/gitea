@@ -266,8 +266,10 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64) delivery_service.
 // ccpmStarts reads the ccpm:started marker off each issue's comments.
 //
 // The marker is the ONLY carrier of a start date onto the forge: Gitea has no column for
-// one. The earliest marker wins, so a re-synced progress comment does not move a bar that
-// already started.
+// one, and the comment is append-only. The LAST marker posted wins, because it is the most
+// recent statement of when the work started: re-syncing an unchanged value changes nothing,
+// a changed one is ccpm correcting itself, and dragging the chart's start edge later has to
+// move the bar or the edge only drags one way.
 func ccpmStarts(ctx *context.APIContext, issues issues_model.IssueList) (map[int64]int64, error) {
 	starts := map[int64]int64{}
 	if len(issues) == 0 {
@@ -298,9 +300,7 @@ func ccpmStarts(ctx *context.APIContext, issues issues_model.IssueList) (map[int
 			// falls back to the issue's creation time and says so.
 			continue
 		}
-		if existing, seen := starts[comment.IssueID]; seen && existing <= at.Unix() {
-			continue
-		}
+		// Comments are ordered oldest first, so the last assignment is the newest marker.
 		starts[comment.IssueID] = at.Unix()
 	}
 	return starts, nil
