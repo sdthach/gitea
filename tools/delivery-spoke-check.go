@@ -42,7 +42,7 @@ var spokes = map[string]spoke{
 	// body unconditionally). Import plus guard is therefore four, not two.
 	"models/actions/task.go": {4, "task-assignment gate (F5e), added by slice 6: one import plus a three-line `if ... { continue }` guard"},
 	".gitignore":             {1, "ignores the gitignored planning directory; carries no fork logic"},
-	"Makefile":               {1, "one -include line pulling in Makefile.delivery, so the fork adds no target to it"},
+	"Makefile":               {2, "one -include line per spoke makefile, Makefile.delivery and Makefile.themes, so neither adds a target to it"},
 }
 
 func main() {

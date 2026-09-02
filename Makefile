@@ -417,6 +417,7 @@ unit-test-coverage:
 	@$(GO) test $(GOTEST_FLAGS) -tags='$(TAGS)' -cover -coverprofile coverage.out $(GO_TEST_PACKAGES) && echo "\n==>\033[32m Ok\033[m\n" || exit 1
 
 -include Makefile.delivery # delivery fork spoke (F2)
+-include Makefile.themes # dracula pro theme pack
 .PHONY: tidy
 tidy: ## run go mod tidy
 	$(eval MIN_GO_VERSION := $(shell grep -Eo '^go\s+[0-9]+\.[0-9.]+' go.mod | cut -d' ' -f2))
@@ -637,10 +638,6 @@ lockfile-check:
 .PHONY: generate-gitignore
 generate-gitignore: ## update gitignore files
 	$(GO) run build/generate-gitignores.go
-
-.PHONY: generate-themes
-generate-themes: ## generate dracula pro theme css
-	$(GO) run build/generate-themes.go
 
 .PHONY: generate-images
 generate-images: | node_modules ## generate images
