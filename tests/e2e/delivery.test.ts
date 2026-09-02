@@ -24,6 +24,26 @@ async function apiCreateEnvironment(request: APIRequestContext, repoID: number, 
   return (await response.json()).id;
 }
 
+async function apiCreateLabel(request: APIRequestContext, owner: string, name: string, label: string): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/labels`, {
+    headers: apiHeaders(),
+    data: {name: label, color: '#00aabb'},
+  });
+  expect(response.ok(), `create label ${label}: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
+}
+
+// The chart draws an issue ccpm manages: one carrying an epic: label, with a deadline for its
+// end. The epic's own issue carries type:epic beside that label, exactly as epic-sync leaves it.
+async function apiCreateManagedIssue(request: APIRequestContext, owner: string, name: string, title: string, labels: number[], due: string): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues`, {
+    headers: apiHeaders(),
+    data: {title, labels, due_date: due},
+  });
+  expect(response.ok(), `create issue ${title}: ${await response.text()}`).toBe(true);
+  return (await response.json()).number;
+}
+
 async function apiCreateRelease(request: APIRequestContext, owner: string, name: string, tag: string) {
   const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/releases`, {
     headers: apiHeaders(),
@@ -180,4 +200,44 @@ test('delivery environment detail offers a reader no control', async ({page}) =>
   } finally {
     await apiDeleteUser(page.request, reader);
   }
+});
+
+test('delivery timeline reads an epic as a bracket and its children as bars', async ({page}) => {
+  const repoName = `e2e-delivery-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const epicLabel = await apiCreateLabel(page.request, owner, repoName, 'epic:checkout');
+  const typeLabel = await apiCreateLabel(page.request, owner, repoName, 'type:epic');
+
+  // The epic declares a window that ends a fortnight before the work filed under it, which is
+  // the contradiction the chart is the only place to see.
+  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic',
+    [epicLabel, typeLabel], '2030-03-11T00:00:00Z');
+  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', [epicLabel], '2030-03-20T00:00:00Z');
+  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story two', [epicLabel], '2030-03-25T00:00:00Z');
+
+  await page.goto('/delivery/timeline');
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+
+  await page.getByLabel('Repository id').fill(String(repoID));
+  await page.getByLabel('Zoom').selectOption('epic');
+
+  const chart = page.locator('#delivery-timeline-body');
+  await expect(chart).toContainText(`epic checkout (#${epicNumber}) ends 14 days before the work filed under it`);
+  await expect(chart).toContainText('epic: checkout');
+  await expect(chart.locator('tr')).toHaveCount(1);
+  await expect(chart.locator('tr.warning')).toHaveCount(1);
+
+  // The axis is the server's: the page states the unit it was handed and never picks one.
+  await expect(page.locator('#delivery-ruler-unit')).toContainText('ruler');
+
+  await page.getByLabel('Zoom').selectOption('issue');
+  await expect(chart).toContainText('checkout story two');
+  await expect(chart.locator('tr')).toHaveCount(3);
+
+  await expect(page.locator('#delivery-token-box')).toBeHidden();
+  await expect(page.locator('#delivery-error')).toBeHidden();
 });

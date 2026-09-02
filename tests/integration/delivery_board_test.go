@@ -302,10 +302,13 @@ func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
 	MakeRequest(t, req, http.StatusOK)
 }
 
-// TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI is E18/I14 for the two new pages.
+// TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI keeps both pages readers of the
+// published endpoints rather than second implementations of them: a page that computed its
+// own rows would disagree with the CLI reading the same repository.
 func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
+	session := loginUser(t, "user2")
 	for path, endpoint := range map[string]string{
 		"/delivery/board":    "/board",
 		"/delivery/timeline": "/timeline",
@@ -313,12 +316,24 @@ func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
 		req := NewRequest(t, "GET", path)
 		MakeRequest(t, req, http.StatusSeeOther)
 
-		session := loginUser(t, "user2")
 		req = NewRequest(t, "GET", path)
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), deliveryv1.BasePath+endpoint,
-			"the page fetches its rows from the documented endpoint (E18, I14)")
+			"the page fetches its rows from the documented endpoint")
 	}
+
+	// The chart's three axes are read from the response and written back to the endpoints
+	// that own them: zoom and grouping are query parameters, a vertical drag is the lane
+	// move, and the time axis is the ruler the server decided.
+	req := NewRequest(t, "GET", "/delivery/timeline")
+	page := session.MakeRequest(t, req, http.StatusOK).Body.String()
+	for _, control := range []string{`id="delivery-zoom"`, `id="delivery-group"`, `id="delivery-ruler"`} {
+		assert.Contains(t, page, control, "the chart offers the control the response's fields are read through")
+	}
+	assert.Contains(t, page, "/timeline/issues/{issue_id}/lane",
+		"a vertical drag posts the published lane move, so it writes what the board's lane move writes")
+	assert.Contains(t, page, "payload.ruler",
+		"the time axis comes from the response; a unit computed here would disagree with every other client")
 }
 
 // timelinePayload is the shape GET /timeline answers with.

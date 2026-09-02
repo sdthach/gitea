@@ -9,8 +9,10 @@
 			the close time, then the deadline, then the effort estimate applied to the start. Every bar
 			names both sources, and an <strong>inferred</strong> end is drawn as an open outline rather
 			than a solid bar — presenting an estimate as a measurement is this view's characteristic
-			failure. Every figure is fetched from <code>{{.DeliveryAPIBase}}/timeline</code>; this page
-			is a client of that endpoint and reads nothing the API does not serve.
+			failure. Zoom reads the same plan at epic or milestone depth, where a row is a bracket over
+			the work filed under it rather than a bar. Every figure is fetched from
+			<code>{{.DeliveryAPIBase}}/timeline</code>; this page is a client of that endpoint and reads
+			nothing the API does not serve, including the time axis and every rollup.
 		</p>
 
 		<div class="ui form">
@@ -20,8 +22,31 @@
 					<input id="delivery-repo" type="number" min="1" size="6">
 				</div>
 				<div class="field">
+					<label for="delivery-zoom">Zoom</label>
+					<select id="delivery-zoom">
+						<option value="issue">issue</option>
+						<option value="epic">epic</option>
+						<option value="milestone">milestone</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="delivery-group">Group by</label>
+					<select id="delivery-group">
+						<option value="none">none</option>
+						<option value="type">type</option>
+						<option value="epic">epic</option>
+						<option value="assignee">assignee</option>
+					</select>
+				</div>
+				<div class="field">
 					<label for="delivery-epic">Epic (optional)</label>
 					<input id="delivery-epic" type="text" size="18">
+				</div>
+				<div class="field">
+					<label for="delivery-milestone">Milestone</label>
+					<select id="delivery-milestone">
+						<option value="0">all</option>
+					</select>
 				</div>
 				<div class="field">
 					<label for="delivery-state">State</label>
@@ -87,10 +112,18 @@
 				</div>
 			</div>
 			<p class="tw-text-12">
-				Drag a bar to move the whole schedule; drag either end to move that end alone. A drag
-				writes the day it lands on — the end to the issue's deadline, the start to ccpm's
-				<code>started:</code> marker, because Gitea has nowhere else to keep one.
+				Drag a bar sideways to move the schedule; drag either end to move that end alone. The
+				Start and End cells show the day the release will write while you drag, because at a
+				coarse ruler one pixel is several days. When the chart is grouped, drag a bar up or down
+				onto a lane heading to move it between lanes, which edits the grouping field itself —
+				the <code>type:</code> label, the <code>epic:</code> label or the assignee. A drag
+				writes the day it lands on at every zoom — the end to the issue's deadline, the start
+				to ccpm's <code>started:</code> marker, because Gitea has nowhere else to keep one.
 			</p>
+		</div>
+
+		<div id="delivery-truncated" class="ui warning message tw-hidden">
+			<p id="delivery-truncated-message"></p>
 		</div>
 
 		<div class="tw-overflow-x-auto">
@@ -103,10 +136,16 @@
 						<th>End</th>
 						<th>Schedule</th>
 						<th>Depends on</th>
+						<th>Warning</th>
+					</tr>
+					<tr>
+						<th colspan="4" class="tw-font-normal tw-text-12" id="delivery-ruler-unit"></th>
+						<th id="delivery-ruler" class="tw-font-normal"></th>
+						<th colspan="2"></th>
 					</tr>
 				</thead>
 				<tbody id="delivery-timeline-body">
-					<tr><td colspan="6">Name a repository, then press Show timeline.</td></tr>
+					<tr><td colspan="7">Name a repository, then press Show timeline.</td></tr>
 				</tbody>
 			</table>
 		</div>
@@ -133,6 +172,10 @@ const base = {{.DeliveryAPIBase}};
 const subURL = {{.AppSubURL}};
 const pageToken = {{.DeliveryPageToken}};
 
+// The vertical drag's endpoint, spelled as the published document spells it, so this page
+// names the operation it is a client of rather than a rewritten copy of it.
+const laneMovePath = '/timeline/issues/{issue_id}/lane';
+
 const body = document.querySelector('#delivery-timeline-body');
 const spansBody = document.querySelector('#delivery-spans');
 const unmanagedBody = document.querySelector('#delivery-unmanaged');
@@ -141,12 +184,25 @@ const tokenInput = document.querySelector('#delivery-token');
 const repoInput = document.querySelector('#delivery-repo');
 const epicInput = document.querySelector('#delivery-epic');
 const stateSelect = document.querySelector('#delivery-state');
+const zoomSelect = document.querySelector('#delivery-zoom');
+const groupSelect = document.querySelector('#delivery-group');
+const milestoneSelect = document.querySelector('#delivery-milestone');
+const rulerCell = document.querySelector('#delivery-ruler');
+const rulerUnitCell = document.querySelector('#delivery-ruler-unit');
+const truncatedBox = document.querySelector('#delivery-truncated');
 
 // What the last load said about the chart: whether this caller may edit it, the rows an
-// issue can be filed under, and the repository the writes name.
+// issue can be filed under, the repository the writes name, and the view it was read at.
 let canWrite = false;
 let rows = [];
 let repoFullName = '';
+let groupBy = 'none';
+let zoom = 'issue';
+
+const columns = 7;
+const daySeconds = 86400;
+// Below this the pointer has not yet said which gesture it is, so nothing moves.
+const axisThreshold = 6;
 
 const tokenKey = 'delivery-api-token';
 function storedToken() {
@@ -186,48 +242,102 @@ function day(unix) {
 	return new Date(unix * 1000).toISOString().slice(0, 10);
 }
 
-const daySeconds = 86400;
+// span is the axis the whole chart is drawn against: the server's ruler, extended to its
+// first tick so a tick that sits on the boundary before the earliest bar still lands on the
+// track. The unit is the server's and is never recomputed here.
+function chartSpan(payload) {
+	const ruler = payload.ruler;
+	let start = ruler.start_unix;
+	if (ruler.ticks.length && ruler.ticks[0].unix < start) start = ruler.ticks[0].unix;
+	return {start, end: Math.max(ruler.end_unix, start + daySeconds)};
+}
 
-// bar draws the schedule cell. An inferred end is an open outline, a recorded one is solid,
-// so an estimated bar can never be read as a measured one. When the caller may write, the
-// bar is a drag handle: its body moves the whole schedule and either edge moves that end.
-function bar(row, span, item) {
-	const td = document.createElement('td');
-	const track = document.createElement('div');
-	track.className = 'tw-w-full';
-	track.style.position = 'relative';
-	track.style.height = '14px';
+function percent(span, unix) {
+	return ((unix - span.start) / Math.max(span.end - span.start, 1)) * 100;
+}
 
-	const width = Math.max(span.end - span.start, 1);
-	const left = ((item.start_unix - span.start) / width) * 100;
-	const size = Math.max(((item.end_unix - item.start_unix) / width) * 100, 1);
+function track() {
+	const el = document.createElement('div');
+	el.className = 'tw-w-full';
+	el.style.position = 'relative';
+	el.style.height = '14px';
+	return el;
+}
 
+function drawRuler(payload, span) {
+	const ruler = payload.ruler;
+	rulerUnitCell.textContent = ruler.ticks.length ? `${ruler.unit} ruler` : '';
+	const line = track();
+	line.append(...ruler.ticks.map((tick) => {
+		const label = document.createElement('span');
+		label.className = 'tw-text-12';
+		label.style.position = 'absolute';
+		label.style.left = `${percent(span, tick.unix)}%`;
+		label.style.whiteSpace = 'nowrap';
+		label.textContent = tick.label;
+		return label;
+	}));
+	rulerCell.replaceChildren(line);
+}
+
+// bar draws one issue's schedule. An inferred end is an open outline, a recorded one is
+// solid, so an estimated bar can never be read as a measured one. When the caller may write,
+// the bar is a drag handle: its body moves the whole schedule and either edge moves that end.
+function bar(container, span, item, readout, lane) {
 	const drawn = document.createElement('div');
 	drawn.style.position = 'absolute';
-	drawn.style.left = `${left}%`;
-	drawn.style.width = `${size}%`;
+	drawn.style.left = `${percent(span, item.start_unix)}%`;
+	drawn.style.width = `${Math.max(percent(span, item.end_unix) - percent(span, item.start_unix), 1)}%`;
 	drawn.style.height = '12px';
 	drawn.style.borderRadius = '3px';
 	if (item.end_inferred) {
 		drawn.style.border = '2px dashed currentColor';
 		drawn.title = `inferred end (${item.end_source})`;
-		drawn.textContent = '';
 	} else {
 		drawn.style.background = 'currentColor';
 		drawn.title = `recorded end (${item.end_source})`;
 	}
-	if (canWrite) makeDraggable(drawn, track, span, item);
-	track.append(drawn);
-	td.append(track);
-	row.append(td);
-	return td;
+	if (canWrite) makeDraggable(drawn, container, span, item, readout, lane);
+	container.append(drawn);
+	return drawn;
 }
 
-// makeDraggable turns one bar into three grips: the left sixth moves the start, the right
-// sixth the end, and the middle both. Nothing is written until the pointer is released, and
-// what is written is the day the bar landed on — the chart's resolution is a day, so a
-// sub-day drag must not silently record a time nobody chose.
-function makeDraggable(drawn, track, span, item) {
+// bracket draws a rolled-up row: three sides, so its ends read as caps over a set rather
+// than as a bar with a body. It is never draggable — its window is derived from its
+// children, so dragging it would be editing a projection.
+function bracket(container, span, row) {
+	const drawn = document.createElement('div');
+	drawn.className = 'delivery-bracket';
+	drawn.style.position = 'absolute';
+	drawn.style.left = `${percent(span, row.start_unix)}%`;
+	drawn.style.width = `${Math.max(percent(span, row.end_unix) - percent(span, row.start_unix), 1)}%`;
+	drawn.style.top = '2px';
+	drawn.style.height = '10px';
+	drawn.style.borderLeft = '2px solid currentColor';
+	drawn.style.borderRight = '2px solid currentColor';
+	drawn.style.borderBottom = '2px solid currentColor';
+	drawn.title = `${row.kind} ${row.label}: ${day(row.start_unix)} → ${day(row.end_unix)}`;
+	container.append(drawn);
+	return drawn;
+}
+
+// descend opens a bracket: it narrows to what the bracket covers and drops to the level the
+// children live at.
+function descend(row) {
+	if (row.kind === 'epic') {
+		epicInput.value = row.key;
+		milestoneSelect.value = '0';
+	} else {
+		milestoneSelect.value = row.key;
+		epicInput.value = '';
+	}
+	zoomSelect.value = 'issue';
+	load();
+}
+
+// makeDraggable: the left sixth moves the start, the right sixth the end, the middle both; a
+// drag past the threshold is sideways (dates) or vertical (lane), and always writes a whole day.
+function makeDraggable(drawn, container, span, item, readout, lane) {
 	drawn.style.cursor = 'grab';
 	drawn.style.touchAction = 'none';
 	drawn.addEventListener('pointerdown', (down) => {
@@ -236,21 +346,45 @@ function makeDraggable(drawn, track, span, item) {
 		const grip = rect.width < 12 ? 'move'
 			: down.clientX - rect.left < rect.width / 6 ? 'start'
 				: rect.right - down.clientX < rect.width / 6 ? 'end' : 'move';
-		const perPixel = Math.max(span.end - span.start, 1) / Math.max(track.getBoundingClientRect().width, 1);
+		const perPixel = Math.max(span.end - span.start, 1) / Math.max(container.getBoundingClientRect().width, 1);
 		let start = item.start_unix;
 		let end = item.end_unix;
+		let axis = '';
+		let target = null;
+
+		const dropTarget = (at) => {
+			const under = document.elementFromPoint(at.clientX, at.clientY);
+			const found = under ? under.closest('tr[data-lane]') : null;
+			if (found === target) return;
+			if (target) target.classList.remove('active');
+			target = found;
+			if (target) target.classList.add('active');
+		};
 
 		const move = (at) => {
-			const shift = (at.clientX - down.clientX) * perPixel;
+			const acrossX = at.clientX - down.clientX;
+			const acrossY = at.clientY - down.clientY;
+			if (!axis) {
+				if (Math.abs(acrossX) < axisThreshold && Math.abs(acrossY) < axisThreshold) return;
+				axis = lane !== null && Math.abs(acrossY) > Math.abs(acrossX) ? 'lane' : 'time';
+			}
+			if (axis === 'lane') {
+				dropTarget(at);
+				return;
+			}
+			const shift = acrossX * perPixel;
 			start = item.start_unix + (grip === 'end' ? 0 : shift);
 			end = item.end_unix + (grip === 'start' ? 0 : shift);
 			if (end - start < daySeconds) {
 				if (grip === 'start') start = end - daySeconds; else end = start + daySeconds;
 			}
-			const left = ((start - span.start) / Math.max(span.end - span.start, 1)) * 100;
-			const size = ((end - start) / Math.max(span.end - span.start, 1)) * 100;
-			drawn.style.left = `${left}%`;
-			drawn.style.width = `${Math.max(size, 1)}%`;
+			drawn.style.left = `${percent(span, start)}%`;
+			drawn.style.width = `${Math.max(percent(span, end) - percent(span, start), 1)}%`;
+			// The day this drag will write, while it is being dragged: at a coarse ruler one
+			// pixel is several days, so a gesture whose result appears only on release is a
+			// gesture that writes the wrong day.
+			readout.start.textContent = day(start);
+			readout.end.textContent = day(end);
 		};
 
 		const up = async (at) => {
@@ -258,6 +392,19 @@ function makeDraggable(drawn, track, span, item) {
 			drawn.removeEventListener('pointermove', move);
 			drawn.removeEventListener('pointerup', up);
 			drawn.style.cursor = 'grab';
+
+			if (axis === 'lane') {
+				const dropped = target ? target.dataset.lane : null;
+				if (target) target.classList.remove('active');
+				if (dropped === null || dropped === lane) {
+					load();
+					return;
+				}
+				await write(laneMovePath.replace('{issue_id}', String(item.issue_id)),
+					{repo: repoFullName, group_by: groupBy, lane: dropped});
+				return;
+			}
+
 			const patch = {repo: repoFullName};
 			if (grip !== 'end' && day(start) !== day(item.start_unix)) patch.start = day(start);
 			if (grip !== 'start' && day(end) !== day(item.end_unix)) patch.end = day(end);
@@ -300,63 +447,208 @@ function sourceNote(item) {
 	return `${item.start_source} → ${item.end_source}${item.end_inferred ? ' (inferred)' : ' (recorded)'}`;
 }
 
+// A hard gate the forge acts on and a sequencing hint it does not are labelled differently,
+// because they do not read the same on a schedule.
+function arrowsCell(tr, payload, arrows) {
+	return cell(tr, arrows.length
+		? arrows.map((a) => `${arrowLabel(payload, a.from_issue_id)} ${a.enforced ? '(gate)' : '(sequence)'}`).join(', ')
+		: '—');
+}
+
+// arrowLabel names the other end of an edge by what the chart is actually showing, never by
+// an issue id dressed up as an issue number.
+function arrowLabel(payload, issueID) {
+	const found = payload.bars.find((b) => b.issue_id === issueID);
+	if (found) return `#${found.number}`;
+	const span = payload.spans.find((s) => s.issue_id === issueID);
+	if (span) return `${span.kind} ${span.label}`;
+	return `issue ${issueID}`;
+}
+
+function warningCell(tr, row) {
+	if (!row || !row.warning) {
+		cell(tr, '—');
+		return;
+	}
+	tr.classList.add('warning');
+	cell(tr, `${row.warning} — ${row.suggested_action}`);
+}
+
+function childCount(row) {
+	// A fraction of an unknown denominator is not a measurement, so a partial rollup says
+	// what it loaded instead of printing a percentage.
+	return row.partial
+		? `${row.children} children loaded, more exist`
+		: `${row.children} children, ${row.progress}% closed`;
+}
+
+// bracketRow is one rolled-up row of the chart. Clicking it descends into the work it covers.
+function bracketRow(payload, span, row, blockers) {
+	const tr = document.createElement('tr');
+	const label = document.createElement('td');
+	const open = document.createElement('button');
+	open.type = 'button';
+	open.className = 'ui basic compact button';
+	open.textContent = `${row.kind}: ${row.label}`;
+	open.title = `show the issues under ${row.label}`;
+	open.addEventListener('click', () => descend(row));
+	label.append(open);
+	tr.append(label);
+
+	cell(tr, childCount(row));
+	cell(tr, day(row.start_unix));
+	cell(tr, day(row.end_unix));
+
+	const td = document.createElement('td');
+	const container = track();
+	const drawn = bracket(container, span, row);
+	drawn.addEventListener('click', () => descend(row));
+	drawn.classList.add('tw-cursor-pointer');
+	td.append(container);
+	tr.append(td);
+
+	arrowsCell(tr, payload, blockers.get(row.issue_id) ?? []);
+	warningCell(tr, row);
+	return tr;
+}
+
+// barRow is one issue. An epic carries two windows, so its own bar is drawn with the bracket
+// its children derive beneath it in the same cell: the gap between the two is the warning.
+function barRow(payload, span, item, blockers, derived, lane) {
+	const tr = document.createElement('tr');
+	const issue = document.createElement('td');
+	const link = document.createElement('a');
+	link.href = `${subURL}${item.url}`;
+	link.textContent = `#${item.number} ${item.title}`;
+	issue.append(link);
+	tr.append(issue);
+
+	tr.append(rowSelect(item));
+	const readout = {
+		start: cell(tr, `${day(item.start_unix)} (${item.start_source})`),
+		end: cell(tr, `${day(item.end_unix)} (${item.end_source})`),
+	};
+
+	const td = document.createElement('td');
+	td.title = sourceNote(item);
+	const container = track();
+	bar(container, span, item, readout, lane);
+	td.append(container);
+	const rollup = derived.get(item.issue_id);
+	if (rollup) {
+		const under = track();
+		bracket(under, span, rollup);
+		td.append(under);
+	}
+	tr.append(td);
+
+	arrowsCell(tr, payload, blockers.get(item.issue_id) ?? []);
+	warningCell(tr, rollup);
+	return tr;
+}
+
+// laneHeading is the drop target a vertical drag lands on. A reader gets the heading and no
+// target, because a reader has nothing to drop.
+function laneHeading(lane) {
+	const tr = document.createElement('tr');
+	tr.className = 'delivery-lane';
+	if (canWrite) tr.dataset.lane = lane.key;
+	const th = document.createElement('th');
+	th.colSpan = columns;
+	th.textContent = `${lane.label} (${lane.cards})`;
+	if (lane.is_empty_value) {
+		th.append(Object.assign(document.createElement('div'), {
+			className: 'tw-text-12 tw-font-normal',
+			textContent: 'no value for this grouping',
+		}));
+	}
+	tr.append(th);
+	return tr;
+}
+
+function statement(payload) {
+	if (!payload.truncated) {
+		truncatedBox.classList.add('tw-hidden');
+		return;
+	}
+	const count = payload.zoom === 'issue' ? payload.bars.length : payload.spans.length;
+	const what = payload.zoom === 'issue' ? 'issues' : `${payload.zoom} rollups`;
+	document.querySelector('#delivery-truncated-message').textContent =
+		`This chart is the first ${count} ${what}; narrow by epic or state to see the rest.`;
+	truncatedBox.classList.remove('tw-hidden');
+}
+
 function render(payload) {
 	canWrite = payload.can_write;
-	rows = payload.rows ?? [];
+	rows = payload.rows;
 	repoFullName = payload.repo_full_name;
+	groupBy = payload.group_by;
+	zoom = payload.zoom;
+	zoomSelect.value = zoom;
+	groupSelect.value = groupBy;
 	document.querySelector('#delivery-edit').classList.toggle('tw-hidden', !canWrite);
-	const rowSelectNew = document.querySelector('#delivery-new-issue-row');
-	rowSelectNew.replaceChildren(new Option('—', '0'),
+	document.querySelector('#delivery-new-issue-row').replaceChildren(new Option('—', '0'),
 		...rows.map((row) => new Option(row.title, String(row.milestone_id))));
+	const milestone = milestoneSelect.value;
+	milestoneSelect.replaceChildren(new Option('all', '0'),
+		...rows.map((row) => new Option(row.title, String(row.milestone_id))));
+	milestoneSelect.value = milestone;
+	if (!milestoneSelect.value) milestoneSelect.value = '0'; // the milestone it named is gone
 
-	if (!payload.bars.length) {
-		const tr = document.createElement('tr');
-		cell(tr, 'no issue in this repository carries an epic label, so there is nothing to draw').colSpan = 6;
-		body.replaceChildren(tr);
-	} else {
-		const span = {
-			start: Math.min(...payload.bars.map((b) => b.start_unix)),
-			end: Math.max(...payload.bars.map((b) => b.end_unix)),
-		};
-		const blockers = new Map();
-		for (const arrow of payload.arrows) {
-			const list = blockers.get(arrow.to_issue_id) ?? [];
-			list.push(arrow);
-			blockers.set(arrow.to_issue_id, list);
+	statement(payload);
+	const span = chartSpan(payload);
+	drawRuler(payload, span);
+
+	const blockers = new Map();
+	for (const arrow of payload.arrows) {
+		const list = blockers.get(arrow.to_issue_id) ?? [];
+		list.push(arrow);
+		blockers.set(arrow.to_issue_id, list);
+	}
+
+	if (zoom === 'issue') {
+		// An epic's derived window belongs beside its own bar, keyed by the issue the
+		// rollup names.
+		const derived = new Map(payload.spans
+			.filter((row) => row.kind === 'epic' && row.issue_id)
+			.map((row) => [row.issue_id, row]));
+		const laneOf = new Map();
+		for (const lane of payload.lanes) {
+			for (const column of lane.columns) {
+				for (const card of column.cards) laneOf.set(card.issue_id, lane.key);
+			}
 		}
 
-		body.replaceChildren(...payload.bars.map((item) => {
-			const tr = document.createElement('tr');
-			const issue = document.createElement('td');
-			const link = document.createElement('a');
-			link.href = `${subURL}${item.url}`;
-			link.textContent = `#${item.number} ${item.title}`;
-			issue.append(link);
-			tr.append(issue);
-
-			tr.append(rowSelect(item));
-			cell(tr, `${day(item.start_unix)} (${item.start_source})`);
-			cell(tr, `${day(item.end_unix)} (${item.end_source})`);
-			bar(tr, span, item).title = sourceNote(item);
-
-			// O9: a hard gate the forge acts on and a sequencing hint it does not are
-			// labelled differently, because they do not read the same on a schedule.
-			const arrows = blockers.get(item.issue_id) ?? [];
-			cell(tr, arrows.length
-				? arrows.map((a) => `#${numberOf(payload, a.from_issue_id)} ${a.enforced ? '(gate)' : '(sequence)'}`).join(', ')
-				: '—');
-			return tr;
-		}));
+		if (!payload.bars.length) {
+			body.replaceChildren(emptyRow('no issue in this repository carries an epic label, so there is nothing to draw'));
+		} else if (payload.lanes.length) {
+			const grouped = [];
+			for (const lane of payload.lanes) {
+				grouped.push(laneHeading(lane));
+				for (const item of payload.bars) {
+					if (laneOf.get(item.issue_id) === lane.key) {
+						grouped.push(barRow(payload, span, item, blockers, derived, lane.key));
+					}
+				}
+			}
+			body.replaceChildren(...grouped);
+		} else {
+			body.replaceChildren(...payload.bars.map((item) => barRow(payload, span, item, blockers, derived, null)));
+		}
+	} else if (!payload.spans.length) {
+		body.replaceChildren(emptyRow(`nothing is filed under a ${zoom} in this repository, so there is nothing to draw`));
+	} else {
+		body.replaceChildren(...payload.spans.map((row) => bracketRow(payload, span, row, blockers)));
 	}
 
 	spansBody.replaceChildren(...(payload.spans.length ? payload.spans.map((row) => {
 		const tr = document.createElement('tr');
 		cell(tr, `${row.kind}: ${row.label}`);
 		cell(tr, `${day(row.start_unix)} → ${day(row.end_unix)}`);
-		cell(tr, `${row.progress}% (${row.closed}/${row.children} closed)`);
+		cell(tr, childCount(row));
 		cell(tr, row.end_inferred ? 'contains an inferred end' : 'every end recorded');
 		return tr;
-	}) : [emptyRow(4)]));
+	}) : [emptyRow('—', 4)]));
 
 	unmanagedBody.replaceChildren(...(payload.unmanaged.length ? payload.unmanaged.map((item) => {
 		const tr = document.createElement('tr');
@@ -369,18 +661,13 @@ function render(payload) {
 		cell(tr, item.reason);
 		cell(tr, item.suggested_action);
 		return tr;
-	}) : [emptyRow(3)]));
+	}) : [emptyRow('—', 3)]));
 }
 
-function emptyRow(span) {
+function emptyRow(text, span = columns) {
 	const tr = document.createElement('tr');
-	cell(tr, '—').colSpan = span;
+	cell(tr, text).colSpan = span;
 	return tr;
-}
-
-function numberOf(payload, issueID) {
-	const found = payload.bars.find((b) => b.issue_id === issueID);
-	return found ? found.number : issueID;
 }
 
 async function load() {
@@ -389,8 +676,12 @@ async function load() {
 		fail('a timeline covers one repository', 'Enter the repository id; the delivery API lists them at /repos.');
 		return;
 	}
-	const params = new URLSearchParams({repo_id: repoID, state: stateSelect.value, limit: '200'});
+	const params = new URLSearchParams({
+		repo_id: repoID, state: stateSelect.value, limit: '200',
+		zoom: zoomSelect.value, group_by: groupSelect.value,
+	});
 	if (epicInput.value.trim()) params.set('epic', epicInput.value.trim());
+	if (milestoneSelect.value !== '0') params.set('milestone_id', milestoneSelect.value);
 
 	let payload;
 	try {
@@ -412,8 +703,10 @@ async function load() {
 	render(payload);
 }
 
-// write posts one of the chart's four edits. Every write endpoint answers with the chart it
-// produced, so the page renders the response rather than re-fetching and hoping.
+// write posts one of the chart's edits. Every write endpoint answers with the chart it
+// produced, so the page renders the response rather than re-fetching and hoping — except
+// when that chart is not the one on screen: a write that states no view answers at issue
+// zoom with no grouping, and rendering it would silently change the view the reader chose.
 async function write(path, patch) {
 	let payload;
 	try {
@@ -436,6 +729,11 @@ async function write(path, patch) {
 		return;
 	}
 	clearError();
+	if (payload.zoom !== zoomSelect.value || payload.group_by !== groupSelect.value ||
+		epicInput.value.trim() || milestoneSelect.value !== '0') {
+		load();
+		return;
+	}
 	render(payload);
 }
 
@@ -478,5 +776,8 @@ document.querySelector('#delivery-token-save').addEventListener('click', () => {
 	load();
 });
 document.querySelector('#delivery-load').addEventListener('click', load);
+zoomSelect.addEventListener('change', load);
+groupSelect.addEventListener('change', load);
+milestoneSelect.addEventListener('change', load);
 </script>
 {{template "base/footer" .}}
