@@ -27,6 +27,7 @@ var environmentSpec = query.Spec{
 		{Name: "sort_order", Column: "sort_order", Kind: query.KindInt},
 		{Name: "approval_policy", Column: "approval_policy", Kind: query.KindString},
 		{Name: "required_approvals", Column: "required_approvals", Kind: query.KindInt},
+		{Name: "require_full_release", Column: "require_full_release", Kind: query.KindBool},
 		{Name: "created_unix", Column: "created_unix", Kind: query.KindTime},
 		{Name: "updated_unix", Column: "updated_unix", Kind: query.KindTime},
 	},

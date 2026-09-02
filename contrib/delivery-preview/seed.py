@@ -9,10 +9,9 @@ Everything goes through the public APIs — Gitea's /api/v1 and the fork's /api/
 
 Re-running adds a fresh generation; every name carries a run tag, so nothing collides.
 Generated names carry their entity kind as a prefix, so a preview instance reads as seed
-data at a glance. Environments and labels are the exceptions: the fork parses both as keys
-rather than reading them as names — deploy-<env>.yaml declares `environment: prod`, the
-instance-wide environment set is created by models/delivery.Seed, and the board keys its
-lanes off the `type:` and `epic:` label prefixes.
+data at a glance. Environments and labels are the exceptions: environments are the ones
+app.ini's [delivery] DEFAULT_ENVIRONMENTS names, and each has a deploy-<env>.yaml declaring
+it; labels keep the `type:` and `epic:` prefixes the board keys its lanes off.
 """
 
 import argparse
@@ -170,8 +169,10 @@ def set_environment_policy(api, approver_team_ids):
     policy = {
         "qa": {"predecessor": "dev", "require_predecessor": True},
         "uat": {"predecessor": "qa", "require_predecessor": True},
-        "staging": {"predecessor": "uat", "require_predecessor": True},
+        "staging": {"predecessor": "uat", "require_predecessor": True,
+                    "require_full_release": True},
         "prod": {"predecessor": "staging", "require_predecessor": True,
+                 "require_full_release": True,
                  "approval_policy": "others_only", "required_approvals": 1,
                  "enable_bypass_allowlist": True,
                  "bypass_allowlist_team_ids": approver_team_ids},

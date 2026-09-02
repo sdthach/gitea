@@ -233,18 +233,20 @@ func TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 	assert.Equal(t, delivery.SourceUI, overrides[0].Source)
 }
 
-// TestAPIDeliveryPromotionRefusesAPrereleaseToProd covers the offer rule at the API, which is
-// what makes it a rule rather than a hidden button: the CLI is refused where the grid is.
-func TestAPIDeliveryPromotionRefusesAPrereleaseToProd(t *testing.T) {
+// TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired covers the offer
+// rule at the API, which is what makes it a rule rather than a hidden button: the CLI is
+// refused where the grid is. The two environments differ only in require_full_release, so
+// nothing here turns on what either is called.
+func TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "qa", SortOrder: 20})
+	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "live", SortOrder: 50, RequireFullRelease: true})
+	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "sandbox", SortOrder: 20})
 	token := deliveryWriteToken(t, "user2")
 
 	status, plan := promote(t, token, map[string]any{
-		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionPrerelease,
+		"repo": repo.FullName(), "environment": "live", "release_tag": promotionPrerelease,
 	})
 	require.Equal(t, http.StatusForbidden, status)
 	assert.Equal(t, "refuse", plan.Outcome)
@@ -252,9 +254,9 @@ func TestAPIDeliveryPromotionRefusesAPrereleaseToProd(t *testing.T) {
 	assert.NotEmpty(t, plan.SuggestedAction)
 
 	status, plan = promote(t, token, map[string]any{
-		"repo": repo.FullName(), "environment": "qa", "release_tag": promotionPrerelease,
+		"repo": repo.FullName(), "environment": "sandbox", "release_tag": promotionPrerelease,
 	})
-	require.Equal(t, http.StatusOK, status, "qa is offered prereleases")
+	require.Equal(t, http.StatusOK, status, "an environment that has not asked for full releases takes a prerelease")
 	assert.Equal(t, "proceed", plan.Outcome)
 }
 

@@ -14,7 +14,6 @@ import (
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/reqctx"
-	"gitea.dev/modules/setting"
 	"gitea.dev/modules/timeutil"
 	actions_service "gitea.dev/services/actions"
 
@@ -62,54 +61,14 @@ func WorkflowIDForEnvironment(environment string) string {
 	return deployWorkflowPrefix + environment + deployWorkflowSuffix
 }
 
-// DefaultPrereleaseEnvironments is the environment set a prerelease may be deployed to. It
-// is configuration, read at render time like the column order is, and defaults to what the
-// slice plan names.
-var DefaultPrereleaseEnvironments = []string{"dev", "qa", "uat"}
-
-// PrereleaseEnvironments reads the configured set:
-//
-//	[delivery]
-//	PRERELEASE_ENVIRONMENTS = dev, qa, uat
-//
-// An unset key means the default, so a fork build behaves the same whether or not the
-// section exists.
-func PrereleaseEnvironments() []string {
-	if setting.CfgProvider == nil {
-		return DefaultPrereleaseEnvironments
-	}
-	raw := setting.CfgProvider.Section(SettingSection).Key("PRERELEASE_ENVIRONMENTS").String()
-	if strings.TrimSpace(raw) == "" {
-		return DefaultPrereleaseEnvironments
-	}
-	out := make([]string, 0, 4)
-	for name := range strings.SplitSeq(raw, ",") {
-		if name = delivery_model.NormalizeEnvironmentName(name); name != "" {
-			out = append(out, name)
-		}
-	}
-	if len(out) == 0 {
-		return DefaultPrereleaseEnvironments
-	}
-	return out
-}
-
 // AcceptsRelease reports whether an environment is offered a release of this kind.
 //
-// A prerelease reaches only the environments in accepting — dev, qa and uat by default. A
-// full release reaches every environment: the rule exists to keep an unfinished build out of
-// staging and prod, not to keep a finished one out of dev.
-func AcceptsRelease(environment string, isPrerelease bool, accepting []string) bool {
-	if !isPrerelease {
-		return true
-	}
-	environment = delivery_model.NormalizeEnvironmentName(environment)
-	for _, name := range accepting {
-		if delivery_model.NormalizeEnvironmentName(name) == environment {
-			return true
-		}
-	}
-	return false
+// An environment takes anything unless it has asked for finished builds only, which is one
+// column on its own row: the fork knows no environment names, so it cannot decide this from
+// a name. A full release reaches every environment — the rule exists to keep an unfinished
+// build out of the environments an operator has named, not to keep a finished one out.
+func AcceptsRelease(env *delivery_model.Environment, isPrerelease bool) bool {
+	return !isPrerelease || env == nil || !env.RequireFullRelease
 }
 
 // EvaluatePredecessor reduces the log to what the sequence rule asks of it: has the
@@ -279,15 +238,14 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 		Ref:          git.RefNameFromTag(release.TagName).String(),
 	}
 
-	// A prerelease reaching staging or prod is refused wherever it is asked for, so the CLI
-	// is not a path around the rule the grid applies.
-	if !AcceptsRelease(env.Name, release.IsPrerelease, PrereleaseEnvironments()) {
+	// A prerelease reaching an environment that takes finished builds only is refused
+	// wherever it is asked for, so the CLI is not a path around the rule the grid applies.
+	if !AcceptsRelease(env, release.IsPrerelease) {
 		out.Decision = Decision{
 			Outcome:          OutcomeRefuse,
 			PredecessorState: PredecessorNone,
-			Message:          fmt.Sprintf("%s is a prerelease and %s is not offered prereleases", release.TagName, env.Name),
-			SuggestedAction: fmt.Sprintf("Deploy it to one of %s, or cut a full release. The set is [delivery] PRERELEASE_ENVIRONMENTS.",
-				strings.Join(PrereleaseEnvironments(), ", ")),
+			Message:          fmt.Sprintf("%s is a prerelease and %s takes finished releases only", release.TagName, env.Name),
+			SuggestedAction:  fmt.Sprintf("Deploy it to an environment that accepts prereleases, cut a full release, or clear require_full_release on %s.", env.Name),
 		}
 		return out, nil
 	}

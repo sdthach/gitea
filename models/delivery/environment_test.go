@@ -44,8 +44,5 @@ func TestValidateEnvironment(t *testing.T) {
 
 func TestDefaultPolicyIsNone(t *testing.T) {
 	assert.Equal(t, PolicyNone, ApprovalPolicies[0])
-	for _, env := range DefaultEnvironments {
-		assert.NotEmpty(t, env.Name)
-		assert.Positive(t, env.SortOrder)
-	}
+	assert.False(t, new(Environment).RequireFullRelease, "a new environment refuses no release kind")
 }

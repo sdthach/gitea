@@ -410,6 +410,8 @@ Flags:
     	free-text search (I10)
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
+  -require-full-release
+    	Refuse prereleases; this environment takes finished releases only.
   -require-predecessor
     	Gate when the predecessor hasn't held the release.
   -required-approvals string
@@ -500,6 +502,8 @@ Flags:
     	free-text search (I10)
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
+  -require-full-release
+    	Refuse prereleases; this environment takes finished releases only.
   -require-predecessor
     	Gate when the predecessor hasn't held the release.
   -required-approvals string

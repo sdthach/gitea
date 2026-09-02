@@ -21,7 +21,12 @@ import (
 // The fork's integration tests run under Gitea's own harness, so they execute the way
 // upstream's do and survive a rebase (J8).
 
-func TestAPIDeliveryEnvironmentsAreSeededAndListed(t *testing.T) {
+// deliveryFixtureEnvironments is how many rows models/fixtures/delivery_environment.yml
+// defines at repo_id 0. Nothing about the count or the names is a fork default; an operator
+// names their own set in [delivery] DEFAULT_ENVIRONMENTS.
+const deliveryFixtureEnvironments = 5
+
+func TestAPIDeliveryEnvironmentsAreListed(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	session := loginUser(t, "user2")
@@ -32,7 +37,7 @@ func TestAPIDeliveryEnvironmentsAreSeededAndListed(t *testing.T) {
 
 	var envs []*delivery.Environment
 	DecodeJSON(t, resp, &envs)
-	require.Len(t, envs, len(delivery.DefaultEnvironments), "the default environment set is seeded at hub mount (M5)")
+	require.Len(t, envs, deliveryFixtureEnvironments, "the instance-wide set is listed whatever it is called")
 
 	names := make([]string, len(envs))
 	for i, env := range envs {
@@ -134,7 +139,7 @@ func TestAPIDeliveryRepoEnvironmentsFallBackToTheDefaultSet(t *testing.T) {
 
 	var envs []*delivery.Environment
 	DecodeJSON(t, resp, &envs)
-	require.Len(t, envs, len(delivery.DefaultEnvironments),
+	require.Len(t, envs, deliveryFixtureEnvironments,
 		"a repository that has declared no environment of its own renders the instance-wide default set")
 	assert.Equal(t, delivery.DefaultsRepoID, envs[0].RepoID)
 }

@@ -6,10 +6,14 @@
 // to an upstream file (F2).
 package delivery
 
-import "gitea.dev/modules/setting"
+import (
+	delivery_model "gitea.dev/models/delivery"
+	"gitea.dev/modules/setting"
+)
 
-// SettingSection is the app.ini section the fork reads.
-const SettingSection = "delivery"
+// SettingSection is the app.ini section the fork reads. It is declared once, beside the
+// model that also reads it.
+const SettingSection = delivery_model.SettingSection
 
 // PagesEnabled reports whether the delivery pages are served. It mirrors
 // reqMilestonesDashboardPageEnabled's shape, so the whole feature can be switched off with

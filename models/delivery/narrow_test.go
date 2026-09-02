@@ -293,7 +293,7 @@ func TestFindEnvironments(t *testing.T) {
 
 	envs, total, err := FindEnvironments(ctx, builderEq("repo_id", DefaultsRepoID), "sort_order ASC, id ASC", 2, 0)
 	require.NoError(t, err)
-	assert.EqualValues(t, len(DefaultEnvironments), total)
+	assert.EqualValues(t, 5, total, "models/fixtures/delivery_environment.yml defines five default rows")
 	require.Len(t, envs, 2)
 	assert.Equal(t, "dev", envs[0].Name)
 	assert.Equal(t, "qa", envs[1].Name)

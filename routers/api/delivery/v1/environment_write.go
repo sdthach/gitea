@@ -26,6 +26,7 @@ type environmentBody struct {
 	RequiredApprovals      int64   `json:"required_approvals"`
 	Predecessor            string  `json:"predecessor"`
 	RequirePredecessor     bool    `json:"require_predecessor"`
+	RequireFullRelease     bool    `json:"require_full_release"`
 	BlockAdminOverride     bool    `json:"block_admin_override"`
 	EnableBypassAllowlist  bool    `json:"enable_bypass_allowlist"`
 	BypassAllowlistUserIDs []int64 `json:"bypass_allowlist_user_ids"`
@@ -40,6 +41,7 @@ var environmentBodyParams = []Param{
 	{Name: "required_approvals", In: "body", Type: "integer", Description: "Approvals needed. Defaults to 1."},
 	{Name: "predecessor", In: "body", Type: "string", Description: "Environment a release must pass through first (E17)."},
 	{Name: "require_predecessor", In: "body", Type: "boolean", Description: "Gate when the predecessor hasn't held the release."},
+	{Name: "require_full_release", In: "body", Type: "boolean", Description: "Refuse prereleases; this environment takes finished releases only."},
 	{Name: "block_admin_override", In: "body", Type: "boolean", Description: "Block repo admin from bypassing the gate."},
 	{Name: "enable_bypass_allowlist", In: "body", Type: "boolean", Description: "Enable bypass allowlist."},
 	{Name: "bypass_allowlist_user_ids", In: "body", Type: "array", Description: "User IDs allowed to bypass."},
@@ -205,6 +207,7 @@ func bodyToEnvironment(body *environmentBody) *delivery.Environment {
 		RequiredApprovals:      body.RequiredApprovals,
 		Predecessor:            body.Predecessor,
 		RequirePredecessor:     body.RequirePredecessor,
+		RequireFullRelease:     body.RequireFullRelease,
 		BlockAdminOverride:     body.BlockAdminOverride,
 		EnableBypassAllowlist:  body.EnableBypassAllowlist,
 		BypassAllowlistUserIDs: body.BypassAllowlistUserIDs,

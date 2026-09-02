@@ -30,9 +30,13 @@ deployer holding write unable to. Accounts, tokens and team ids land in
 `planning/seed-users.md` (`--accounts-file`), which is gitignored.
 
 Generated names carry their entity kind as a prefix — `org-`, `user-`, `repo-`, `project-`,
-`issue-`, `milestone-`, `release-`. Environments and labels do not: the fork parses both as
-keys, `deploy-<env>.yaml` declares `environment: prod`, and the board keys its lanes off the
-`type:` and `epic:` label prefixes.
+`issue-`, `milestone-`, `release-`. Environments and labels do not. The environments are
+whatever `app.ini`'s `[delivery] DEFAULT_ENVIRONMENTS` names — `dev, qa, uat, staging, prod`
+here, but nothing in the fork reads those words — and each gets a `deploy-<env>.yaml`
+declaring it. Labels keep the `type:` and `epic:` prefixes the board keys its lanes off.
+
+Gating is the seeder's choice, not the fork's: each environment names its `predecessor`, and
+`staging` and `prod` set `require_full_release` so prereleases stop at `uat`.
 
 Useful flags: `--repos`, `--issues`, `--releases`, `--users` (accounts per role),
 `--failure-rate`, `--wait-approvals`, `--seed` to repeat the content, `--tag` to repeat the

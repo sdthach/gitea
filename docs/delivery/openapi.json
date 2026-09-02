@@ -4190,6 +4190,24 @@
             }
           },
           {
+            "description": "Filter on require_full_release. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "require_full_release",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Filter require_full_release with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "require_full_release[ne]",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Filter on created_unix. Bare form means the eq operator (I3).",
             "in": "query",
             "name": "created_unix",
@@ -4468,6 +4486,10 @@
                     "description": "Repository id; 0 is the instance-wide default set.",
                     "type": "integer"
                   },
+                  "require_full_release": {
+                    "description": "Refuse prereleases; this environment takes finished releases only.",
+                    "type": "boolean"
+                  },
                   "require_predecessor": {
                     "description": "Gate when the predecessor hasn't held the release.",
                     "type": "boolean"
@@ -4655,6 +4677,10 @@
                   "repo_id": {
                     "description": "Repository id; 0 is the instance-wide default set.",
                     "type": "integer"
+                  },
+                  "require_full_release": {
+                    "description": "Refuse prereleases; this environment takes finished releases only.",
+                    "type": "boolean"
                   },
                   "require_predecessor": {
                     "description": "Gate when the predecessor hasn't held the release.",
@@ -5912,6 +5938,24 @@
             "required": false,
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on require_full_release. Bare form means the eq operator (I3).",
+            "in": "query",
+            "name": "require_full_release",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Filter require_full_release with the ne operator. Repeating the field ANDs the conditions (I3).",
+            "in": "query",
+            "name": "require_full_release[ne]",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           },
           {

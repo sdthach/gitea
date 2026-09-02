@@ -8,24 +8,52 @@ import (
 
 	"gitea.dev/models/db"
 	"gitea.dev/models/unittest"
+	"gitea.dev/modules/setting"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSeedPlan(t *testing.T) {
-	assert.Equal(t, DefaultEnvironments, seedPlan(DefaultEnvironments, nil),
-		"a fresh database needs every default row")
+// configuredSet stands in for whatever an operator writes in DEFAULT_ENVIRONMENTS. The
+// names carry no meaning to the fork, which is the property these tests hold it to.
+var configuredSet = []SeededEnvironment{
+	{Name: "sandbox", SortOrder: 10},
+	{Name: "live", SortOrder: 20},
+}
 
-	assert.Empty(t, seedPlan(DefaultEnvironments, names(DefaultEnvironments)),
+func TestSeedPlan(t *testing.T) {
+	assert.Equal(t, configuredSet, seedPlan(configuredSet, nil),
+		"a fresh database needs every configured row")
+
+	assert.Empty(t, seedPlan(configuredSet, names(configuredSet)),
 		"re-running changes nothing")
 
-	assert.Equal(t, []SeededEnvironment{{Name: "qa", SortOrder: 20}},
-		seedPlan(DefaultEnvironments[:2], []string{"dev"}),
+	assert.Equal(t, []SeededEnvironment{{Name: "live", SortOrder: 20}},
+		seedPlan(configuredSet, []string{"sandbox"}),
 		"only the missing row is planned")
 
-	assert.Empty(t, seedPlan(DefaultEnvironments[:1], []string{"DEV"}),
+	assert.Empty(t, seedPlan(configuredSet[:1], []string{"SANDBOX"}),
 		"names are identifiers, matched case-insensitively")
+}
+
+// TestSeededEnvironmentsIsConfiguration is the point of the key: an operator names their
+// own environments, and an unset key seeds none.
+func TestSeededEnvironmentsIsConfiguration(t *testing.T) {
+	assert.Empty(t, SeededEnvironments(), "no config provider is the no-[delivery]-section case")
+
+	previous := setting.CfgProvider
+	t.Cleanup(func() { setting.CfgProvider = previous })
+
+	cfg, err := setting.NewConfigProviderFromData("[delivery]\nDEFAULT_ENVIRONMENTS = Sandbox, live , \n")
+	require.NoError(t, err)
+	setting.CfgProvider = cfg
+	assert.Equal(t, configuredSet, SeededEnvironments(),
+		"names are normalized, blanks dropped, and order is the order given")
+
+	cfg, err = setting.NewConfigProviderFromData("[delivery]\n")
+	require.NoError(t, err)
+	setting.CfgProvider = cfg
+	assert.Empty(t, SeededEnvironments(), "an unset key seeds nothing")
 }
 
 func names(envs []SeededEnvironment) []string {
@@ -41,15 +69,21 @@ func names(envs []SeededEnvironment) []string {
 func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
+	_, err := db.GetEngine(ctx).Where("repo_id = ?", DefaultsRepoID).Delete(new(Environment))
+	require.NoError(t, err)
 
-	require.NoError(t, Seed(ctx))
+	require.NoError(t, Seed(ctx, nil), "no configured set seeds nothing")
+	require.Empty(t, defaults(t))
+
+	require.NoError(t, Seed(ctx, configuredSet))
 	first := defaults(t)
-	require.Len(t, first, len(DefaultEnvironments))
-	assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, envNames(first),
-		"the environment set is seeded in its configured order")
+	require.Len(t, first, len(configuredSet))
+	assert.Equal(t, []string{"sandbox", "live"}, envNames(first),
+		"the environment set is seeded in the order it was configured")
 	for _, env := range first {
 		assert.Equal(t, PolicyNone, env.ApprovalPolicy, "a new environment gates nothing (F5b)")
 		assert.EqualValues(t, 1, env.RequiredApprovals)
+		assert.False(t, env.RequireFullRelease, "and refuses no release kind")
 	}
 
 	// A user edits a seeded row.
@@ -57,13 +91,13 @@ func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	edited.ApprovalPolicy = PolicyOthersOnly
 	edited.RequiredApprovals = 2
 	edited.SortOrder = 999
-	_, err := db.GetEngine(ctx).ID(edited.ID).Cols("approval_policy", "required_approvals", "sort_order").Update(edited)
+	_, err = db.GetEngine(ctx).ID(edited.ID).Cols("approval_policy", "required_approvals", "sort_order").Update(edited)
 	require.NoError(t, err)
 
 	// A second start.
-	require.NoError(t, Seed(ctx))
+	require.NoError(t, Seed(ctx, configuredSet))
 	second := defaults(t)
-	assert.Len(t, second, len(DefaultEnvironments), "starting twice seeds no duplicate row")
+	assert.Len(t, second, len(configuredSet), "starting twice seeds no duplicate row")
 
 	after, err := GetEnvironment(ctx, DefaultsRepoID, edited.Name)
 	require.NoError(t, err)
@@ -74,11 +108,10 @@ func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	// Deleting a seeded row and restarting restores it.
 	_, err = db.GetEngine(ctx).ID(first[0].ID).Delete(new(Environment))
 	require.NoError(t, err)
-	require.Len(t, defaults(t), len(DefaultEnvironments)-1)
+	require.Len(t, defaults(t), len(configuredSet)-1)
 
-	require.NoError(t, Seed(ctx))
-	restored := defaults(t)
-	assert.Len(t, restored, len(DefaultEnvironments))
+	require.NoError(t, Seed(ctx, configuredSet))
+	assert.Len(t, defaults(t), len(configuredSet))
 	got, err := GetEnvironment(ctx, DefaultsRepoID, first[0].Name)
 	require.NoError(t, err)
 	assert.Equal(t, first[0].SortOrder, got.SortOrder, "the restored row carries its configured order again")
@@ -104,7 +137,6 @@ func envNames(envs []*Environment) []string {
 func TestGetEnvironmentFallsBackToTheDefaultSet(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
-	require.NoError(t, Seed(ctx))
 
 	env, err := GetEnvironment(ctx, 4242, "PROD")
 	require.NoError(t, err)

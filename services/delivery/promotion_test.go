@@ -9,7 +9,6 @@ import (
 	delivery_model "gitea.dev/models/delivery"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
@@ -24,22 +23,19 @@ func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
 	}
 }
 
-// TestDeliveryAcceptsRelease is the offer rule: prereleases reach dev, qa and uat only, and
-// full releases reach every environment. Both directions per environment (J9).
+// TestDeliveryAcceptsRelease is the offer rule, which reads one column and no name: an
+// environment takes anything unless it has asked for finished releases only. Both
+// directions per environment (J9).
 func TestDeliveryAcceptsRelease(t *testing.T) {
-	accepting := DefaultPrereleaseEnvironments
+	open := &delivery_model.Environment{Name: "anything-at-all"}
+	assert.True(t, AcceptsRelease(open, true), "an environment offers prereleases by default")
+	assert.True(t, AcceptsRelease(open, false), "and full releases too")
 
-	for _, name := range []string{"dev", "qa", "uat"} {
-		assert.True(t, AcceptsRelease(name, true, accepting), "%s is offered prereleases", name)
-		assert.True(t, AcceptsRelease(name, false, accepting), "%s is offered full releases too", name)
-	}
-	for _, name := range []string{"staging", "prod"} {
-		assert.False(t, AcceptsRelease(name, true, accepting), "%s is not offered prereleases", name)
-		assert.True(t, AcceptsRelease(name, false, accepting), "%s is offered full releases", name)
-	}
-	assert.True(t, AcceptsRelease("QA", true, accepting), "the environment name is normalized before it is matched")
-	assert.True(t, AcceptsRelease("qa", true, []string{" QA "}), "so is the configured set")
-	assert.False(t, AcceptsRelease("dev", true, nil), "an empty set offers a prerelease nowhere")
+	closed := &delivery_model.Environment{Name: "anything-at-all", RequireFullRelease: true}
+	assert.False(t, AcceptsRelease(closed, true), "require_full_release refuses a prerelease")
+	assert.True(t, AcceptsRelease(closed, false), "it still takes a full release")
+
+	assert.True(t, AcceptsRelease(nil, true), "a missing environment refuses nothing here; the caller has already 404ed")
 }
 
 // succeeded builds one success of tag in environment at t.
@@ -111,10 +107,4 @@ func TestDeliveryDecidePromotion(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestDeliveryPrereleaseEnvironmentsDefaultsWithoutConfiguration(t *testing.T) {
-	// setting.CfgProvider is nil in this package's unit run, which is the "no [delivery]
-	// section at all" case: the fork behaves the same whether or not one exists.
-	require.Equal(t, []string{"dev", "qa", "uat"}, PrereleaseEnvironments())
 }

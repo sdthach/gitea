@@ -15,5 +15,5 @@ func Init(ctx context.Context) error {
 	if err := Migrate(ctx); err != nil {
 		return err
 	}
-	return Seed(ctx)
+	return Seed(ctx, SeededEnvironments())
 }

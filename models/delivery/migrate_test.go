@@ -13,6 +13,7 @@ import (
 
 	"gitea.dev/models/db"
 	"gitea.dev/models/unittest"
+	"gitea.dev/modules/setting"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,6 +132,46 @@ func TestMigration0001LowercasesEnvironmentNames(t *testing.T) {
 	assert.Equal(t, "prod", got.Name)
 }
 
+// TestMigration0002CarriesThePrereleaseNameListOntoTheColumn proves the upgrade keeps an
+// instance refusing prereleases exactly where the old name list refused them.
+func TestMigration0002CarriesThePrereleaseNameListOntoTheColumn(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	previous := setting.CfgProvider
+	t.Cleanup(func() { setting.CfgProvider = previous })
+	cfg, err := setting.NewConfigProviderFromData("[delivery]\nPRERELEASE_ENVIRONMENTS = sandbox\n")
+	require.NoError(t, err)
+	setting.CfgProvider = cfg
+
+	for _, name := range []string{"sandbox", "live"} {
+		require.NoError(t, db.Insert(ctx, &Environment{
+			RepoID: 4242, Name: name, ApprovalPolicy: PolicyNone, RequiredApprovals: 1,
+		}))
+	}
+
+	require.NoError(t, migrationByID(t, 2).Migrate(ctx, db.GetEngine(ctx)))
+
+	sandbox, err := GetEnvironment(ctx, 4242, "sandbox")
+	require.NoError(t, err)
+	assert.False(t, sandbox.RequireFullRelease, "an environment the key named still takes prereleases")
+
+	live, err := GetEnvironment(ctx, 4242, "live")
+	require.NoError(t, err)
+	assert.True(t, live.RequireFullRelease, "every other environment now asks for finished releases")
+}
+
+func migrationByID(t *testing.T, id int64) *Migration {
+	t.Helper()
+	for _, m := range RegisteredMigrations() {
+		if m.ID == id {
+			return m
+		}
+	}
+	t.Fatalf("no migration with id %d is registered", id)
+	return nil
+}
+
 // TestTheForkNeverTouchesGiteasSharedVersionRow is F6/SC 28 as a source check. Gitea
 // log.Fatals when its shared `version` row exceeds what the binary knows, so registering
 // into the shared list would permanently lock an older Gitea binary out of the database.
@@ -195,7 +236,7 @@ func forkPackageRoots(t *testing.T) []string {
 
 // TestInitMigratesAndSeeds covers the hub-mount entry point routers/init.go names. It is
 // the whole of the fork's boot behaviour: migrate into the fork's own version table, then
-// seed the default environment set.
+// seed whatever set the operator configured.
 func TestInitMigratesAndSeeds(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
@@ -205,6 +246,12 @@ func TestInitMigratesAndSeeds(t *testing.T) {
 	_, err = db.GetEngine(ctx).Where("1=1").Delete(new(Version))
 	require.NoError(t, err)
 
+	previous := setting.CfgProvider
+	t.Cleanup(func() { setting.CfgProvider = previous })
+	cfg, err := setting.NewConfigProviderFromData("[delivery]\nDEFAULT_ENVIRONMENTS = sandbox, live\n")
+	require.NoError(t, err)
+	setting.CfgProvider = cfg
+
 	require.NoError(t, Init(ctx))
 
 	v, err := currentVersion(ctx)
@@ -213,11 +260,19 @@ func TestInitMigratesAndSeeds(t *testing.T) {
 
 	count, err := db.GetEngine(ctx).Where("repo_id = ?", DefaultsRepoID).Count(new(Environment))
 	require.NoError(t, err)
-	assert.EqualValues(t, len(DefaultEnvironments), count, "Init seeds")
+	assert.EqualValues(t, 2, count, "Init seeds the configured set")
 
 	// Booting twice is safe.
 	require.NoError(t, Init(ctx))
 	count, err = db.GetEngine(ctx).Where("repo_id = ?", DefaultsRepoID).Count(new(Environment))
 	require.NoError(t, err)
-	assert.EqualValues(t, len(DefaultEnvironments), count)
+	assert.EqualValues(t, 2, count)
+
+	setting.CfgProvider = previous
+	_, err = db.GetEngine(ctx).Where("1=1").Delete(new(Environment))
+	require.NoError(t, err)
+	require.NoError(t, Init(ctx))
+	count, err = db.GetEngine(ctx).Count(new(Environment))
+	require.NoError(t, err)
+	assert.Zero(t, count, "with no configured set Init creates no environment")
 }

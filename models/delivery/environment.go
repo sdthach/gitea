@@ -48,9 +48,12 @@ type Environment struct {
 	// (F11). The three allowlist fields are branch protection's own, spelled exactly as
 	// models/git/protected_branch.go:46-48 spells them, so no gate models permission twice
 	// (F12). BlockAdminOverride is upstream's BlockAdminMergeOverride without the "Merge",
-	// which names a step no deploy has; see promotion.go.
+	// which names a step no deploy has; see promotion.go. RequireFullRelease is per
+	// environment rather than a list of names: an operator names environments whatever
+	// suits them, so which of them takes an unfinished build is a property of the row.
 	Predecessor            string  `xorm:"VARCHAR(64) NOT NULL DEFAULT ''" json:"predecessor"`
 	RequirePredecessor     bool    `xorm:"NOT NULL DEFAULT false" json:"require_predecessor"`
+	RequireFullRelease     bool    `xorm:"NOT NULL DEFAULT false" json:"require_full_release"`
 	BlockAdminOverride     bool    `xorm:"NOT NULL DEFAULT false" json:"block_admin_override"`
 	EnableBypassAllowlist  bool    `xorm:"NOT NULL DEFAULT false" json:"enable_bypass_allowlist"`
 	BypassAllowlistUserIDs []int64 `xorm:"JSON TEXT" json:"bypass_allowlist_user_ids"`
