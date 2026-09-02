@@ -17,7 +17,7 @@ import (
 
 // releaseSpec is the releases resource's whitelist declaration. Releases are finite and
 // stable, so they page by 1-based page with X-Total-Count and a Link header, Gitea's own
-// convention (I7, I8).
+// convention.
 var releaseSpec = query.Spec{
 	Resource: "releases",
 	Fields: []query.Field{
@@ -37,10 +37,10 @@ var releaseSpec = query.Spec{
 }
 
 // Release is the delivery view of a release. Releases own version identity: a deployment
-// points at a release tag and carries no version string to be parsed (D1).
+// points at a release tag and carries no version string to be parsed.
 //
 // Nothing here is synced, cached or mirrored — it is read from Gitea's own Release model at
-// render time, so a release cut outside this feature appears immediately (E6).
+// render time, so a release cut outside this feature appears immediately.
 type Release struct {
 	ID      int64  `json:"id"`
 	RepoID  int64  `json:"repo_id"`
@@ -48,7 +48,7 @@ type Release struct {
 	Title   string `json:"title"`
 	// Target is the release's own commitish. The deploy job posts its commit status
 	// against this SHA; posting against any other passes every API check while leaving the
-	// native release page blank (D2).
+	// native release page blank.
 	Target       string                 `json:"target"`
 	SHA          string                 `json:"sha"`
 	URL          string                 `json:"url"`
@@ -59,7 +59,7 @@ type Release struct {
 }
 
 // Artifact is one of the release's attachments. Artifacts come from the release, not from a
-// second store the fork would have to keep in step (E9).
+// second store the fork would have to keep in step.
 type Artifact struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
@@ -87,8 +87,8 @@ func listReleasesEndpoint() *endpoint {
 			ID: "listReleases", Method: http.MethodGet, Path: "/repos/{owner}/{repo}/releases",
 			Summary: "List a repository's releases, the rows of the grid",
 			Description: "Read from Gitea's own Release model at render time. Nothing is synced, cached or mirrored, " +
-				"so a release cut outside this feature appears immediately (E6). " +
-				"Expand deployments to get every deployment of each release (I9).",
+				"so a release cut outside this feature appears immediately. " +
+				"Expand deployments to get every deployment of each release.",
 			Tag: "releases", PathParams: ownerRepoParams,
 			Query: &releaseSpec, Response: "Release", ResponseIs: "array",
 		},
@@ -132,7 +132,7 @@ func ListReleases(ctx *context.APIContext) {
 	renderPage(ctx, q, total, out)
 }
 
-// expandReleases fills the whitelisted sub-resources, one level deep (I9).
+// expandReleases fills the whitelisted sub-resources, one level deep.
 func expandReleases(ctx *context.APIContext, expand []string, repoID int64, rows []*Release) error {
 	for _, name := range expand {
 		if name != "deployments" {

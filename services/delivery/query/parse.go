@@ -31,7 +31,7 @@ type Filter struct {
 	Text string
 }
 
-// Sort is the resolved sort, always tie-broken on the primary key (I5).
+// Sort is the resolved sort, always tie-broken on the primary key.
 type Sort struct {
 	Column     string
 	Order      string
@@ -53,7 +53,7 @@ type Query struct {
 
 // Parse reads the grammar out of url values against a resource's whitelists.
 // An unknown field, an unknown operator or an unparseable value is refused; a filter
-// is never silently dropped (I4).
+// is never silently dropped.
 func Parse(values url.Values, spec Spec) (*Query, *Error) {
 	q := &Query{Spec: spec, Limit: DefaultLimit, Page: 1}
 
@@ -95,7 +95,7 @@ func parseFilters(values url.Values, spec Spec, q *Query) *Error {
 			// letting one through would build a LIKE against a non-text column.
 			return errOperatorNotAllowed(name, string(op), opNames(field.ops()))
 		}
-		// Repeating a field ANDs the conditions (I3).
+		// Repeating a field ANDs the conditions.
 		for _, raw := range values[param] {
 			parsed, err := parseValues(field, op, raw)
 			if err != nil {
@@ -112,7 +112,7 @@ func parseFilters(values url.Values, spec Spec, q *Query) *Error {
 	return nil
 }
 
-// splitParam reads `field[op]` into its parts. A bare `field` means `eq` (I3).
+// splitParam reads `field[op]` into its parts. A bare `field` means `eq`.
 func splitParam(param string, spec Spec) (string, Op, *Error) {
 	open := strings.IndexByte(param, '[')
 	if open < 0 {

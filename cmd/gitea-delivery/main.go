@@ -1,12 +1,12 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Command gitea-delivery is a thin client over /api/delivery/v1 (K2). It holds no business
+// Command gitea-delivery is a thin client over /api/delivery/v1. It holds no business
 // logic, reaches no database, and knows no rule the API does not enforce: flags become query
-// parameters and the server decides (K4).
+// parameters and the server decides.
 //
 // Gitea's own tea CLI is a separate project, absent from go.mod and the Makefile, and models
-// no environment or deployment; it is not forked (K1).
+// no environment or deployment; it is not forked.
 package main
 
 import (

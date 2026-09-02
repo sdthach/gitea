@@ -66,11 +66,11 @@ func seedPlan(wanted []SeededEnvironment, existing []string) []SeededEnvironment
 // Seed inserts any of wanted that is missing. It runs at hub mount on every start and is
 // an insert on the natural key (repo_id, name), never an update: re-running changes
 // nothing, a row a user has edited is not overwritten, and deleting a seeded row and
-// restarting restores it (M5, SC 31).
+// restarting restores it.
 //
 // It deliberately does not use RegisterModel's init-func hook, whose append is guarded by
 // len(registeredInitFuncs) > 0 on a slice that starts empty, so a callback attached there
-// is never invoked (M4).
+// is never invoked.
 func Seed(ctx context.Context, wanted []SeededEnvironment) error {
 	if len(wanted) == 0 {
 		return nil

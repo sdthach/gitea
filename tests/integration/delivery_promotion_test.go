@@ -83,7 +83,7 @@ func deliveryAuditEvents(t *testing.T, event string) []*delivery.AuditEvent {
 	return rows
 }
 
-// TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching is E14's first step over the
+// TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching is the first step over the
 // wire: with confirm absent the response names the target environment, the release tag and
 // the release currently live there, and nothing is dispatched. The log is counted as well as
 // the response, because a response claiming "not dispatched" while dispatching would pass an
@@ -106,19 +106,19 @@ func TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching(t *testing.T) 
 	assert.Equal(t, repo.FullName(), plan.RepoFullName)
 	assert.Equal(t, "prod", plan.Environment)
 	assert.Equal(t, promotionFullRelease, plan.ReleaseTag)
-	assert.Equal(t, promotionPrerelease, plan.CurrentlyLive, "the confirm step names what it is replacing (E14)")
+	assert.Equal(t, promotionPrerelease, plan.CurrentlyLive, "the confirm step names what it is replacing")
 	assert.Equal(t, "deploy-prod.yaml", plan.WorkflowID)
 	assert.Equal(t, "refs/tags/"+promotionFullRelease, plan.Ref)
 	assert.False(t, plan.Confirmed)
 	assert.Equal(t, "proceed", plan.Outcome, "no predecessor is declared, so there is no sequence to warn about")
 
 	assert.Len(t, deliveryAuditEvents(t, delivery.AuditRequested), before,
-		"the first step appends nothing and dispatches nothing (E14)")
+		"the first step appends nothing and dispatches nothing")
 }
 
-// TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt is F11: with
-// require_predecessor off the sequence is a warning and the deploy is still offered, so an
-// environment that has set no policy behaves as it did before this slice.
+// TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt: with require_predecessor off
+// the sequence is a warning and the deploy is still offered, so an environment that has set
+// no policy keeps the behaviour it had before the fork.
 func TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -133,7 +133,7 @@ func TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt(t *testing.T) {
 	assert.Equal(t, "never", plan.PredecessorState)
 	assert.Equal(t, "staging", plan.Predecessor)
 	assert.NotEmpty(t, plan.Message)
-	assert.NotEmpty(t, plan.SuggestedAction, "every decision carries a suggested next action (A21)")
+	assert.NotEmpty(t, plan.SuggestedAction, "every decision carries a suggested next action")
 	assert.False(t, plan.RequiresOverrideReason, "a warning owes no reason")
 }
 
@@ -160,7 +160,7 @@ func TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt(t *testing.T) {
 	assert.False(t, plan.RequiresOverrideReason)
 }
 
-// TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin is SC 40's refusing half: with
+// TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin is the refusing half: with
 // block_admin_override set, the repository admin is refused, and nothing is written.
 func TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -184,8 +184,8 @@ func TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin(t *testing.T) {
 		"a refused deploy overrides nothing, whatever reason it sent")
 }
 
-// TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog is SC 40's accepting half and E17's
-// requirement that the override and its reason ARE an audit event.
+// TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog is the accepting half: the override
+// and its reason ARE an audit event.
 //
 // The dispatch that follows fails, because repo 1's tag carries no deploy-prod.yaml, and
 // that is exactly the case worth pinning: the override was granted, and it is on the log
@@ -260,7 +260,7 @@ func TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired(t *t
 	assert.Equal(t, "proceed", plan.Outcome)
 }
 
-// TestAPIDeliveryPromotionIsRefusedWithoutWriteOnActions is E10 and K6: authorization is
+// TestAPIDeliveryPromotionIsRefusedWithoutWriteOnActions: authorization is
 // Gitea's own check applied in process, and the API grants nothing the UI does not.
 func TestAPIDeliveryPromotionIsRefusedWithoutWriteOnActions(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -279,10 +279,10 @@ func TestAPIDeliveryPromotionIsRefusedWithoutWriteOnActions(t *testing.T) {
 		SuggestedAction string `json:"suggested_action"`
 	}
 	DecodeJSON(t, resp, &err)
-	assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action")
 }
 
-// TestAPIDeliveryPromotionNamesWhatItCannotFind covers A21 on the request-shape paths.
+// TestAPIDeliveryPromotionNamesWhatItCannotFind covers the suggested next action on the request-shape paths.
 func TestAPIDeliveryPromotionNamesWhatItCannotFind(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -320,12 +320,12 @@ func TestAPIDeliveryPromotionNamesWhatItCannotFind(t *testing.T) {
 			}
 			DecodeJSON(t, resp, &err)
 			assert.Contains(t, err.Message, tc.says)
-			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }
 
-// TestDeliveryPromotePageIsAClientOfTheAPI is E18/I14 for the confirm page: the handler
+// TestDeliveryPromotePageIsAClientOfTheAPI covers the confirm page: the handler
 // ships the shell, and everything on the page arrives over POST /deployments.
 func TestDeliveryPromotePageIsAClientOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -336,6 +336,6 @@ func TestDeliveryPromotePageIsAClientOfTheAPI(t *testing.T) {
 		http.StatusOK)
 	body := resp.Body.String()
 	assert.Contains(t, body, deliveryv1.BasePath+"/deployments",
-		"the page names the endpoint it is a client of (E18, I14)")
+		"the page names the endpoint it is a client of")
 	assert.Contains(t, body, "confirm")
 }

@@ -18,10 +18,10 @@ import (
 	"xorm.io/builder"
 )
 
-// The approval states (F5). A state is a PROJECTION over the append-only audit log; it is
+// The approval states. A state is a PROJECTION over the append-only audit log; it is
 // never a column. An Approval row records that a job is held and who asked for it; every
-// approval and every rejection is an audit event (F5c), which is the same discipline the
-// grid already applies to cell state (E3, E5).
+// approval and every rejection is an audit event, which is the same discipline the
+// grid already applies to cell state.
 const (
 	ApprovalPending  = "pending"
 	ApprovalApproved = "approved"
@@ -32,7 +32,7 @@ const (
 var ApprovalStates = []string{ApprovalPending, ApprovalApproved, ApprovalRejected}
 
 // Approval is one held deploy: the job a runner may not be given until the environment's
-// approval policy is satisfied (F5e).
+// approval policy is satisfied.
 //
 // The table is APPEND-ONLY, like deployments and audit. One row per (repo, run, job) records
 // the hold; nothing about it is ever rewritten. RequesterLogin is denormalized for the same
@@ -63,21 +63,21 @@ func init() {
 }
 
 // Vote is one approval or rejection reduced to what the decision depends on. It is read
-// from the audit log: an approval is not stored a second time (F5c).
+// from the audit log: an approval is not stored a second time.
 type Vote struct {
 	ActorID int64
 	Event   string
 }
 
 // ProjectApprovalState decides whether a held job may run. It is pure, so every policy in
-// both its accepting and its refusing case is testable with no database (J7, J9, J10).
+// both its accepting and its refusing case is testable with no database.
 //
 // Rejecting ends the deploy: a rejection anywhere in the log is terminal and no later
 // approval revives the run.
 func ProjectApprovalState(policy string, requiredApprovals, requesterID int64, votes []Vote) (string, int64) {
 	if policy == "" || policy == PolicyNone {
 		// No gate configured, so nothing is held. This is what keeps a fork install
-		// behaving exactly as stock Gitea until a policy is set (F5b).
+		// behaving exactly as stock Gitea until a policy is set.
 		return ApprovalApproved, 0
 	}
 
@@ -109,7 +109,7 @@ func ProjectApprovalState(policy string, requiredApprovals, requesterID int64, v
 }
 
 // ValidateApproval refuses a row the gate or the API would otherwise persist. Every message
-// carries a suggested next action (A21).
+// carries a suggested next action.
 func ValidateApproval(a *Approval) error {
 	if a.RepoID <= 0 {
 		return &Error{
@@ -149,7 +149,7 @@ func AppendApproval(ctx context.Context, a *Approval) error {
 }
 
 // FindApprovals lists holds matching cond. Holds are finite and stable — one per held job —
-// so the resource pages by offset (I7).
+// so the resource pages by offset.
 func FindApprovals(ctx context.Context, cond builder.Cond, orderBy string, limit, offset int) ([]*Approval, int64, error) {
 	sess := db.GetEngine(ctx).Where(cond).OrderBy(orderBy)
 	if limit > 0 {
@@ -197,7 +197,7 @@ func VotesForApproval(ctx context.Context, a *Approval) ([]Vote, error) {
 
 // ResolveApprovalState projects one hold's current state against its environment's live
 // policy. The policy is read from the environment record, never inferred from run status,
-// which cannot tell a held deploy from a queued one (E15).
+// which cannot tell a held deploy from a queued one.
 func ResolveApprovalState(ctx context.Context, a *Approval) (state string, count, required int64, err error) {
 	env, err := GetEnvironment(ctx, a.RepoID, a.Environment)
 	if err != nil {
@@ -215,7 +215,7 @@ func ResolveApprovalState(ctx context.Context, a *Approval) (state string, count
 // approvalDeps are the lookups the gate performs. They are a struct of functions rather
 // than direct calls so that every branch — including the ones that run only when a lookup
 // fails, which is where fail-closed lives — is reachable from a unit test with no database,
-// no git repository and no network (J10, J11).
+// no git repository and no network.
 type approvalDeps struct {
 	repoIsGated       func(ctx context.Context, repoID int64) (bool, error)
 	loadJob           func(ctx context.Context, repoID, jobID int64) (*actions_model.ActionRunJob, error)
@@ -240,8 +240,8 @@ var productionApprovalDeps = approvalDeps{
 var approvalGateDeps = productionApprovalDeps
 
 // JobIsHeldForApproval is the gate models/actions/task.go delegates to through
-// models/delivery/approvalgate — the function the spoke inside CreateTaskForRunner names
-// (F5e). It runs at job ASSIGNMENT, not at dispatch, so a held job is never handed to a
+// models/delivery/approvalgate — the function the spoke inside CreateTaskForRunner names.
+// It runs at job ASSIGNMENT, not at dispatch, so a held job is never handed to a
 // runner in the first place rather than being stopped once it is already executing.
 //
 // It FAILS CLOSED. Every lookup that cannot answer holds the job: an unassigned job is
@@ -357,7 +357,7 @@ func HoldForJob(ctx context.Context, job *actions_model.ActionRunJob, environmen
 }
 
 // releaseTagOfRef reads the release tag out of a run's ref. A deploy dispatched against a
-// branch carries no release identity (D1), and the hold simply records none.
+// branch carries no release identity, and the hold simply records none.
 func releaseTagOfRef(ref string) string {
 	const tagPrefix = "refs/tags/"
 	if tag, found := strings.CutPrefix(ref, tagPrefix); found {

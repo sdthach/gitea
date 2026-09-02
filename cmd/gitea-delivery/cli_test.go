@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// recorder is the recorded API every CLI test runs against. No test reaches a live server
-// (J13, J10): each asserts the request the CLI composed and the exit code it returned.
+// recorder is the recorded API every CLI test runs against. No test reaches a live server:
+// each asserts the request the CLI composed and the exit code it returned.
 type recorder struct {
 	requests []*http.Request
 	status   int
@@ -53,7 +53,7 @@ func exec(t *testing.T, rec *recorder, args ...string) (string, string, *Error) 
 	return stdout.String(), stderr.String(), err
 }
 
-// TestEveryCommandComposesItsRequest is one test per command (J13).
+// TestEveryCommandComposesItsRequest is one test per command.
 func TestEveryCommandComposesItsRequest(t *testing.T) {
 	cases := map[string]struct {
 		args     []string
@@ -70,8 +70,8 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 		"audit":                    {[]string{"audit"}, "/api/delivery/v1/audit", ""},
 		"releases":                 {[]string{"releases", "acme", "web"}, "/api/delivery/v1/repos/acme/web/releases", ""},
 		"grid":                     {[]string{"grid"}, "/api/delivery/v1/grid", ""},
-		// slice 5: deploy and rollback are one endpoint under two names, because rolling
-		// back is deploying a prior release tag rather than a second path (K6).
+		// deploy and rollback are one endpoint under two names, because rolling
+		// back is deploying a prior release tag rather than a second path.
 		"deploy": {
 			[]string{"deploy", "--repo", "acme/web", "--environment", "prod", "--release-tag", "v1.0"},
 			"/api/delivery/v1/deployments", http.MethodPost,
@@ -80,19 +80,19 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"rollback", "--repo", "acme/web", "--environment", "prod", "--release-tag", "v0.9"},
 			"/api/delivery/v1/deployments", http.MethodPost,
 		},
-		// slice 8: the cross-repository CI overview's resources (K3).
+		// the cross-repository CI overview's resources.
 		"runs":            {[]string{"runs"}, "/api/delivery/v1/runs", ""},
 		"workflows":       {[]string{"workflows"}, "/api/delivery/v1/workflows", ""},
 		"overview":        {[]string{"overview"}, "/api/delivery/v1/overview", ""},
 		"overview-trends": {[]string{"overview-trends"}, "/api/delivery/v1/overview/trends", ""},
 		"overview-repos":  {[]string{"overview-repos"}, "/api/delivery/v1/overview/repos", ""},
-		// slice 6: a gated environment holds a CLI-started deploy identically, and these
-		// are the only way to release it — there is no CLI path around the gate (K6).
+		// a gated environment holds a CLI-started deploy identically, and these
+		// are the only way to release it — there is no CLI path around the gate.
 		"approvals": {[]string{"approvals"}, "/api/delivery/v1/approvals", ""},
 		"approve":   {[]string{"approve", "42"}, "/api/delivery/v1/approvals/42/approve", http.MethodPost},
 		"reject":    {[]string{"reject", "42"}, "/api/delivery/v1/approvals/42/reject", http.MethodPost},
-		// slice 7: the board with its swimlanes, its two writes, and the timeline, which
-		// needs no Projects API and so is reachable where the board is not (K3, O13).
+		// the board with its swimlanes, its two writes, and the timeline, which
+		// needs no Projects API and so is reachable where the board is not.
 		"board": {
 			[]string{"board", "--filter", "repo_id=1", "--filter", "project_id=5", "--filter", "group_by=type"},
 			"/api/delivery/v1/board", "",
@@ -177,7 +177,7 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 	}
 }
 
-// TestFlagsBecomeQueryParameters covers K4: the CLI does not filter client-side.
+// TestFlagsBecomeQueryParameters: the CLI does not filter client-side.
 func TestFlagsBecomeQueryParameters(t *testing.T) {
 	rec := &recorder{body: "[]"}
 	withRecorder(t, rec)
@@ -214,7 +214,6 @@ func TestRepeatedFilterOnOneFieldIsSentTwice(t *testing.T) {
 	assert.Equal(t, []string{"40"}, q["sort_order[lte]"])
 }
 
-// TestJSONIsVerbatim covers K5.
 func TestJSONIsVerbatim(t *testing.T) {
 	payload := `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`
 	rec := &recorder{body: payload}
@@ -225,7 +224,6 @@ func TestJSONIsVerbatim(t *testing.T) {
 	assert.Equal(t, payload+"\n", stdout, "--json emits the API response unshaped")
 }
 
-// TestTableIsTheDefaultAndNeverTheOnlyOutput covers K5's other half.
 func TestTableIsTheDefault(t *testing.T) {
 	rec := &recorder{body: `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`}
 	withRecorder(t, rec)
@@ -237,7 +235,8 @@ func TestTableIsTheDefault(t *testing.T) {
 	assert.Contains(t, stdout, "APPROVAL_POLICY")
 }
 
-// TestServerRejectionSurfacesItsSuggestedAction covers A21 across the CLI boundary.
+// TestServerRejectionSurfacesItsSuggestedAction: the server's suggested next action
+// survives the CLI boundary.
 func TestServerRejectionSurfacesItsSuggestedAction(t *testing.T) {
 	rec := &recorder{
 		status: http.StatusBadRequest,
@@ -281,7 +280,7 @@ func TestUsageErrors(t *testing.T) {
 			require.NotNil(t, err)
 			assert.Equal(t, 2, err.ExitCode)
 			assert.Contains(t, err.Message, c.want)
-			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }
@@ -306,7 +305,7 @@ func TestMissingCredentialsNameWhatToSet(t *testing.T) {
 	assert.Contains(t, err.SuggestedAction, "user/settings/applications")
 }
 
-// TestCredentialPrecedence covers K8/B4: one token serves the adapter and the CLI.
+// TestCredentialPrecedence: one token serves the adapter and the CLI.
 func TestCredentialPrecedence(t *testing.T) {
 	env := func(pairs map[string]string) func(string) (string, bool) {
 		return func(name string) (string, bool) { v, ok := pairs[name]; return v, ok }
@@ -329,7 +328,7 @@ func TestCredentialPrecedence(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			value, source := ResolveToken(c.flag, env(c.env))
 			assert.Equal(t, c.wantValue, value)
-			assert.Equal(t, c.wantSource, source, "the CLI must be able to report which credential source won (B4)")
+			assert.Equal(t, c.wantSource, source, "the CLI must be able to report which credential source won")
 		})
 	}
 }
@@ -354,7 +353,7 @@ func TestListOperationsIsStable(t *testing.T) {
 }
 
 // TestUsageListsEveryCommand covers the root --help, which is also the source the generated
-// command reference is rendered from (K11).
+// command reference is rendered from.
 func TestUsageListsEveryCommand(t *testing.T) {
 	for _, args := range [][]string{{}, {"--help"}, {"-h"}, {"help"}} {
 		var stdout bytes.Buffer
@@ -368,7 +367,7 @@ func TestUsageListsEveryCommand(t *testing.T) {
 		assert.Contains(t, body, "--filter")
 		assert.Contains(t, body, "Exit codes:", "the help states what each exit code means")
 		for _, source := range tokenSources {
-			assert.Contains(t, body, source, "help names every credential source it consults (K8)")
+			assert.Contains(t, body, source, "help names every credential source it consults")
 		}
 	}
 }
@@ -387,9 +386,9 @@ func TestSubcommandHelpGoesToStdoutAndExitsZero(t *testing.T) {
 	}
 }
 
-// TestDeliveryRunsFilterComposesTheFailedRunsRequest is SC 41's CLI half: the command the
-// success criterion names has to compose exactly the request the page's failed-runs list
-// makes, or the two would disagree about what "failed" means (J13).
+// TestDeliveryRunsFilterComposesTheFailedRunsRequest is the CLI half: the command has to
+// compose exactly the request the page's failed-runs list makes, or the two would disagree
+// about what "failed" means.
 func TestDeliveryRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
 	rec := &recorder{body: "[]"}
 	withRecorder(t, rec)
@@ -402,6 +401,6 @@ func TestDeliveryRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
 	assert.Equal(t, http.MethodGet, req.Method)
 	assert.Equal(t, "/api/delivery/v1/runs", req.URL.Path)
 	assert.Equal(t, "failure", req.URL.Query().Get("status[eq]"),
-		"the filter is sent verbatim; the server maps the state name onto its own status integer (I3, K4)")
-	assert.Equal(t, "[]", strings.TrimSpace(stdout), "--json emits the API response verbatim and unshaped (K5)")
+		"the filter is sent verbatim; the server maps the state name onto its own status integer")
+	assert.Equal(t, "[]", strings.TrimSpace(stdout), "--json emits the API response verbatim and unshaped")
 }

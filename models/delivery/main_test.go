@@ -10,7 +10,7 @@ import (
 )
 
 // TestMain runs the package's database-backed units on SQLite, Gitea's own default for
-// test-backend (M9). No test in this package reaches a network or a running server (J10).
+// test-backend. No test in this package reaches a network or a running server.
 func TestMain(m *testing.M) {
 	unittest.MainTest(m)
 }

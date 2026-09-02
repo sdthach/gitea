@@ -37,7 +37,7 @@ func createSecretScopeEndpoint() *endpoint {
 			ID: "createSecretScope", Method: http.MethodPost, Path: "/secret-scopes",
 			Summary: "Bind a secret to an environment",
 			Description: "Creates a scope row so the secret is only available to jobs declaring this environment. " +
-				"A secret value is never accepted or returned (I12). Authorized as repo admin.",
+				"A secret value is never accepted or returned. Authorized as repo admin.",
 			Tag: "secrets", Body: secretScopeBodyParams,
 			CLINames: []string{"secret-scope-create"},
 			Response: "SecretScope", ResponseIs: "object",

@@ -20,7 +20,7 @@ import (
 )
 
 // environmentSpec is the environment resource's whitelist declaration. It restates no part
-// of the grammar (I2).
+// of the grammar.
 var environmentSpec = query.Spec{
 	Resource: "environments",
 	Fields: []query.Field{
@@ -53,7 +53,7 @@ func listEnvironmentsEndpoint() *endpoint {
 			ID: "listEnvironments", Method: http.MethodGet, Path: "/environments",
 			Summary: "List environments across every repository the caller can see",
 			Description: "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). " +
-				"The /delivery/environments/{name} page is a client of this endpoint (E18, I14).",
+				"The /delivery/environments/{name} page is a client of this endpoint.",
 			Tag: "environments", Query: &environmentSpec, Response: "Environment", ResponseIs: "array",
 		},
 		Handler: ListEnvironments,
@@ -256,7 +256,7 @@ func GetRepoEnvironment(ctx *context.APIContext) {
 
 // repoWithActions resolves {owner}/{repo} and authorizes through Gitea's own permission
 // check on the Actions unit — the same check the rest of Gitea makes, never a second model
-// of permissions (E10, I13).
+// of permissions.
 func repoWithActions(ctx *context.APIContext, needWrite bool) (*repo_model.Repository, bool) {
 	owner, name := ctx.PathParam("owner"), ctx.PathParam("repo")
 	repo, err := repo_model.GetRepositoryByOwnerAndName(ctx, owner, name)

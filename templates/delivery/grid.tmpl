@@ -93,7 +93,7 @@ function link(text, href, title) {
 	return a;
 }
 
-// promoteURL is the first of E14's two steps: a cell offers "deploy this release here", and
+// promoteURL is the first of the two steps: a cell offers "deploy this release here", and
 // the confirm page is where the target, the tag and the release currently live there are
 // named. Nothing is dispatched by following it.
 function promoteURL(row, cell) {
@@ -104,7 +104,7 @@ function promoteURL(row, cell) {
 }
 
 // showHistory expands a row to that release's history across environments, drawn from the
-// audit log, with the release's own attachments as its artifacts (E9). Both come from
+// audit log, with the release's own attachments as its artifacts. Both come from
 // documented endpoints; the page reaches past neither into the models.
 async function showHistory(row, tr) {
 	const open = tr.nextElementSibling?.dataset?.detailFor === row.release_tag;
@@ -155,7 +155,7 @@ async function showHistory(row, tr) {
 	cell.replaceChildren(list);
 }
 
-// decideHeld approves or rejects a held deploy from the cell holding it (E15). The endpoint
+// decideHeld approves or rejects a held deploy from the cell holding it. The endpoint
 // is the only thing that releases the job, so its refusal is the real answer and is shown
 // with the next action it suggests.
 async function decideHeld(approval, verb) {
@@ -196,8 +196,8 @@ try {
 		fail('no release is visible to you yet',
 			'Cut a release, or check your account can read the Actions unit of a repository that has one.');
 	} else {
-		// Environment headers open that environment's view (E8). Columns are the union over every
-		// row, ordered by configured sort_order (E7): cells are per repository, so no one row orders a grid.
+		// Environment headers open that environment's view. Columns are the union over every
+		// row, ordered by configured sort_order: cells are per repository, so no one row orders a grid.
 		const columns = [];
 		for (const row of payload) {
 			for (const cell of row.cells) {
@@ -217,7 +217,7 @@ try {
 			repo.append(link(row.repo_full_name, `${subURL}/${row.repo_full_name}`));
 			tr.append(repo);
 			const release = document.createElement('td');
-			// A release row opens the release (E8).
+			// A release row opens the release.
 			release.append(link(row.release_tag, row.release_url || `${subURL}/${row.repo_full_name}/releases`));
 			release.append(' ');
 			const toggle = document.createElement('button');
@@ -237,14 +237,14 @@ try {
 					continue;
 				}
 				// A cell opens its run; a cell with no run opens Gitea's run list filtered
-				// by that environment's workflow file, which is the same history (E8, D4).
+				// by that environment's workflow file, which is the same history.
 				const href = cell.run_url ||
 					`${subURL}/${row.repo_full_name}/actions?workflow=deploy-${encodeURIComponent(cell.environment)}.yaml`;
 				td.append(link(cell.symbol, href, `${row.release_tag} → ${cell.environment}: ${cell.state}`));
 				td.append(' ');
 				// Step one of two: this opens the confirm page, which names the target
 				// environment, the release tag and what is live there before anything is
-				// dispatched (E14). Rolling back is this same action on an earlier row.
+				// dispatched. Rolling back is this same action on an earlier row.
 				td.append(link('▸', promoteURL(row, cell), `Deploy ${row.release_tag} to ${cell.environment}`));
 				const held = heldByRun.get(cell.run_id);
 				if (held) {

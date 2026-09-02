@@ -49,7 +49,7 @@ func (f Filter) cond() builder.Cond {
 }
 
 // OrderBy renders the sort. Every sort is tie-broken on the primary key; without the
-// tie-breaker pagination repeats and skips rows (I5).
+// tie-breaker pagination repeats and skips rows.
 func (q *Query) OrderBy() string {
 	dir := strings.ToUpper(q.Sort.Order)
 	if q.Sort.Column == q.Sort.TieBreaker {
@@ -76,5 +76,5 @@ func (q *Query) CursorCond() builder.Cond {
 	)
 }
 
-// Offset is the 1-based page rendered as a row offset (I7).
+// Offset is the 1-based page rendered as a row offset.
 func (q *Query) Offset() int { return (q.Page - 1) * q.Limit }

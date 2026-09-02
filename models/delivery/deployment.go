@@ -13,15 +13,15 @@ import (
 	"xorm.io/builder"
 )
 
-// Deployment is one deployment of a release to an environment (E3, E4).
+// Deployment is one deployment of a release to an environment.
 //
 // The table is APPEND-ONLY. It is never upserted per (release_tag, environment): deploying
 // v1 to qa, then v2, then v1 again leaves three rows, and without all three the grid cannot
-// show that a version was deployed somewhere previously (SC 14).
+// show that a version was deployed somewhere previously.
 //
 // Version identity belongs to the release. A row points at a release tag and carries no
-// version string to be parsed (D1). Every id is Gitea's own; there is no foreign forge id
-// to reconcile (E4).
+// version string to be parsed. Every id is Gitea's own; there is no foreign forge id
+// to reconcile.
 type Deployment struct {
 	ID          int64  `xorm:"pk autoincr" json:"id"`
 	RepoID      int64  `xorm:"INDEX UNIQUE(run_env) NOT NULL" json:"repo_id"`
@@ -33,7 +33,7 @@ type Deployment struct {
 	RunURL      string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''" json:"run_url"`
 	// Status is the run status at the moment the deployment was first recorded. It is
 	// written once and never updated: a cell's current state is projected from the
-	// append-only audit log, never read from a mutable column (E3, E5).
+	// append-only audit log, never read from a mutable column.
 	Status      string             `xorm:"VARCHAR(32) NOT NULL" json:"status"`
 	CreatedUnix timeutil.TimeStamp `xorm:"created INDEX NOT NULL" json:"created_unix"`
 }
@@ -47,7 +47,7 @@ func init() {
 }
 
 // ValidateDeployment refuses a row the API or the notifier would otherwise persist. Every
-// message carries a suggested next action (A21).
+// message carries a suggested next action.
 func ValidateDeployment(d *Deployment) error {
 	if d.RepoID <= 0 {
 		return &Error{
@@ -58,13 +58,13 @@ func ValidateDeployment(d *Deployment) error {
 	if NormalizeEnvironmentName(d.Environment) == "" {
 		return &Error{
 			Message:         "deployment names no environment",
-			SuggestedAction: "Name the workflow file deploy-<env>.yaml so the environment is read from it (D4), or set environment explicitly.",
+			SuggestedAction: "Name the workflow file deploy-<env>.yaml so the environment is read from it, or set environment explicitly.",
 		}
 	}
 	if d.ReleaseTag == "" {
 		return &Error{
 			Message:         "deployment names no release tag",
-			SuggestedAction: "Dispatch the deploy workflow with the release tag as Ref (D5); a deployment points at a release, never at a version string (D1).",
+			SuggestedAction: "Dispatch the deploy workflow with the release tag as Ref; a deployment points at a release, never at a version string.",
 		}
 	}
 	return nil
@@ -75,8 +75,7 @@ func ValidateDeployment(d *Deployment) error {
 // It is the only write path to the table, and it is an append: a row carrying a primary key
 // is what an update looks like when written through the model, and it is refused. A second
 // call for a (repo, environment, run) already recorded is a no-op rather than an overwrite,
-// so a run that reports several status changes still leaves exactly one deployment row and
-// SC 14's row count holds.
+// so a run that reports several status changes still leaves exactly one deployment row.
 func AppendDeployment(ctx context.Context, d *Deployment) error {
 	if d.ID != 0 {
 		return errAppendOnly("delivery_deployment", d.ID)
@@ -99,7 +98,7 @@ func AppendDeployment(ctx context.Context, d *Deployment) error {
 
 // FindDeployments lists deployments matching cond. It takes no offset: the resource is
 // append-only and pages by cursor, because an offset traversal over a table receiving
-// concurrent inserts returns rows twice and misses others (I6).
+// concurrent inserts returns rows twice and misses others.
 func FindDeployments(ctx context.Context, cond builder.Cond, orderBy string, limit int) ([]*Deployment, error) {
 	sess := db.GetEngine(ctx).Where(cond).OrderBy(orderBy)
 	if limit > 0 {

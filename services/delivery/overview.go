@@ -16,17 +16,17 @@ import (
 	"gitea.dev/services/delivery/query"
 )
 
-// The cross-repository CI overview (P1-P10).
+// The cross-repository CI overview.
 //
 // Gitea shows runs one repository at a time; this is the aggregate. Its aggregates are
 // computed here, in process, over rows reduced by models/delivery — never in dialect-specific
 // SQL, because bucketing by UTC day is spelled strftime on SQLite and date_trunc on
-// PostgreSQL and one schema has to answer both (P10, M3).
+// PostgreSQL and one schema has to answer both.
 //
 // The projections below take plain slices and return plain structs, so every number the page
-// shows is proven by a test that needs no database (J5, J10).
+// shows is proven by a test that needs no database.
 
-// RunState is a run's state as the overview groups them (P2). The five states the tiles
+// RunState is a run's state as the overview groups them. The five states the tiles
 // name are success, failure, in_progress, queued and cancelled; skipped and unknown exist so
 // no run is silently dropped from a total.
 type RunState string
@@ -95,7 +95,7 @@ const DefaultWindowDays = 7
 // MaxOverviewRunFacts allows and return a truncated aggregate.
 const MaxWindowDays = 365
 
-// Window is the selectable period the tiles summarise (P2). It is half-open — [From, To) —
+// Window is the selectable period the tiles summarise. It is half-open — [From, To) —
 // so a run on the boundary is counted once, by exactly one of a window and its predecessor.
 type Window struct {
 	FromUnix int64 `json:"from_unix"`
@@ -120,13 +120,13 @@ func NewWindow(days int, now time.Time) Window {
 }
 
 // Previous is the window of equal length immediately before this one, which is what each
-// tile is compared against (P2).
+// tile is compared against.
 func (w Window) Previous() Window {
 	span := w.ToUnix - w.FromUnix
 	return Window{FromUnix: w.FromUnix - span, ToUnix: w.FromUnix, Days: w.Days}
 }
 
-// Summary is one window's tiles (P2).
+// Summary is one window's tiles.
 type Summary struct {
 	Window    Window           `json:"window"`
 	TotalRuns int64            `json:"total_runs"`
@@ -181,7 +181,7 @@ func workflowKey(repoID int64, workflowID string) string {
 	return strconv.FormatInt(repoID, 10) + "\x00" + workflowID
 }
 
-// RepoStat is one repository's run volume, success rate and average duration (P4, P8).
+// RepoStat is one repository's run volume, success rate and average duration.
 type RepoStat struct {
 	RepoID                 int64   `json:"repo_id"`
 	RepoFullName           string  `json:"repo_full_name"`
@@ -192,7 +192,7 @@ type RepoStat struct {
 	AverageDurationSeconds int64   `json:"average_duration_seconds"`
 }
 
-// WorkflowStat is one workflow's, with whether the repository has it disabled (P8).
+// WorkflowStat is one workflow's, with whether the repository has it disabled.
 type WorkflowStat struct {
 	RepoID                 int64   `json:"repo_id"`
 	RepoFullName           string  `json:"repo_full_name"`
@@ -310,10 +310,10 @@ func AggregateWorkflows(facts []delivery_model.RunFact, names map[int64]string, 
 
 // SortRepoStats orders rows in process. The rows are a projection rather than a table, so
 // sorting cannot be pushed into SQL; the whitelist of sortable fields is still the
-// resource's own, checked by the one grammar before it reaches here (I2, I5).
+// resource's own, checked by the one grammar before it reaches here.
 //
 // Every order is tie-broken on the repository id, so paging a projection repeats and skips
-// no row (I5).
+// no row.
 func SortRepoStats(rows []RepoStat, column, order string) {
 	desc := order != query.OrderAsc
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -374,7 +374,7 @@ func SortWorkflowStats(rows []WorkflowStat, column, order string) {
 	})
 }
 
-// TrendPoint is one UTC day of the daily series (P5).
+// TrendPoint is one UTC day of the daily series.
 type TrendPoint struct {
 	Date                   string `json:"date"`
 	DayUnix                int64  `json:"day_unix"`
@@ -390,7 +390,7 @@ type TrendPoint struct {
 //
 // Deployments come from the fork's own delivery_deployment rather than from counting deploy
 // runs, so this dashboard and the delivery grid cannot disagree about how many deploys
-// happened (P5).
+// happened.
 func DailyTrend(facts []delivery_model.RunFact, deployments []delivery_model.DeploymentFact, window Window) []TrendPoint {
 	start := dayStart(window.FromUnix)
 	end := dayStart(window.ToUnix)
@@ -430,7 +430,7 @@ func DailyTrend(facts []delivery_model.RunFact, deployments []delivery_model.Dep
 }
 
 // dayStart truncates a unix second to the start of its UTC day. Doing it in Go rather than in
-// SQL is what keeps one schema answering both SQLite and PostgreSQL (M3, P10).
+// SQL is what keeps one schema answering both SQLite and PostgreSQL.
 func dayStart(unix int64) int64 {
 	return unix - modFloor(unix, 86400)
 }
@@ -446,7 +446,7 @@ func modFloor(a, m int64) int64 {
 }
 
 // OverviewOptions narrows an aggregate. RepoIDs is always the caller's own accessible set,
-// resolved by Gitea's existing permission filtering before it reaches here (P6, E12): a run
+// resolved by Gitea's existing permission filtering before it reaches here: a run
 // in a repository the viewer cannot read must not appear in any figure.
 type OverviewOptions struct {
 	RepoIDs []int64
@@ -470,7 +470,7 @@ func (o OverviewOptions) scope() []int64 {
 	return []int64{o.RepoID}
 }
 
-// Overview is the composite of P9: the window's summary beside the previous window of equal
+// Overview is the composite: the window's summary beside the previous window of equal
 // length. It exists to save round trips, never as the only way to reach the data — every
 // number in it is independently queryable from /runs, /workflows and /overview/repos.
 type Overview struct {
@@ -511,7 +511,7 @@ func BuildOverview(ctx context.Context, opts OverviewOptions) (*Overview, error)
 	}, nil
 }
 
-// BuildTrends assembles the daily series (P5).
+// BuildTrends assembles the daily series.
 func BuildTrends(ctx context.Context, opts OverviewOptions) ([]TrendPoint, bool, error) {
 	repoIDs := opts.scope()
 	if len(repoIDs) == 0 {
@@ -528,7 +528,7 @@ func BuildTrends(ctx context.Context, opts OverviewOptions) ([]TrendPoint, bool,
 	return DailyTrend(facts, deployments, opts.Window), truncated, nil
 }
 
-// BuildRepoStats assembles one row per repository (P4, P8).
+// BuildRepoStats assembles one row per repository.
 func BuildRepoStats(ctx context.Context, opts OverviewOptions) ([]RepoStat, bool, error) {
 	repoIDs := opts.scope()
 	if len(repoIDs) == 0 {
@@ -545,7 +545,7 @@ func BuildRepoStats(ctx context.Context, opts OverviewOptions) ([]RepoStat, bool
 	return AggregateRepos(facts, names), truncated, nil
 }
 
-// BuildWorkflowStats assembles one row per (repository, workflow file) (P8).
+// BuildWorkflowStats assembles one row per (repository, workflow file).
 func BuildWorkflowStats(ctx context.Context, opts OverviewOptions) ([]WorkflowStat, bool, error) {
 	repoIDs := opts.scope()
 	if len(repoIDs) == 0 {
@@ -567,7 +567,7 @@ func BuildWorkflowStats(ctx context.Context, opts OverviewOptions) ([]WorkflowSt
 }
 
 // repoNames resolves owner/name for the rows to link out to. Every per-repository detail
-// links to Gitea's own page; the overview duplicates none of them (P1).
+// links to Gitea's own page; the overview duplicates none of them.
 func repoNames(ctx context.Context, repoIDs []int64) (map[int64]string, error) {
 	repos, err := repo_model.GetRepositoriesMapByIDs(ctx, repoIDs)
 	if err != nil {

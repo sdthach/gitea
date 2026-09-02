@@ -3,8 +3,8 @@
 
 // Package cligen renders the gitea-delivery CLI's request layer from the API's own
 // operation set, which is also what the published OpenAPI document is generated from. The
-// CLI therefore builds against the contract rather than a hand-written copy of it (K2), and
-// every endpoint has a command by construction (K7).
+// CLI therefore builds against the contract rather than a hand-written copy of it, and
+// every endpoint has a command by construction.
 package cligen
 
 import (
@@ -43,7 +43,7 @@ func CommandName(operationID string) string {
 
 // CommandNamesFor lists the commands one operation serves. An operation may declare more
 // than one: deploy and rollback compose the identical request and differ only in the release
-// tag, so they are one endpoint reached by two names rather than two endpoints (K6).
+// tag, so they are one endpoint reached by two names rather than two endpoints.
 func CommandNamesFor(op *deliveryv1.Operation) []string {
 	if len(op.CLINames) > 0 {
 		return op.CLINames
@@ -90,11 +90,11 @@ func RenderClient(ops []*deliveryv1.Operation) ([]byte, error) {
 //
 // The request layer is generated from the API's operation set, the same set the published
 // OpenAPI document is generated from, so a call that no longer matches the contract fails
-// the build rather than at runtime (K2).
+// the build rather than at runtime.
 
 package main
 
-// Commands is every command the CLI serves, one per documented endpoint (K3, K7).
+// Commands is every command the CLI serves, one per documented endpoint.
 var Commands = []Command{
 `)
 	for _, c := range sorted {
@@ -133,7 +133,7 @@ func pathParamNames(op *deliveryv1.Operation) []string {
 }
 
 // bodyParamNames lists an operation's request-body members. Each becomes a flag, so a body
-// the document publishes always has a way to send it from the CLI (K2, K7).
+// the document publishes always has a way to send it from the CLI.
 func bodyParamNames(op *deliveryv1.Operation) []string {
 	names := make([]string, 0, len(op.Body))
 	for _, p := range op.Body {
@@ -180,7 +180,7 @@ func queryParamNames(op *deliveryv1.Operation) []string {
 }
 
 // columnsFor names the response fields the human-readable table renders. The table is never
-// the only output: --json emits the API response verbatim (K5).
+// the only output: --json emits the API response verbatim.
 func columnsFor(op *deliveryv1.Operation) []string {
 	schema, ok := deliveryv1.Schemas()[op.Response]
 	if !ok {
@@ -193,8 +193,7 @@ func columnsFor(op *deliveryv1.Operation) []string {
 }
 
 // bodyHelp carries each body member's published description into the flag's help text, so
-// the generated command reference explains the request body rather than merely listing it
-// (K11, A21).
+// the generated command reference explains the request body rather than merely listing it.
 func bodyHelp(op *deliveryv1.Operation) map[string]string {
 	out := make(map[string]string, len(op.Body))
 	for _, p := range op.Body {

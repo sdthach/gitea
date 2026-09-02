@@ -44,7 +44,7 @@ func listReposEndpoint() *endpoint {
 			ID: "listRepos", Method: http.MethodGet, Path: "/repos",
 			Summary: "List the repositories the caller can see delivery data for",
 			Description: "Scoped by Gitea's own permission filtering on the Actions unit, the same filter the " +
-				"cross-repository grid uses (E12, I13).",
+				"cross-repository grid uses.",
 			Tag: "repos", Query: &repoSpec, Response: "Repository", ResponseIs: "array",
 		},
 		Handler: ListRepos,

@@ -20,7 +20,7 @@ import (
 )
 
 // Command is one documented endpoint. The set lives in generated_client.go, rendered from
-// the API's operation set (K2, K7).
+// the API's operation set.
 type Command struct {
 	Name        string
 	OperationID string
@@ -36,14 +36,14 @@ type Command struct {
 	RequiredBody []string
 	BoolBody     []string
 	// BodyHelp is each member's published description, used as its flag's help text so the
-	// generated command reference explains the body rather than listing it (K11, A21).
+	// generated command reference explains the body rather than listing it.
 	BodyHelp map[string]string
 	Columns  []string
 	IsList   bool
 }
 
 // Error carries a message, an exit code and a suggested next action. An error that states
-// only what went wrong is incomplete (A21).
+// only what went wrong is incomplete.
 type Error struct {
 	Message         string
 	SuggestedAction string
@@ -55,7 +55,7 @@ func failf(code int, action, format string, args ...any) *Error {
 }
 
 // Doer is the transport. Tests inject a recorded API here, so no test needs a live
-// server (J13).
+// server.
 type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -93,21 +93,21 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 	fs.SetOutput(stderr)
 
 	var filters filterFlag
-	fs.Var(&filters, "filter", "repeatable `field[op]=value` filter; sent to the server verbatim (I3, K4)")
-	q := fs.String("q", "", "free-text search (I10)")
-	sortBy := fs.String("sort-by", "", "sort field (I5)")
-	order := fs.String("order", "", "asc or desc (I5)")
-	limit := fs.Int("limit", 0, "page size; the server defaults to 50 and caps at 200 (I7)")
-	offset := fs.Int("offset", 0, "row offset, converted to the 1-based page the API takes (I7)")
-	cursor := fs.String("cursor", "", "opaque cursor from a previous response (I6)")
-	expand := fs.String("expand", "", "comma-separated sub-resources, one level deep (I9)")
-	asJSON := fs.Bool("json", false, "emit the API response verbatim and unshaped (K5)")
+	fs.Var(&filters, "filter", "repeatable `field[op]=value` filter; sent to the server verbatim")
+	q := fs.String("q", "", "free-text search")
+	sortBy := fs.String("sort-by", "", "sort field")
+	order := fs.String("order", "", "asc or desc")
+	limit := fs.Int("limit", 0, "page size; the server defaults to 50 and caps at 200")
+	offset := fs.Int("offset", 0, "row offset, converted to the 1-based page the API takes")
+	cursor := fs.String("cursor", "", "opaque cursor from a previous response")
+	expand := fs.String("expand", "", "comma-separated sub-resources, one level deep")
+	asJSON := fs.Bool("json", false, "emit the API response verbatim and unshaped")
 	server := fs.String("server", "", "Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER")
-	token := fs.String("token", "", "API token; resolved by the same precedence detect.sh implements (K8)")
+	token := fs.String("token", "", "API token; resolved by the same precedence detect.sh implements")
 
 	// One flag per request-body member, from the published document. deploy and rollback are
 	// the same operation, so they take the same flags and compose the identical request,
-	// differing only in --release-tag (K6).
+	// differing only in --release-tag.
 	bodyStrings := map[string]*string{}
 	bodyBools := map[string]*bool{}
 	for _, name := range cmd.BodyParams {
@@ -140,7 +140,7 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 	fs.Usage = func() { printUsage(stderr) }
 
 	// --help is a successful request for documentation, not a usage error, so it prints on
-	// stdout and exits 0. The generated command reference is this output (K11).
+	// stdout and exits 0. The generated command reference is this output.
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
 			printUsage(stdout)
@@ -191,7 +191,7 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 		}
 		if *offset%size != 0 {
 			return failf(2, fmt.Sprintf("Use an --offset that is a multiple of --limit (%d), or page with --limit and no --offset.", size),
-				"--offset %d is not a multiple of the page size %d, and the API pages by 1-based page (I7)", *offset, size)
+				"--offset %d is not a multiple of the page size %d, and the API pages by 1-based page", *offset, size)
 		}
 		values.Set("page", strconv.Itoa(*offset/size+1))
 	}
@@ -241,7 +241,7 @@ func runCommand(cmd Command, args []string, stdout, stderr io.Writer) *Error {
 		return apiFailure(resp.StatusCode, body)
 	}
 	if *asJSON {
-		// Verbatim and unshaped, so no script has to parse a table (K5).
+		// Verbatim and unshaped, so no script has to parse a table.
 		if _, err := stdout.Write(body); err != nil {
 			return failf(1, "Check the destination of stdout.", "%v", err)
 		}

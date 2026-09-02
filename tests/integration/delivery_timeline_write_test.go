@@ -44,7 +44,7 @@ func timelineBar(t *testing.T, payload timelinePayload, issueID int64) (int64, i
 	return 0, 0, 0, "", ""
 }
 
-// manageIssue puts an issue under an epic, which is what gives it a bar at all (O10).
+// manageIssue puts an issue under an epic, which is what gives it a bar at all.
 func manageIssue(t *testing.T, issueID int64, epicName string) *issues_model.Issue {
 	t.Helper()
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
@@ -84,7 +84,7 @@ func TestDeliveryTimelineMovesAnIssueBetweenMilestoneRows(t *testing.T) {
 
 // TestDeliveryTimelineSetsABarsStartAndEnd covers the endpoint whose two halves are written
 // to different places: the end is Issue.DeadlineUnix, and the start has no Gitea field, so
-// it is the ccpm:started comment the chart already reads (O7, O8).
+// it is the ccpm:started comment the chart already reads.
 func TestDeliveryTimelineSetsABarsStartAndEnd(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -110,7 +110,7 @@ func TestDeliveryTimelineSetsABarsStartAndEnd(t *testing.T) {
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
 	assert.Equal(t, "no_dates", refusal.Code)
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/5/dates",
 		map[string]any{"repo": "user2/repo1", "start": "last tuesday"}).AddTokenAuth(token)
@@ -151,7 +151,7 @@ func TestDeliveryTimelineCreatesARowAndAnIssueOnIt(t *testing.T) {
 	for _, label := range created.Labels {
 		names = append(names, label.Name)
 	}
-	assert.Contains(t, names, "epic:checkout", "without the epic label the chart would list it as unmanaged (O10)")
+	assert.Contains(t, names, "epic:checkout", "without the epic label the chart would list it as unmanaged")
 
 	// A milestone needs a title, and a title-less request is refused rather than creating a
 	// nameless row.
@@ -226,7 +226,7 @@ func TestDeliveryTimelineRefusesEveryWriteWithoutIssueWrite(t *testing.T) {
 			assert.Equal(t, "forbidden", refusal.Code)
 			assert.Contains(t, refusal.Message, "Issues")
 			assert.Contains(t, refusal.Message, "user2/repo1")
-			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 
@@ -346,7 +346,7 @@ func TestAPIDeliveryTimelineFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *t
 	assert.Equal(t, "w/c 23 Feb", atEpic.Ruler.Ticks[0].Label, "the axis starts on a unit boundary in UTC")
 
 	// Moving the epic's deadline past its children clears the warning; it is a warning, not
-	// a refusal, and it goes away when the plan stops contradicting itself.
+	// a refusal, and it goes away when the schedule stops contradicting itself.
 	timelineWrite(t, token, "/timeline/issues/1/dates",
 		map[string]any{"repo": "user2/repo1", "end": "2026-03-25"})
 	fixed := getTimeline(t, token, "repo_id=1&limit=200&zoom=epic")

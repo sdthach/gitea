@@ -60,7 +60,7 @@ func stubDeps(scopes map[string]string, env string) narrowDeps {
 
 var repoScopes = map[string]string{prodSecret: "prod", qaSecret: "qa"}
 
-// TestNarrowSecretsToJobEnvironment is SC 17 asserted against the shipped entry point:
+// TestNarrowSecretsToJobEnvironment asserts scoping against the shipped entry point:
 // PROD_DB_PASS scoped to prod is present under environment: prod, absent from a job
 // declaring environment: qa, and absent from a job declaring no environment at all.
 func TestNarrowSecretsToJobEnvironment(t *testing.T) {
@@ -106,7 +106,7 @@ func TestNarrowSecretsToJobEnvironment(t *testing.T) {
 	}
 }
 
-// TestNarrowSecretsLeavesAnUnscopedRepositoryAlone is F5b/F4's compatibility guarantee:
+// TestNarrowSecretsLeavesAnUnscopedRepositoryAlone is the compatibility guarantee:
 // with nothing scoped, adding the fork changes no existing behaviour.
 func TestNarrowSecretsLeavesAnUnscopedRepositoryAlone(t *testing.T) {
 	withDeps(t, stubDeps(map[string]string{}, "prod"))

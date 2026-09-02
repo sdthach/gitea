@@ -13,7 +13,7 @@ import (
 	"gitea.dev/modules/timeutil"
 )
 
-// Version is the fork's OWN version row (F6). The fork never touches Gitea's shared
+// Version is the fork's OWN version row. The fork never touches Gitea's shared
 // `version` row: Gitea log.Fatals when that row exceeds what the binary knows, so
 // registering into the shared list would permanently lock an older Gitea binary out of
 // the database.
@@ -31,7 +31,7 @@ func init() {
 
 // Migration is one forward-only, additive step. Migrations create fork tables and add fork
 // columns; they never rewrite, rename or drop an upstream table or column, and they never
-// remove a column — Sync does not drop one and the dialects disagree on how (M6, M7).
+// remove a column — Sync does not drop one and the dialects disagree on how.
 type Migration struct {
 	ID          int64 // matches the numeric prefix of the file that registers it
 	Description string
@@ -39,7 +39,7 @@ type Migration struct {
 }
 
 // migrations is appended to by each migration file's own init(), one file each, so there
-// is no shared array for two rebased commits to conflict on (F6, US-11).
+// is no shared array for two rebased commits to conflict on.
 var migrations []*Migration
 
 // RegisterMigration is called from the init() of the file that defines the migration.
@@ -108,7 +108,7 @@ func pendingMigrations(all []*Migration, current int64) ([]*Migration, error) {
 }
 
 // currentVersion reads the fork's own version row, creating it at 0 on a fresh install so
-// a fresh install and an upgrade from stock converge on the same state (M8).
+// a fresh install and an upgrade from stock converge on the same state.
 func currentVersion(ctx context.Context) (*Version, error) {
 	v := new(Version)
 	has, err := db.GetEngine(ctx).Where("1=1").Get(v)
@@ -126,7 +126,7 @@ func currentVersion(ctx context.Context) (*Version, error) {
 }
 
 // Migrate applies every pending fork migration. The tables themselves are created by
-// Gitea's own Sync over the models RegisterModel received (M2), so a migration exists only
+// Gitea's own Sync over the models RegisterModel received, so a migration exists only
 // for work Sync cannot do.
 func Migrate(ctx context.Context) error {
 	v, err := currentVersion(ctx)

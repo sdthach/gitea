@@ -3,7 +3,7 @@
 	<div class="ui container">
 		<h2 class="ui header">{{.Title}}</h2>
 		<p class="tw-text-14">
-			Deploying is two steps (E14). This is the second: nothing has been dispatched yet.
+			Deploying is two steps. This is the second: nothing has been dispatched yet.
 			Both steps are the same request to <code>POST {{.DeliveryAPIBase}}/deployments</code> —
 			the first with <code>confirm: false</code>, which plans and dispatches nothing. Rolling
 			back is this page with an earlier release tag; there is no separate rollback path.
@@ -48,7 +48,7 @@
 		<div id="delivery-override" class="tw-hidden">
 			<p class="tw-text-14">
 				<label for="override-reason"><strong>Reason for overriding the sequence rule</strong></label><br>
-				It is written to the append-only audit log against your account (E17).
+				It is written to the append-only audit log against your account.
 			</p>
 			<textarea id="override-reason" rows="2" class="tw-w-full"></textarea>
 		</div>
@@ -91,7 +91,7 @@ function text(id, value) {
 	document.querySelector(id).textContent = value;
 }
 
-// Every error carries a suggested next action, and the page prints it (A21).
+// Every error carries a suggested next action, and the page prints it.
 function fail(header, message, action) {
 	text('#delivery-error-header', header);
 	text('#delivery-error-message', message);

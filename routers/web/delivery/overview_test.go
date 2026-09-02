@@ -68,7 +68,7 @@ func TestDeliveryCIPageOffersTheServersOwnDefaultWindow(t *testing.T) {
 		"the selected window is the server's own DefaultWindowDays")
 }
 
-// TestDeliveryCIPageOpensNoSecondTransport is P7 as the repository actually permits it. The
+// TestDeliveryCIPageOpensNoSecondTransport asserts it as the repository permits. The
 // page re-reads its documented endpoints on an interval; it opens no WebSocket and no
 // EventSource of its own.
 func TestDeliveryCIPageOpensNoSecondTransport(t *testing.T) {
@@ -76,12 +76,12 @@ func TestDeliveryCIPageOpensNoSecondTransport(t *testing.T) {
 	require.NoError(t, err)
 	body := string(raw)
 
-	assert.NotContains(t, body, "new WebSocket", "adding a transport of its own is exactly what P7 forbids")
+	assert.NotContains(t, body, "new WebSocket", "the page must open no transport of its own")
 	assert.NotContains(t, body, "EventSource", "Gitea's SSE endpoint was replaced upstream; nothing here revives one")
 	assert.Contains(t, body, "setInterval(load,", "the page refreshes itself over the same documented endpoints")
 }
 
-// TestDeliveryCIPageLinksOutToGitea is P1: every per-run and per-repository detail opens
+// TestDeliveryCIPageLinksOutToGitea: every per-run and per-repository detail opens
 // Gitea's own page rather than a reimplementation.
 func TestDeliveryCIPageLinksOutToGitea(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "overview.tmpl"))
@@ -92,7 +92,7 @@ func TestDeliveryCIPageLinksOutToGitea(t *testing.T) {
 	assert.Contains(t, body, "${subURL}/${r.repo_full_name}/actions", "a repository row opens its runs in Gitea")
 }
 
-// TestDeliveryCIPageShowsTheComparisonWindow is P2: the previous window of equal length
+// TestDeliveryCIPageShowsTheComparisonWindow: the previous window of equal length
 // renders beside each tile.
 func TestDeliveryCIPageShowsTheComparisonWindow(t *testing.T) {
 	body := renderOverview(t, map[string]any{
@@ -101,6 +101,6 @@ func TestDeliveryCIPageShowsTheComparisonWindow(t *testing.T) {
 		"AppSubURL":         "",
 		"DefaultWindowDays": delivery_service.DefaultWindowDays,
 	})
-	assert.Contains(t, body, "Previous window", "each tile carries its comparison column (P2)")
+	assert.Contains(t, body, "Previous window", "each tile carries its comparison column")
 	assert.Contains(t, body, "overview.previous", "the comparison is the API's own previous-window summary")
 }

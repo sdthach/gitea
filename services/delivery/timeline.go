@@ -31,7 +31,7 @@ const (
 	// carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress
 	// comment. It is the only recorded start that exists.
 	StartFromProgress StartSource = "ccpm_started"
-	// StartFromCreated is the issue's creation time, the fallback O7 names.
+	// StartFromCreated is the issue's creation time, the fallback start.
 	StartFromCreated StartSource = "issue_created"
 	// StartNone is an issue ccpm does not manage: it has no start to draw.
 	StartNone StartSource = "none"

@@ -16,7 +16,7 @@ import (
 func TestDeliveryAuditEnumsAreDeclaredOnce(t *testing.T) {
 	assert.Equal(t,
 		[]string{"requested", "started", "succeeded", "failed", "cancelled", "approved", "rejected", "overridden"},
-		AuditEvents, "the event set is E5's, in E5's order, with slice 5's override appended rather than inserted")
+		AuditEvents, "the event set is declared once, in order, with override appended rather than inserted")
 	assert.Equal(t, []string{"ui", "notifier", "reconcile"}, AuditSources)
 }
 
@@ -41,12 +41,12 @@ func TestDeliveryValidateAuditEvent(t *testing.T) {
 
 			var hubErr *Error
 			require.ErrorAs(t, err, &hubErr)
-			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }
 
-// TestDeliveryAuditIsAppendOnly covers E5 and SC 19: the log only grows, and it keeps
+// TestDeliveryAuditIsAppendOnly: the log only grows, and it keeps
 // naming the actor after the Gitea user is gone.
 func TestDeliveryAuditIsAppendOnly(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -69,7 +69,7 @@ func TestDeliveryAuditIsAppendOnly(t *testing.T) {
 	assert.Equal(t, int64(10), int64(rows[1].OccurredUnix-rows[0].OccurredUnix))
 
 	// Re-saving a row is what an update looks like through the model. No row may be
-	// updated or deleted (E5).
+	// updated or deleted.
 	err = AppendAuditEvent(ctx, rows[0])
 	require.Error(t, err)
 	var hubErr *Error

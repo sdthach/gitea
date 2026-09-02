@@ -15,8 +15,8 @@ import (
 //
 // The grid is a PROJECTION over the append-only log, not a table, so its filters select
 // what to project rather than rendering into a SQL condition. They still go through the one
-// grammar, so an unknown field is rejected by the same parser every other resource uses
-// (I2, I4). Its rows are releases, which are finite and stable, so it pages by page (I7).
+// grammar, so an unknown field is rejected by the same parser every other resource uses.
+// Its rows are releases, which are finite and stable, so it pages by page.
 var gridSpec = query.Spec{
 	Resource: "grid",
 	Fields: []query.Field{
@@ -34,10 +34,10 @@ func getGridEndpoint() *endpoint {
 			ID: "getGrid", Method: http.MethodGet, Path: "/grid",
 			Summary: "The release × environment grid",
 			Description: "Releases are rows, environments are columns in configured order — sequence is configuration, " +
-				"since nothing in Gitea expresses it (E7). Every cell state is a projection over the append-only " +
-				"audit log; no row carries a mutable status column the grid reads (E3, E5). " +
+				"since nothing in Gitea expresses it. Every cell state is a projection over the append-only " +
+				"audit log; no row carries a mutable status column the grid reads. " +
 				"The grid spans the repositories the viewer can see, using Gitea's existing permission " +
-				"filtering (E10, E12). The /delivery/grid page is a client of this endpoint (E18, I14).",
+				"filtering. The /delivery/grid page is a client of this endpoint.",
 			Tag: "grid", Query: &gridSpec, Response: "GridRow", ResponseIs: "array",
 		},
 		Handler: GetGrid,

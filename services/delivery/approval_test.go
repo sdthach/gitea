@@ -16,7 +16,7 @@ import (
 	"xorm.io/builder"
 )
 
-// TestDeliveryCanApproveEnvironment covers the approver set (F5a, F12) in BOTH its accepting
+// TestDeliveryCanApproveEnvironment covers the approver set in BOTH its accepting
 // and its refusing case for every branch. The default is whoever Gitea already permits to
 // dispatch; the allowlist narrows it, and it is the SAME allowlist branch protection uses.
 func TestDeliveryCanApproveEnvironment(t *testing.T) {
@@ -95,7 +95,7 @@ func TestDeliveryCanApproveEnvironment(t *testing.T) {
 	}
 }
 
-// TestDeliveryApplyHeldRunsIsTheSecondHeldSource covers `⏸`'s second source (E15): the
+// TestDeliveryApplyHeldRunsIsTheSecondHeldSource covers `⏸`'s second source: the
 // approvals table repaints a cell that only looks queued, and repaints nothing else.
 func TestDeliveryApplyHeldRunsIsTheSecondHeldSource(t *testing.T) {
 	cells := func() map[string][]Cell {
@@ -132,7 +132,7 @@ func decideFixture(t *testing.T, policy string, required int64) (*delivery_model
 		RepoID: 1, Name: "prod", ApprovalPolicy: policy, RequiredApprovals: required,
 	}
 	// The record has to be in the database as well as in hand: the projection reads the
-	// policy back from the environment record, never from what the caller passed (E15).
+	// policy back from the environment record, never from what the caller passed.
 	require.NoError(t, db.Insert(t.Context(), env))
 	hold := &delivery_model.Approval{
 		RepoID: 1, Environment: "prod", RunID: 4242, JobID: 84, ReleaseTag: "v1.1",
@@ -142,7 +142,7 @@ func decideFixture(t *testing.T, policy string, required int64) (*delivery_model
 	return hold, env
 }
 
-// TestDeliveryDecideWritesAnAuditEventAndReleases is F5c and SC 18: an approval releases the
+// TestDeliveryDecideWritesAnAuditEventAndReleases: an approval releases the
 // job and lands in the append-only log naming the approver and the time.
 func TestDeliveryDecideWritesAnAuditEventAndReleases(t *testing.T) {
 	hold, env := decideFixture(t, delivery_model.PolicyAnyApprover, 1)
@@ -173,7 +173,7 @@ func TestDeliveryDecideWritesAnAuditEventAndReleases(t *testing.T) {
 	assert.Equal(t, "v1.1", events[0].ReleaseTag)
 }
 
-// TestDeliveryDecideRefusals is SC 21 and SC 20: every refusal is made by the service, not
+// TestDeliveryDecideRefusals: every refusal is made by the service, not
 // hidden in a view, and each carries a suggested next action.
 func TestDeliveryDecideRefusals(t *testing.T) {
 	t.Run("a user who may not approve is refused", func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestDeliveryDecideRefusals(t *testing.T) {
 		})
 		assertRefused(t, err)
 
-		// A second user's approval is accepted, which is the other half of SC 18.
+		// A second user's approval is accepted, which is the other half.
 		other := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
 		decision, err := Decide(t.Context(), ApprovalRequest{
 			Approval: hold, Environment: env, Actor: other,
@@ -225,7 +225,7 @@ func TestDeliveryDecideRefusals(t *testing.T) {
 		decision, err := Decide(t.Context(), req)
 		require.NoError(t, err)
 		assert.Equal(t, delivery_model.ApprovalPending, decision.State,
-			"required_approvals 2 keeps the job held after the first approval (SC 18)")
+			"required_approvals 2 keeps the job held after the first approval")
 
 		_, err = Decide(t.Context(), req)
 		assertRefused(t, err)
@@ -288,5 +288,5 @@ func assertRefused(t *testing.T, err error) {
 	refused, ok := err.(*ErrApprovalRefused)
 	require.True(t, ok, "a refusal the caller is not permitted to make must be an ErrApprovalRefused, so the API answers 403 rather than 500: got %v", err)
 	assert.NotEmpty(t, refused.Err.Message)
-	assert.NotEmpty(t, refused.Err.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refused.Err.SuggestedAction, "every error carries a suggested next action")
 }

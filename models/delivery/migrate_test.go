@@ -44,14 +44,14 @@ func TestPendingMigrationsOrdersAndSkips(t *testing.T) {
 
 // TestPendingMigrationsRefusesANewerDatabase is the fork's own version guard. It refuses in
 // the fork's own table; Gitea's shared version row is never involved, so an older Gitea
-// binary is never locked out by it (F6).
+// binary is never locked out by it.
 func TestPendingMigrationsRefusesANewerDatabase(t *testing.T) {
 	_, err := pendingMigrations([]*Migration{{ID: 1, Description: "first", Migrate: noop}}, 9)
 	require.Error(t, err)
 	var hubErr *Error
 	require.ErrorAs(t, err, &hubErr)
 	assert.Contains(t, hubErr.Message, "version 9")
-	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 }
 
 func TestValidateMigrationsRefusesDuplicateAndZeroIDs(t *testing.T) {
@@ -172,7 +172,7 @@ func migrationByID(t *testing.T, id int64) *Migration {
 	return nil
 }
 
-// TestTheForkNeverTouchesGiteasSharedVersionRow is F6/SC 28 as a source check. Gitea
+// TestTheForkNeverTouchesGiteasSharedVersionRow is a source check. Gitea
 // log.Fatals when its shared `version` row exceeds what the binary knows, so registering
 // into the shared list would permanently lock an older Gitea binary out of the database.
 // The fork counts in its own `delivery_version` table and imports none of Gitea's migration
@@ -201,7 +201,7 @@ func TestTheForkNeverTouchesGiteasSharedVersionRow(t *testing.T) {
 			scanned++
 			for _, needle := range forbidden {
 				assert.NotContains(t, string(raw), needle,
-					"%s contains %q; the fork counts in delivery_version and never in Gitea's shared version row (F6)", path, needle)
+					"%s contains %q; the fork counts in delivery_version and never in Gitea's shared version row", path, needle)
 			}
 			return nil
 		}))

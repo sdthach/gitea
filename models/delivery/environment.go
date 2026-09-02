@@ -15,8 +15,8 @@ import (
 	"xorm.io/builder"
 )
 
-// Approval policies (F5). A new environment defaults to PolicyNone, so adding the fork
-// changes no existing behaviour until a policy is set (F5b). Slice 6 gives them meaning.
+// Approval policies. A new environment defaults to PolicyNone, so adding the fork
+// changes no existing behaviour until a policy is set.
 const (
 	PolicyNone        = "none"
 	PolicyAnyApprover = "any_approver"
@@ -30,9 +30,9 @@ var ApprovalPolicies = []string{PolicyNone, PolicyAnyApprover, PolicyOthersOnly}
 // is a template: a repository that has declared no environment of its own renders these.
 const DefaultsRepoID int64 = 0
 
-// Environment is authoritative for which environments exist and what is scoped to them (F9).
+// Environment is authoritative for which environments exist and what is scoped to them.
 // Column order is configuration read at render time; the model expresses no sequence beyond
-// the predecessor slice 5 adds.
+// the predecessor link below.
 type Environment struct {
 	ID                int64              `xorm:"pk autoincr" json:"id"`
 	RepoID            int64              `xorm:"INDEX UNIQUE(repo_name) NOT NULL DEFAULT 0" json:"repo_id"`
@@ -43,11 +43,11 @@ type Environment struct {
 	CreatedUnix       timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
 	UpdatedUnix       timeutil.TimeStamp `xorm:"updated NOT NULL" json:"updated_unix"`
 
-	// The sequence policy (E17) and its bypass (F10). RequirePredecessor defaults to false,
-	// so an environment with no policy behaves as it did before slice 5 — a warning only
-	// (F11). The three allowlist fields are branch protection's own, spelled exactly as
-	// models/git/protected_branch.go:46-48 spells them, so no gate models permission twice
-	// (F12). BlockAdminOverride is upstream's BlockAdminMergeOverride without the "Merge",
+	// The sequence policy and its bypass. RequirePredecessor defaults to false,
+	// so an environment with no policy only warns and never refuses.
+	// The three allowlist fields are branch protection's own, spelled exactly as
+	// models/git/protected_branch.go:46-48 spells them, so no gate models permission twice.
+	// BlockAdminOverride is upstream's BlockAdminMergeOverride without the "Merge",
 	// which names a step no deploy has; see promotion.go. RequireFullRelease is per
 	// environment rather than a list of names: an operator names environments whatever
 	// suits them, so which of them takes an unfinished build is a property of the row.
@@ -75,7 +75,7 @@ func NormalizeEnvironmentName(name string) string {
 }
 
 // ValidateEnvironment refuses a row the API would otherwise persist. Every message carries
-// a suggested next action (A21).
+// a suggested next action.
 func ValidateEnvironment(env *Environment) error {
 	if NormalizeEnvironmentName(env.Name) == "" {
 		return &Error{
@@ -101,12 +101,12 @@ func ValidateEnvironment(env *Environment) error {
 			SuggestedAction: "Set required_approvals to 1 or more, or set approval_policy to \"none\" to remove the gate.",
 		}
 	}
-	return ValidatePromotionPolicy(env) // the sequence rule, in promotion.go (E17, F11)
+	return ValidatePromotionPolicy(env) // the sequence rule, in promotion.go
 }
 
 func isKnownPolicy(policy string) bool { return slices.Contains(ApprovalPolicies, policy) }
 
-// Error is a hub error. It always carries a suggested next action (A21).
+// Error is a hub error. It always carries a suggested next action.
 type Error struct {
 	Message         string
 	SuggestedAction string

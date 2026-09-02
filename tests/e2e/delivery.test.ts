@@ -115,7 +115,7 @@ test('delivery promote page plans a deploy and offers to confirm it', async ({pa
   await expect(page.locator('#delivery-plan')).toContainText('promote-target');
 
   // The plan is the first of the confirm step's two halves: nothing is dispatched until the
-  // button the plan enables is pressed.
+  // button it enables is pressed.
   const confirm = page.locator('#delivery-confirm');
   await expect(confirm).toBeEnabled();
   await confirm.click();

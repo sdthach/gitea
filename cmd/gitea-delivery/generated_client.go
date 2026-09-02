@@ -5,11 +5,11 @@
 //
 // The request layer is generated from the API's operation set, the same set the published
 // OpenAPI document is generated from, so a call that no longer matches the contract fails
-// the build rather than at runtime (K2).
+// the build rather than at runtime.
 
 package main
 
-// Commands is every command the CLI serves, one per documented endpoint (K3, K7).
+// Commands is every command the CLI serves, one per documented endpoint.
 var Commands = []Command{
 	{
 		Name:         "approvals",
@@ -97,7 +97,7 @@ var Commands = []Command{
 		BodyParams:   []string{"group_by", "lane", "project_id", "repo"},
 		RequiredBody: []string{"group_by", "project_id", "repo"},
 		BoolBody:     nil,
-		BodyHelp:     map[string]string{"group_by": "The active grouping. A lane move is refused when this is none, because there is nothing to write (O4).", "lane": "The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.", "project_id": "The board the card is on.", "repo": "Repository as owner/name."},
+		BodyHelp:     map[string]string{"group_by": "The active grouping. A lane move is refused when this is none, because there is nothing to write.", "lane": "The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.", "project_id": "The board the card is on.", "repo": "Repository as owner/name."},
 		Columns:      []string{"can_edit_issue", "can_write", "columns", "group_by", "lanes", "project_id", "repo_full_name", "repo_id"},
 		IsList:       false,
 	},
@@ -112,7 +112,7 @@ var Commands = []Command{
 		BodyParams:   []string{"confirm", "environment", "override_reason", "release_tag", "repo"},
 		RequiredBody: []string{"environment", "release_tag", "repo"},
 		BoolBody:     []string{"confirm"},
-		BodyHelp:     map[string]string{"confirm": "False, the default, returns the plan and dispatches nothing — the first of E14's two steps. True dispatches.", "environment": "Target environment, for example prod.", "override_reason": "Why the environment's sequence rule is being bypassed. Required when the plan reports outcome \"override\"; it is written to the audit log (E17).", "release_tag": "Release tag to deploy. A prior tag is a rollback; it is the same request (E14).", "repo": "Target repository as owner/name."},
+		BodyHelp:     map[string]string{"confirm": "False, the default, returns the deploy plan and dispatches nothing — the first of the two confirm steps. True dispatches.", "environment": "Target environment, for example prod.", "override_reason": "Why the environment's sequence rule is being bypassed. Required when the deploy plan reports outcome \"override\"; it is written to the audit log.", "release_tag": "Release tag to deploy. A prior tag is a rollback; it is the same request.", "repo": "Target repository as owner/name."},
 		Columns:      []string{"confirmed", "environment", "outcome", "predecessor_state", "release_tag", "repo_full_name", "repo_id"},
 		IsList:       false,
 	},
@@ -172,7 +172,7 @@ var Commands = []Command{
 		BodyParams:   []string{"approval_policy", "block_admin_override", "bypass_allowlist_team_ids", "bypass_allowlist_user_ids", "enable_bypass_allowlist", "name", "predecessor", "repo_id", "require_full_release", "require_predecessor", "required_approvals", "sort_order"},
 		RequiredBody: []string{"name"},
 		BoolBody:     []string{"block_admin_override", "enable_bypass_allowlist", "require_full_release", "require_predecessor"},
-		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first (E17).", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
+		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first.", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
 		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
@@ -202,7 +202,7 @@ var Commands = []Command{
 		BodyParams:   []string{"approval_policy", "block_admin_override", "bypass_allowlist_team_ids", "bypass_allowlist_user_ids", "enable_bypass_allowlist", "name", "predecessor", "repo_id", "require_full_release", "require_predecessor", "required_approvals", "sort_order"},
 		RequiredBody: []string{"name"},
 		BoolBody:     []string{"block_admin_override", "enable_bypass_allowlist", "require_full_release", "require_predecessor"},
-		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first (E17).", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
+		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first.", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
 		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
@@ -382,7 +382,7 @@ var Commands = []Command{
 		BodyParams:   []string{"confirm", "environment", "override_reason", "release_tag", "repo"},
 		RequiredBody: []string{"environment", "release_tag", "repo"},
 		BoolBody:     []string{"confirm"},
-		BodyHelp:     map[string]string{"confirm": "False, the default, returns the plan and dispatches nothing — the first of E14's two steps. True dispatches.", "environment": "Target environment, for example prod.", "override_reason": "Why the environment's sequence rule is being bypassed. Required when the plan reports outcome \"override\"; it is written to the audit log (E17).", "release_tag": "Release tag to deploy. A prior tag is a rollback; it is the same request (E14).", "repo": "Target repository as owner/name."},
+		BodyHelp:     map[string]string{"confirm": "False, the default, returns the deploy plan and dispatches nothing — the first of the two confirm steps. True dispatches.", "environment": "Target environment, for example prod.", "override_reason": "Why the environment's sequence rule is being bypassed. Required when the deploy plan reports outcome \"override\"; it is written to the audit log.", "release_tag": "Release tag to deploy. A prior tag is a rollback; it is the same request.", "repo": "Target repository as owner/name."},
 		Columns:      []string{"confirmed", "environment", "outcome", "predecessor_state", "release_tag", "repo_full_name", "repo_id"},
 		IsList:       false,
 	},

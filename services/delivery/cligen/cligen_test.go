@@ -29,17 +29,17 @@ func TestCommandName(t *testing.T) {
 	}
 }
 
-// TestEveryOperationGetsACommand is K7 at the source: the parity check reads the published
+// TestEveryOperationGetsACommand works at the source: the parity check reads the published
 // document, and this asserts the generator cannot produce a document without a command.
 func TestEveryOperationGetsACommand(t *testing.T) {
 	ops := deliveryv1.Operations()
 	require.NotEmpty(t, ops)
 	names := CommandNames(ops)
-	// An operation may serve more than one command — slice 5's deploy and rollback compose
+	// An operation may serve more than one command — deploy and rollback compose
 	// the identical request — so the count is a lower bound, not an equality. What has to
 	// hold is that every operation yields at least one command and that no two operations
-	// answer to the same name, which is what K7's parity check would otherwise discover in
-	// the published document rather than here.
+	// answer to the same name, which the parity check would otherwise discover in the
+	// published document rather than here.
 	assert.GreaterOrEqual(t, len(names), len(ops), "every operation yields at least one command")
 	seen := map[string]bool{}
 	for _, op := range ops {

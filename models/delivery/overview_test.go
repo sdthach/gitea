@@ -17,7 +17,7 @@ import (
 
 // Repository 4 is public and carries four runs in the shared fixtures; repository 2 is
 // private to user2 and carries two. That pair is what makes the scoping tests below able to
-// fail in both directions (J9).
+// fail in both directions.
 const (
 	fixturePublicRepoID  = 4
 	fixturePrivateRepoID = 2
@@ -42,7 +42,7 @@ func TestDeliveryRunFactDurationIgnoresUnfinishedAndInvertedRuns(t *testing.T) {
 }
 
 // TestDeliveryFindRunFactsIsScopedToTheGivenRepositories is the permission filter's data
-// half, in both its including and its excluding case (J9, P6). The handler resolves the
+// half, in both its including and its excluding case. The handler resolves the
 // accessible set through Gitea's own check; this proves the read honours it.
 func TestDeliveryFindRunFactsIsScopedToTheGivenRepositories(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -114,8 +114,8 @@ func TestDeliveryFindRunFactsHonoursTheWindow(t *testing.T) {
 	assert.Empty(t, before, "the upper bound is exclusive, so no run is counted by two adjacent windows")
 }
 
-// TestDeliveryFindDeploymentFactsReadsTheForksOwnTable is P5's shared source of truth: the
-// daily trend's deployment count comes from delivery_deployment, not from counting runs.
+// TestDeliveryFindDeploymentFactsReadsTheForksOwnTable: the daily trend's deployment count
+// comes from delivery_deployment, not from counting runs.
 func TestDeliveryFindDeploymentFactsReadsTheForksOwnTable(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()

@@ -36,12 +36,12 @@ func TestDeliveryValidateDeployment(t *testing.T) {
 
 			var hubErr *Error
 			require.ErrorAs(t, err, &hubErr)
-			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }
 
-// TestDeliveryDeploymentsAreAppendOnly is SC 14's row count and E3's append-only rule.
+// TestDeliveryDeploymentsAreAppendOnly: one row per deploy, and the table is append-only.
 func TestDeliveryDeploymentsAreAppendOnly(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
@@ -58,7 +58,7 @@ func TestDeliveryDeploymentsAreAppendOnly(t *testing.T) {
 	rows, err := FindDeployments(ctx, builderEq("repo_id", int64(1)), "id ASC", 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3,
-		"three deploys leave three rows; an implementation that upserts per (release, environment) would leave two (SC 14)")
+		"three deploys leave three rows; an implementation that upserts per (release, environment) would leave two")
 	assert.Equal(t, []string{"v1", "v2", "v1"}, []string{rows[0].ReleaseTag, rows[1].ReleaseTag, rows[2].ReleaseTag})
 
 	// A run reporting several status changes still leaves one row for that run, so the
@@ -67,7 +67,7 @@ func TestDeliveryDeploymentsAreAppendOnly(t *testing.T) {
 	rows, err = FindDeployments(ctx, builderEq("repo_id", int64(1)), "id ASC", 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3, "re-observing a run appends nothing")
-	assert.Equal(t, "success", rows[2].Status, "the recorded status is written once and never updated (E3)")
+	assert.Equal(t, "success", rows[2].Status, "the recorded status is written once and never updated")
 
 	// Re-saving an existing row is what an update looks like through the model, and it is
 	// refused rather than silently applied.
@@ -92,7 +92,7 @@ func TestDeliveryFindDeploymentsLimitsWithoutOffset(t *testing.T) {
 
 	page, err := FindDeployments(ctx, builderEq("repo_id", int64(2)), "id ASC", 2)
 	require.NoError(t, err)
-	assert.Len(t, page, 2, "the limit bounds the page; the position comes from the cursor, never an offset (I6)")
+	assert.Len(t, page, 2, "the limit bounds the page; the position comes from the cursor, never an offset")
 
 	all, err := FindDeployments(ctx, builderEq("repo_id", int64(2)), "id ASC", 0)
 	require.NoError(t, err)

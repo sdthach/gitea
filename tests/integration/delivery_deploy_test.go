@@ -24,7 +24,7 @@ import (
 )
 
 // deployThroughTheNotifier drives one deploy the way a real one arrives: through Gitea's
-// own notifier, which is the fork's single capture point (E2, E11). Nothing here writes the
+// own notifier, which is the fork's single capture point. Nothing here writes the
 // tables directly, so a hook that stopped firing would fail these tests.
 func deployThroughTheNotifier(t *testing.T, repo *repo_model.Repository, sender *user_model.User, environment, tag string, runID, at int64) {
 	t.Helper()
@@ -45,7 +45,7 @@ func deployThroughTheNotifier(t *testing.T, repo *repo_model.Repository, sender 
 	notify.WorkflowRunStatusUpdate(t.Context(), repo, sender, run)
 }
 
-// TestAPIDeliveryGridProjectsRepeatDeploys is SC 14 over the wire: v1.0 to qa, v1.1 to qa,
+// TestAPIDeliveryGridProjectsRepeatDeploys, over the wire: v1.0 to qa, v1.1 to qa,
 // v1.0 to qa again leaves v1.0 at `✔ ×2 now`, v1.1 at `✔`, and three rows in the table.
 // An implementation that upserted per (release, environment) would fail every assertion.
 func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
@@ -82,7 +82,7 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 	successes := map[string]int{}
 	for _, row := range rows {
 		assert.Equal(t, "user2/repo1", row.RepoFullName)
-		require.NotEmpty(t, row.Cells, "every row carries one cell per environment, in configured order (E7)")
+		require.NotEmpty(t, row.Cells, "every row carries one cell per environment, in configured order")
 		byTag[row.ReleaseTag] = map[string]string{}
 		columns := make([]string, 0, len(row.Cells))
 		orders := make([]int64, 0, len(row.Cells))
@@ -95,9 +95,9 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 			}
 		}
 		assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, columns,
-			"environment sequence is configuration; nothing in Gitea expresses it (E7)")
+			"environment sequence is configuration; nothing in Gitea expresses it")
 		assert.Equal(t, []int64{10, 20, 30, 40, 50}, orders,
-			"each cell carries its environment's configured order, which is what orders a grid spanning repositories (E7)")
+			"each cell carries its environment's configured order, which is what orders a grid spanning repositories")
 	}
 
 	require.Contains(t, byTag, "v1.0")
@@ -108,23 +108,23 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 	assert.Equal(t, 1, successes["v1.1"])
 	assert.Equal(t, "·", byTag["v1.0"]["prod"], "nothing has reached prod")
 
-	// SC 15: the deployments endpoint returns the rows the notifier wrote — three of them,
+	// The deployments endpoint returns the rows the notifier wrote — three of them,
 	// not one per (release, environment).
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/deployments?environment=qa&sort_by=id&order=asc").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
 	var deployments []*delivery.Deployment
 	DecodeJSON(t, resp, &deployments)
-	require.Len(t, deployments, 3, "three deploys leave three rows (E3, SC 14)")
+	require.Len(t, deployments, 3, "three deploys leave three rows")
 	assert.Equal(t, []string{"v1.0", "v1.1", "v1.0"},
 		[]string{deployments[0].ReleaseTag, deployments[1].ReleaseTag, deployments[2].ReleaseTag})
 	assert.Equal(t, []int64{9001, 9002, 9003},
 		[]int64{deployments[0].RunID, deployments[1].RunID, deployments[2].RunID})
 	assert.Empty(t, resp.Header().Get("X-Total-Count"),
-		"a cursor-paged resource carries no total: counting a table receiving concurrent inserts answers a stale question (I6)")
+		"a cursor-paged resource carries no total: counting a table receiving concurrent inserts answers a stale question")
 }
 
-// TestAPIDeliveryAuditIsReadOnlyOverTheAPI is SC 19 and SC 24: the audit resource publishes
-// no write verb, so PATCH and DELETE are refused at the route as well as at the table (I11).
+// TestAPIDeliveryAuditIsReadOnlyOverTheAPI: the audit resource publishes
+// no write verb, so PATCH and DELETE are refused at the route as well as at the table.
 func TestAPIDeliveryAuditIsReadOnlyOverTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -139,7 +139,7 @@ func TestAPIDeliveryAuditIsReadOnlyOverTheAPI(t *testing.T) {
 	resp := MakeRequest(t, req, http.StatusOK)
 	var events []*delivery.AuditEvent
 	DecodeJSON(t, resp, &events)
-	require.Len(t, events, 2, "each deploy writes requested and a terminal event (E5)")
+	require.Len(t, events, 2, "each deploy writes requested and a terminal event")
 	require.NotZero(t, events[0].ID)
 
 	for _, method := range []string{"PATCH", "DELETE", "POST", "PUT"} {
@@ -153,7 +153,7 @@ func TestAPIDeliveryAuditIsReadOnlyOverTheAPI(t *testing.T) {
 	assert.Contains(t, err.Error(), "append-only")
 }
 
-// TestAPIDeliveryAuditOutlivesTheUserItNames is SC 19: deleting the deploying user from
+// TestAPIDeliveryAuditOutlivesTheUserItNames: deleting the deploying user from
 // Gitea leaves the audit still naming them, because actor_login is denormalized and the row
 // resolves no foreign key.
 func TestAPIDeliveryAuditOutlivesTheUserItNames(t *testing.T) {
@@ -177,12 +177,12 @@ func TestAPIDeliveryAuditOutlivesTheUserItNames(t *testing.T) {
 	DecodeJSON(t, resp, &events)
 	require.NotEmpty(t, events)
 	for _, e := range events {
-		assert.Equal(t, "user4", e.ActorLogin, "the audit still names who deployed (E5, SC 19)")
+		assert.Equal(t, "user4", e.ActorLogin, "the audit still names who deployed")
 		assert.Equal(t, int64(4), e.ActorID)
 	}
 }
 
-// TestAPIDeliveryCursorPagingVisitsEveryRowOnce covers I6 for the first two resources that
+// TestAPIDeliveryCursorPagingVisitsEveryRowOnce covers cursor paging for the first two resources that
 // use it. An offset traversal over an append-only table repeats and skips rows; a cursor
 // traversal does not.
 func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
@@ -246,7 +246,7 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 				}
 			}
 			assert.Equal(t, map[int64]int{9300: 1, 9301: 1, 9302: 1}, seenRuns,
-				"each deployment is returned exactly once across the traversal (I6)")
+				"each deployment is returned exactly once across the traversal")
 		})
 	}
 
@@ -265,17 +265,17 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 	}
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "cursor_sort_mismatch", refusal.Code)
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
-	// Cursor and page are the only two forms, and a resource accepts exactly one (I8).
+	// Cursor and page are the only two forms, and a resource accepts exactly one.
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?page=2").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusBadRequest)
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/releases?cursor=x").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNotFound)
 }
 
-// TestAPIDeliveryReleasesExpandDeployments covers I9's expansion over the two new resources
-// and E6: releases are read from Gitea's own model at render time.
+// TestAPIDeliveryReleasesExpandDeployments covers expansion over the two new resources:
+// releases are read from Gitea's own model at render time.
 func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -292,7 +292,7 @@ func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 	var releases []*deliveryv1.Release
 	DecodeJSON(t, resp, &releases)
 	require.NotEmpty(t, releases)
-	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "releases are finite and stable, so they page by page (I7)")
+	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "releases are finite and stable, so they page by page")
 
 	found := false
 	for _, r := range releases {
@@ -301,12 +301,12 @@ func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 			found = true
 			require.Len(t, r.Deployments, 1)
 			assert.Equal(t, "staging", r.Deployments[0].Environment)
-			assert.NotEmpty(t, r.Target, "the release's own commitish, which the deploy status is posted against (D2)")
+			assert.NotEmpty(t, r.Target, "the release's own commitish, which the deploy status is posted against")
 		}
 	}
 	assert.True(t, found, "v1.1 is a release of user2/repo1")
 
-	// Deeper or unwhitelisted expansion is refused, naming what is accepted (I9, I4).
+	// Deeper or unwhitelisted expansion is refused, naming what is accepted.
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/releases?expand=audit").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusBadRequest)
 
@@ -321,7 +321,7 @@ func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 	assert.Len(t, deployments[0].Audit, 2, "the run's own requested and terminal events")
 }
 
-// TestDeliveryGridPageIsAClientOfTheAPI is E18/I14 for the new page: the handler serves the
+// TestDeliveryGridPageIsAClientOfTheAPI covers the new page: the handler serves the
 // shell and every figure arrives over the documented endpoint.
 func TestDeliveryGridPageIsAClientOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -333,5 +333,5 @@ func TestDeliveryGridPageIsAClientOfTheAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/grid")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Body.String(), deliveryv1.BasePath+"/grid",
-		"the page fetches its rows from the documented endpoint (E18, I14)")
+		"the page fetches its rows from the documented endpoint")
 }

@@ -54,7 +54,7 @@ func TestDeliveryParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.
 	assert.False(t, ok, "an unknown grouping is refused, never silently treated as none")
 }
 
-// SC 37: by type, by assignee and by epic.
+// By type, by assignee and by epic.
 func TestDeliveryBuildLanesGroupsByEveryDeclaredDimension(t *testing.T) {
 	cards := []Card{
 		card(1, 11, []string{"type:bug", "epic:checkout"}, []string{"alice"}),
@@ -92,7 +92,7 @@ func TestDeliveryBuildLanesCarriesEveryColumnInOrderInEveryLane(t *testing.T) {
 	assert.Len(t, lanes[1].Columns[2].Cards, 1, "the task lands in Done")
 }
 
-// O3: nothing disappears from a board because a field is unset.
+// Nothing disappears from a board because a field is unset.
 func TestDeliveryBuildLanesPutsAnUnsetValueInAnExplicitEmptyLane(t *testing.T) {
 	cards := []Card{
 		card(1, 11, []string{"type:bug"}, []string{"alice"}),
@@ -144,7 +144,7 @@ func TestDeliveryBuildLanesOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
 	assert.Equal(t, 0, lanes[0].Cards)
 }
 
-// O4: the two writes and no others. A lane move edits the grouping field itself.
+// The two writes and no others. A lane move edits the grouping field itself.
 func TestDeliveryPlanLaneMoveEditsTheGroupingFieldItself(t *testing.T) {
 	write, err := PlanLaneMove(GroupType, "bug")
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestDeliveryPlanLaneMoveEditsTheGroupingFieldItself(t *testing.T) {
 }
 
 // Moving INTO the empty-value lane clears the field rather than being refused: the lane is
-// explicit (O3), so it has to be reachable.
+// explicit, so it has to be reachable.
 func TestDeliveryPlanLaneMoveIntoTheEmptyLaneClearsTheField(t *testing.T) {
 	write, err := PlanLaneMove(GroupType, "")
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestDeliveryPlanLaneMoveIntoTheEmptyLaneClearsTheField(t *testing.T) {
 	assert.Empty(t, write.Assignee)
 }
 
-// SC 37: a lane move is refused when grouping is off, because there is nothing to write.
+// A lane move is refused when grouping is off, because there is nothing to write.
 func TestDeliveryPlanLaneMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
 	_, err := PlanLaneMove(GroupNone, "bug")
 	require.Error(t, err)
@@ -181,6 +181,6 @@ func TestDeliveryPlanLaneMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
 	var hubErr *delivery_model.Error
 	require.ErrorAs(t, err, &hubErr)
 	assert.Contains(t, hubErr.Message, "not grouped")
-	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 	assert.Contains(t, hubErr.SuggestedAction, "COLUMNS", "the refusal names the write that does still work")
 }

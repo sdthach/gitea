@@ -15,12 +15,12 @@ import (
 
 const tplOverview templates.TplName = "delivery/overview"
 
-// CI renders /delivery/ci, the cross-repository CI/CD overview (P1-P6).
+// CI renders /delivery/ci, the cross-repository CI/CD overview.
 //
 // Like every other fork page it is a client of documented endpoints and reads nothing the API
-// does not serve (E18, I14): the handler passes the API base and the default window and
+// does not serve: the handler passes the API base and the default window and
 // nothing else. Every per-run, per-workflow and per-repository detail on it links out to
-// Gitea's own page rather than to a reimplementation (P1).
+// Gitea's own page rather than to a reimplementation.
 func CI(ctx *context.Context) {
 	ctx.Data["Title"] = "CI/CD overview"
 	ctx.Data["PageIsDelivery"] = true

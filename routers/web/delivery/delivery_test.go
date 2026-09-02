@@ -61,7 +61,7 @@ func TestForkTemplatesParse(t *testing.T) {
 	}
 }
 
-// TestPagesInheritGiteasChrome is F7: pages wrap their content in base/head … base/footer,
+// TestPagesInheritGiteasChrome: pages wrap their content in base/head … base/footer,
 // exactly as templates/user/dashboard/milestones.tmpl does, so chrome, themes, dark mode and
 // Fomantic classes are inherited and the fork ships no stylesheet.
 func TestPagesInheritGiteasChrome(t *testing.T) {
@@ -105,8 +105,8 @@ func TestEveryInlineScriptCarriesTheCspNonce(t *testing.T) {
 }
 
 // forkPages is every page the fork serves, with the documented operation it is a client of.
-// A page added without an entry here fails TestEveryPageIsListed, so no page can slip past
-// the E18/I14 check.
+// A page added without an entry here fails TestEveryPageIsListed, so no page can serve
+// itself from anything but a published operation.
 var forkPages = []struct {
 	template string
 	// endpoints are every operation path the page fetches. Each must be published, and
@@ -127,27 +127,27 @@ var forkPages = []struct {
 		endpoints: []string{"/grid", "/deployments", "/repos/{owner}/{repo}/releases"},
 		fetch:     "/grid?",
 	},
-	{ // slice 8
+	{
 		template:  "overview.tmpl",
 		endpoints: []string{"/overview", "/overview/trends", "/overview/repos", "/runs"},
 		fetch:     "/overview?",
 	},
-	{ // slice 5
+	{
 		template:  "promote.tmpl",
 		endpoints: []string{"/deployments"},
 		fetch:     "/deployments",
 	},
-	{ // slice 6
+	{
 		template:  "approvals.tmpl",
 		endpoints: []string{"/approvals"},
 		fetch:     "/approvals?",
 	},
-	{ // slice 7
+	{
 		template:  "board.tmpl",
 		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/lane"},
 		fetch:     "/board?",
 	},
-	{ // slice 7
+	{
 		template:  "timeline.tmpl",
 		endpoints: []string{"/timeline"},
 		fetch:     "/timeline?",
@@ -177,10 +177,10 @@ func TestEveryPageIsListed(t *testing.T) {
 	for _, p := range forkPages {
 		listed = append(listed, p.template)
 	}
-	assert.ElementsMatch(t, pages, listed, "every page the fork ships is checked against its API (E18, I14)")
+	assert.ElementsMatch(t, pages, listed, "every page the fork ships is checked against its API")
 }
 
-// TestPageIsAClientOfItsAPI is E18/I14: the page fetches its data from a documented
+// TestPageIsAClientOfItsAPI: the page fetches its data from a documented
 // endpoint and the handler serves only the shell. A handler serving the UI alone is a defect.
 func TestPageIsAClientOfItsAPI(t *testing.T) {
 	for _, page := range forkPages {
@@ -189,7 +189,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 			require.NoError(t, err)
 			body := string(raw)
 			assert.Contains(t, body, page.fetch, "the page reads its rows over the API")
-			assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action (A21)")
+			assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action")
 
 			published := map[string]bool{}
 			for _, op := range deliveryv1.Operations() {
@@ -197,7 +197,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 			}
 			for _, endpoint := range page.endpoints {
 				assert.True(t, published[endpoint],
-					"the page's endpoint %s must be a published operation (E18, I14)", endpoint)
+					"the page's endpoint %s must be a published operation", endpoint)
 				// The template has to name it, so an endpoint listed here but no longer
 				// fetched is caught rather than standing as a claim about a dead page. A page
 				// may name the documented path verbatim, as board.tmpl does, or interpolate the
@@ -210,7 +210,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 	}
 }
 
-// TestNavbarSpokeDelegatesToAHubTemplate is F2: the single upstream template edit is one
+// TestNavbarSpokeDelegatesToAHubTemplate: the single upstream template edit is one
 // line delegating into a template the fork owns.
 func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(templateDir(t), "base", "head_navbar.tmpl"))
@@ -235,13 +235,13 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	assert.Equal(t, []string{
 		"/delivery/environments", "/delivery/environments/{name}",
 		"/delivery/environments/{id}/edit", "/delivery/grid",
-		"/delivery/ci",                                                   // slice 8
-		"/delivery/promote",                                              // slice 5
-		"/delivery/approvals", "/delivery/environments/{name}/approvals", // slice 6
-		"/delivery/board", "/delivery/timeline", // slice 7
+		"/delivery/ci",
+		"/delivery/promote",
+		"/delivery/approvals", "/delivery/environments/{name}/approvals",
+		"/delivery/board", "/delivery/timeline",
 	}, r.patterns)
 	for _, handlers := range r.handlers {
-		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate (F13)")
+		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate")
 	}
 }
 

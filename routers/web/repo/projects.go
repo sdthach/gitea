@@ -426,7 +426,7 @@ func ViewProject(ctx *context.Context) {
 	ctx.Data["Project"] = project
 	ctx.Data["IssuesMap"] = issuesMap
 	ctx.Data["Columns"] = columns
-	ctx.Data["EnableDeliverySwimlanes"] = delivery_service.SwimlanesEnabled() // delivery fork spoke (F2/D2)
+	ctx.Data["EnableDeliverySwimlanes"] = delivery_service.SwimlanesEnabled() // delivery fork spoke
 
 	ctx.HTML(http.StatusOK, tplProjectsView)
 }

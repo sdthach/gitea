@@ -15,9 +15,8 @@ import (
 	"xorm.io/builder"
 )
 
-// The audit event set, declared once (E5, E13). Slice 6 gives approved and rejected a
-// producer; the enum is complete here so the grid projection has one closed set to switch
-// on rather than a string it has to guess at.
+// The audit event set, declared once. The enum is complete here so the grid projection has
+// one closed set to switch on rather than a string it has to guess at.
 const (
 	AuditRequested = "requested"
 	AuditStarted   = "started"
@@ -27,20 +26,20 @@ const (
 	AuditApproved  = "approved"
 	AuditRejected  = "rejected"
 	// AuditOverridden records that someone who could bypass the sequence rule did so, and
-	// why (E17). It is appended only after the deploy it authorized was dispatched, so the
+	// why. It is appended only after the deploy it authorized was dispatched, so the
 	// row carries the run that is its evidence.
 	AuditOverridden = "overridden"
 )
 
-// AuditEvents is the complete event set, in the order E5 lists it, with slice 5's override
-// appended rather than inserted so an existing row's meaning never moves.
+// AuditEvents is the complete event set, in the order the constants above declare it, with
+// override appended rather than inserted so an existing row's meaning never moves.
 var AuditEvents = []string{
 	AuditRequested, AuditStarted, AuditSucceeded,
 	AuditFailed, AuditCancelled, AuditApproved, AuditRejected,
 	AuditOverridden,
 }
 
-// The source set, declared once (E5).
+// The source set, declared once.
 const (
 	SourceUI        = "ui"
 	SourceNotifier  = "notifier"
@@ -50,11 +49,11 @@ const (
 // AuditSources is the complete source set.
 var AuditSources = []string{SourceUI, SourceNotifier, SourceReconcile}
 
-// AuditEvent is one row of the append-only audit log (E5). It is retained indefinitely; no
-// purge or archive path is built (E13).
+// AuditEvent is one row of the append-only audit log. It is retained indefinitely; no
+// purge or archive path is built.
 //
 // ActorLogin is denormalized on purpose: deleting the user from Gitea must not erase who
-// deployed (SC 19).
+// deployed.
 type AuditEvent struct {
 	ID           int64              `xorm:"pk autoincr" json:"id"`
 	Event        string             `xorm:"VARCHAR(32) INDEX NOT NULL" json:"event"`
@@ -70,7 +69,7 @@ type AuditEvent struct {
 	RunURL       string             `xorm:"VARCHAR(255) NOT NULL DEFAULT ''" json:"run_url"`
 	Source       string             `xorm:"VARCHAR(32) NOT NULL" json:"source"`
 	// Reason is the actor's own words for an event that needed them: the reason given when
-	// the sequence rule was overridden (E17). It is empty on every event that needs none.
+	// the sequence rule was overridden. It is empty on every event that needs none.
 	Reason      string             `xorm:"TEXT NOT NULL DEFAULT ''" json:"reason"`
 	CreatedUnix timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
 }
@@ -83,12 +82,12 @@ func init() {
 }
 
 // errAppendOnly is the rejection both append-only tables share. It is what an attempt to
-// rewrite an existing row gets: the row already stands, and the log is the record (E5, I11).
+// rewrite an existing row gets: the row already stands, and the log is the record.
 func errAppendOnly(table string, id int64) error {
 	return &Error{
 		Message: fmt.Sprintf("%s row %d already exists and %s is append-only", table, id, table),
 		SuggestedAction: "Append a new row describing what changed instead of rewriting this one. " +
-			"The API exposes no POST, PATCH or DELETE on the audit resource (I11).",
+			"The API exposes no POST, PATCH or DELETE on the audit resource.",
 	}
 }
 
@@ -116,22 +115,22 @@ func ValidateAuditEvent(e *AuditEvent) error {
 	if NormalizeEnvironmentName(e.Environment) == "" {
 		return &Error{
 			Message:         "audit event names no environment",
-			SuggestedAction: "Name the workflow file deploy-<env>.yaml so the environment is read from it (D4), or set environment explicitly.",
+			SuggestedAction: "Name the workflow file deploy-<env>.yaml so the environment is read from it, or set environment explicitly.",
 		}
 	}
 	// An override is the reason it records. A row saying only that the sequence rule was
-	// bypassed answers none of what E17 asks the log to keep, so the write path refuses it.
+	// bypassed answers none of what the log is kept for, so the write path refuses it.
 	if e.Event == AuditOverridden && strings.TrimSpace(e.Reason) == "" {
 		return &Error{
 			Message:         "an overridden event carries no reason",
-			SuggestedAction: "Send override_reason with the deploy; the sequence rule is only bypassable with a reason on the record (E17).",
+			SuggestedAction: "Send override_reason with the deploy; the sequence rule is only bypassable with a reason on the record.",
 		}
 	}
 	return nil
 }
 
 // AppendAuditEvent appends one event. It is the only write path to the table: there is no
-// update and no delete, so the log can only grow (E5, E13).
+// update and no delete, so the log can only grow.
 //
 // A row carrying a primary key is what an update looks like when written through the model,
 // and it is refused rather than silently inserted as a duplicate.
@@ -150,7 +149,7 @@ func AppendAuditEvent(ctx context.Context, e *AuditEvent) error {
 }
 
 // FindAuditEvents lists events matching cond. Like deployments it takes no offset: the
-// resource is append-only and pages by cursor (I6).
+// resource is append-only and pages by cursor.
 func FindAuditEvents(ctx context.Context, cond builder.Cond, orderBy string, limit int) ([]*AuditEvent, error) {
 	sess := db.GetEngine(ctx).Where(cond).OrderBy(orderBy)
 	if limit > 0 {

@@ -17,7 +17,7 @@ import (
 //
 // The resource is READ-ONLY. It declares one GET operation and nothing else, and Routes
 // mounts operations rather than handlers, so there is no POST, PATCH or DELETE to reach:
-// the append-only guarantee of E5 is enforced at the route as well as at the table (I11).
+// the append-only guarantee is enforced at the route as well as at the table.
 var auditSpec = query.Spec{
 	Resource: "audit",
 	Fields: []query.Field{
@@ -45,10 +45,10 @@ func listAuditEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "listAudit", Method: http.MethodGet, Path: "/audit",
 			Summary: "List delivery audit events across every repository the caller can see",
-			Description: "One row per event, retained indefinitely; no purge or archive path exists (E5, E13). " +
+			Description: "One row per event, retained indefinitely; no purge or archive path exists. " +
 				"actor_login is denormalized, so deleting the user from Gitea does not erase who deployed. " +
-				"The resource is read-only: no POST, PATCH or DELETE is published (I11). " +
-				"Pages by cursor; the continuation token is in the " + NextCursorHeader + " header and in Link rel=next (I6).",
+				"The resource is read-only: no POST, PATCH or DELETE is published. " +
+				"Pages by cursor; the continuation token is in the " + NextCursorHeader + " header and in Link rel=next.",
 			Tag: "audit", Query: &auditSpec, Response: "AuditEvent", ResponseIs: "array",
 		},
 		Handler: ListAudit,

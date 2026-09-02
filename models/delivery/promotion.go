@@ -5,14 +5,14 @@ package delivery
 
 import "fmt"
 
-// The promotion policy is the sequence rule an environment declares about itself (E17):
+// The promotion policy is the sequence rule an environment declares about itself:
 // which environment must have held a release before this one may take it, whether that is a
 // warning or a gate, and who may pass the gate anyway.
 //
 // The bypass fields on Environment reuse branch protection's own names, defaults and API
 // names — EnableBypassAllowlist, BypassAllowlistUserIDs, BypassAllowlistTeamIDs, verified
 // at models/git/protected_branch.go:46-48 — because a gate that invents its own notion of
-// who may pass is a defect (F10, F12).
+// who may pass is a defect.
 
 // NormalizePromotionPolicy applies the one spelling rule to the policy's own fields. An
 // environment name is an identifier, and a predecessor is an environment name, so the two
@@ -22,7 +22,7 @@ func NormalizePromotionPolicy(env *Environment) {
 }
 
 // ValidatePromotionPolicy refuses a policy the API would otherwise persist. Every message
-// carries a suggested next action (A21).
+// carries a suggested next action.
 //
 // It is called from ValidateEnvironment, so no write path can reach the table around it.
 func ValidatePromotionPolicy(env *Environment) error {

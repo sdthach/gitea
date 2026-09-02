@@ -26,7 +26,7 @@ func parseRunQuery(t *testing.T, raw string) *query.Query {
 	return q
 }
 
-// TestDeliveryRunStatusFilterBecomesTheStoredInteger is what makes SC 41's
+// TestDeliveryRunStatusFilterBecomesTheStoredInteger is what makes
 // `status[eq]=failure` return the failed runs rather than nothing: the column stores Gitea's
 // integer, and the caller filters on the state name the overview publishes.
 func TestDeliveryRunStatusFilterBecomesTheStoredInteger(t *testing.T) {
@@ -57,7 +57,7 @@ func TestDeliveryRunStatusFilterWidensAMultiStatusState(t *testing.T) {
 		q.Filters[0].Values)
 }
 
-// TestDeliveryRunStatusFilterRefusesAnUnknownState is I4/A21: the rejection names the
+// TestDeliveryRunStatusFilterRefusesAnUnknownState: the rejection names the
 // offender and lists what is accepted, rather than returning an empty page a caller would
 // read as "no failed runs".
 func TestDeliveryRunStatusFilterRefusesAnUnknownState(t *testing.T) {
@@ -66,9 +66,9 @@ func TestDeliveryRunStatusFilterRefusesAnUnknownState(t *testing.T) {
 	require.NotNil(t, qErr)
 
 	assert.Equal(t, "unknown_run_status", qErr.Code)
-	assert.Contains(t, qErr.Message, "exploded", "the rejection names the offender (I4)")
-	assert.NotEmpty(t, qErr.SuggestedAction, "every error carries a suggested next action (A21)")
-	assert.Contains(t, qErr.Accepted, "failure", "the rejection lists what is accepted (I4)")
+	assert.Contains(t, qErr.Message, "exploded", "the rejection names the offender")
+	assert.NotEmpty(t, qErr.SuggestedAction, "every error carries a suggested next action")
+	assert.Contains(t, qErr.Accepted, "failure", "the rejection lists what is accepted")
 }
 
 // TestDeliveryRunStatusFilterLeavesOtherFiltersAlone catches a rewrite that reached past its
@@ -89,7 +89,7 @@ func TestDeliveryRunStatusFilterLeavesOtherFiltersAlone(t *testing.T) {
 	}
 }
 
-// TestDeliveryOverviewResourcesArePublished is P8/P9: every figure the composite shows is
+// TestDeliveryOverviewResourcesArePublished: every figure the composite shows is
 // also reachable from a resource of its own, so the composite is a saving rather than the
 // only door.
 func TestDeliveryOverviewResourcesArePublished(t *testing.T) {
@@ -98,7 +98,7 @@ func TestDeliveryOverviewResourcesArePublished(t *testing.T) {
 		published[op.Path] = true
 	}
 	for _, path := range []string{"/runs", "/workflows", "/overview", "/overview/trends", "/overview/repos"} {
-		assert.True(t, published[path], "%s must be a published operation (P8, P9)", path)
+		assert.True(t, published[path], "%s must be a published operation", path)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestDeliveryProjectionFiltersNarrowTheRows(t *testing.T) {
 	assert.Len(t, apply("repo_full_name[contains]=acme"), 2)
 	assert.Len(t, apply("repo_full_name[in]=acme/web,other/tool"), 2)
 	assert.Len(t, apply("repo_full_name[ne]=acme/web"), 2)
-	assert.Len(t, apply("q=OTHER"), 1, "free-text search is case-insensitive over the declared columns (I10)")
+	assert.Len(t, apply("q=OTHER"), 1, "free-text search is case-insensitive over the declared columns")
 	assert.Len(t, apply("runs[gte]=7&repo_full_name[contains]=acme"), 1, "repeating narrows, it does not widen")
 	assert.Len(t, apply("window_days=30"), 3, "window_days selects the period; it narrows no row")
 	assert.Len(t, apply(""), 3)

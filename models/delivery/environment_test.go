@@ -37,7 +37,7 @@ func TestValidateEnvironment(t *testing.T) {
 			var hubErr *Error
 			require.ErrorAs(t, err, &hubErr)
 			assert.Contains(t, hubErr.Message, c.wantInMsg)
-			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }

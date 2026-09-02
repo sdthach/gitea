@@ -29,7 +29,7 @@ import (
 // The board is a PROJECTION over Gitea's own project rows, not a table of its own, so its
 // parameters select what to project rather than rendering into a SQL condition. They still
 // go through the one grammar, so an unknown parameter is a 400 that names the offender
-// rather than a silently ignored word (I2, I4).
+// rather than a silently ignored word.
 var boardSpec = query.Spec{
 	Resource: "board",
 	Fields: []query.Field{
@@ -42,7 +42,7 @@ var boardSpec = query.Spec{
 }
 
 // Board is the board resource's response shape: the columns Gitea models and the lanes it
-// does not (O1).
+// does not.
 type Board struct {
 	RepoID       int64                          `json:"repo_id"`
 	RepoFullName string                         `json:"repo_full_name"`
@@ -65,13 +65,13 @@ func getBoardEndpoint() *endpoint {
 			Summary: "A project board with horizontal swimlanes",
 			Description: "Gitea's project columns rendered vertically, with horizontal lanes it does not model at all: " +
 				"project.Column carries title, sorting, colour and project and no lane, row or group field, so lanes are a " +
-				"rendering over rows the Projects API already returns — no schema change and no fork change (O1). " +
+				"rendering over rows the Projects API already returns — no schema change and no fork change. " +
 				"group_by selects the lane dimension at view time and is never stored on the project, so two people may " +
-				"group the same board differently (O2). An issue with no value for the active grouping falls into an " +
-				"explicit empty-value lane; nothing disappears from a board because a field is unset (O3). " +
+				"group the same board differently. An issue with no value for the active grouping falls into an " +
+				"explicit empty-value lane; nothing disappears from a board because a field is unset. " +
 				"Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that " +
-				"disables it globally, is answered with the reason and what to do about it rather than an empty board (O5, C3). " +
-				"The /delivery/board page is a client of this endpoint (E18, I14).",
+				"disables it globally, is answered with the reason and what to do about it rather than an empty board. " +
+				"The /delivery/board page is a client of this endpoint.",
 			Tag: "board", Query: &boardSpec, Response: "Board", ResponseIs: "object",
 		},
 		Handler: GetBoard,
@@ -97,7 +97,7 @@ var boardLaneMoveParams = []Param{
 	{Name: "project_id", In: "body", Type: "integer", Required: true, Description: "The board the card is on."},
 	{
 		Name: "group_by", In: "body", Type: "string", Required: true, Enum: delivery_service.Groupings,
-		Description: "The active grouping. A lane move is refused when this is none, because there is nothing to write (O4).",
+		Description: "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
 	},
 	{
 		Name: "lane", In: "body", Type: "string",
@@ -110,9 +110,9 @@ func moveBoardCardColumnEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "moveBoardCardColumn", Method: http.MethodPost, Path: "/board/cards/{issue_id}/column",
 			Summary: "Move a card between the board's columns",
-			Description: "The first of the board's exactly two writes (O4). It is the same operation ccpm's board-issue-move " +
+			Description: "The first of the board's exactly two writes. It is the same operation ccpm's board-issue-move " +
 				"verb performs over Gitea's own Projects API, reached here as the calling user. " +
-				"Authorized by Gitea's own write check on the Projects unit (E10, I13).",
+				"Authorized by Gitea's own write check on the Projects unit.",
 			Tag: "board", PathParams: boardCardParams, Body: boardColumnMoveParams,
 			CLINames: []string{"board-move-column"},
 			Response: "Board", ResponseIs: "object",
@@ -126,10 +126,10 @@ func moveBoardCardLaneEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "moveBoardCardLane", Method: http.MethodPost, Path: "/board/cards/{issue_id}/lane",
 			Summary: "Move a card between the board's lanes",
-			Description: "The second and last of the board's writes (O4). A lane IS the grouping value, so moving between " +
+			Description: "The second and last of the board's writes. A lane IS the grouping value, so moving between " +
 				"lanes edits the field itself: the type: label, the epic: label, or the assignee. " +
-				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so (O4, A21). " +
-				"Authorized by Gitea's own write check on the Issues unit (E10, I13).",
+				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
+				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "board", PathParams: boardCardParams, Body: boardLaneMoveParams,
 			CLINames: []string{"board-move-lane"},
 			Response: "Board", ResponseIs: "object",
@@ -138,7 +138,7 @@ func moveBoardCardLaneEndpoint() *endpoint {
 	}
 }
 
-// boardAvailable is the runtime probe of O5/C3, on the fork's side.
+// boardAvailable is the runtime probe for Projects availability, on the fork's side.
 //
 // The fork cannot lose its own compiled-in Projects API, so the runtime condition it CAN
 // meet is the one Gitea itself enforces before serving a board: the Projects unit disabled
@@ -365,7 +365,7 @@ func GetBoard(ctx *context.APIContext) {
 }
 
 // parseGrouping refuses an unknown grouping naming what is accepted, rather than falling
-// back to none and rendering a board the caller did not ask for (I4).
+// back to none and rendering a board the caller did not ask for.
 func parseGrouping(ctx *context.APIContext, raw string) (delivery_service.Grouping, bool) {
 	grouping, ok := delivery_service.ParseGrouping(raw)
 	if !ok {
@@ -478,7 +478,7 @@ func boardMoveTarget(ctx *context.APIContext, needed unit.Type) (*boardMoveBody,
 	return body, repo, perm, project, issue, true
 }
 
-// MoveBoardCardColumn answers POST /board/cards/{issue_id}/column — the first of O4's two
+// MoveBoardCardColumn answers POST /board/cards/{issue_id}/column — the first of the two
 // writes. It reaches Gitea's own MoveIssueToColumn, so a card moved here and a card moved on
 // Gitea's board land in the same place by the same code.
 func MoveBoardCardColumn(ctx *context.APIContext) {
@@ -502,7 +502,7 @@ func MoveBoardCardColumn(ctx *context.APIContext) {
 
 // MoveBoardCardLane answers POST /board/cards/{issue_id}/lane — the second and last write.
 // A lane is the grouping value itself, so this edits the type: label, the epic: label or the
-// assignee, and is refused outright when grouping is off (O4).
+// assignee, and is refused outright when grouping is off.
 func MoveBoardCardLane(ctx *context.APIContext) {
 	body, repo, perm, project, issue, ok := boardMoveTarget(ctx, unit.TypeIssues)
 	if !ok {
@@ -514,7 +514,7 @@ func MoveBoardCardLane(ctx *context.APIContext) {
 	}
 	write, err := delivery_service.PlanLaneMove(grouping, body.Lane)
 	if err != nil {
-		// O4's refusal: with grouping off there is no field to write, and the message
+		// The refusal: with grouping off there is no field to write, and the message
 		// says which write does still work.
 		renderHubError(ctx, http.StatusBadRequest, err)
 		return

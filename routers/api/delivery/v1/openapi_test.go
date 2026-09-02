@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEveryEndpointIsDocumentedAndHandled is I15/I16 at the source: Routes mounts the
+// TestEveryEndpointIsDocumentedAndHandled works at the source: Routes mounts the
 // operation list, so an endpoint that is not documented cannot be served, and a documented
 // operation with no handler is a defect rather than a 404 to discover in production.
 func TestEveryEndpointIsDocumentedAndHandled(t *testing.T) {
@@ -37,7 +37,7 @@ func TestEveryEndpointIsDocumentedAndHandled(t *testing.T) {
 	assert.NotEmpty(t, seen)
 }
 
-// TestEveryListSpecIsTieBroken is I5: without a primary key to tie-break on, pagination
+// TestEveryListSpecIsTieBroken: without a primary key to tie-break on, pagination
 // repeats and skips rows.
 func TestEveryListSpecIsTieBroken(t *testing.T) {
 	for _, op := range Operations() {
@@ -68,7 +68,7 @@ func TestPathParamsAppearInThePath(t *testing.T) {
 	}
 }
 
-// TestOpenAPIIsDeterministic is what makes the diff gate of I16 meaningful: a generator
+// TestOpenAPIIsDeterministic is what makes the diff gate meaningful: a generator
 // whose output moved between runs would fail CI for no reason and be turned off.
 func TestOpenAPIIsDeterministic(t *testing.T) {
 	first, err := OpenAPI()
@@ -100,8 +100,8 @@ func TestOpenAPIDeclaresEveryOperation(t *testing.T) {
 	for _, methods := range doc.Paths {
 		for _, op := range methods {
 			documented[op.OperationID] = true
-			assert.Contains(t, op.Responses, "400", "every endpoint documents the rejection of I4")
-			assert.Contains(t, op.Responses, "403", "every endpoint documents Gitea's own permission refusal (I13)")
+			assert.Contains(t, op.Responses, "400", "every endpoint documents its rejection")
+			assert.Contains(t, op.Responses, "403", "every endpoint documents Gitea's own permission refusal")
 		}
 	}
 	for _, op := range Operations() {
@@ -110,7 +110,7 @@ func TestOpenAPIDeclaresEveryOperation(t *testing.T) {
 	assert.Contains(t, doc.Components.Schemas, "Error")
 }
 
-// TestSecretSchemaHasNoValueField is I12: a secret value is never readable over any
+// TestSecretSchemaHasNoValueField: a secret value is never readable over any
 // endpoint at any scope, so there is no field to forget to strip.
 func TestSecretSchemaHasNoValueField(t *testing.T) {
 	schema, ok := Schemas()["SecretName"]
@@ -144,7 +144,7 @@ func TestGrammarParamsCoverEveryOperator(t *testing.T) {
 	for _, want := range []string{"size", "size[ne]", "size[lt]", "size[lte]", "size[gt]", "size[gte]", "size[in]", "sort_by", "order", "limit", "page"} {
 		assert.True(t, names[want], "the document omits %q", want)
 	}
-	assert.False(t, names["cursor"], "an offset-paged resource documents page, not cursor (I8)")
+	assert.False(t, names["cursor"], "an offset-paged resource documents page, not cursor")
 }
 
 // TestMethodSwitchCoversAllEndpoints verifies that every endpoint's method is one the
@@ -181,5 +181,5 @@ func TestCursorResourcesDocumentCursorNotPage(t *testing.T) {
 		names[p.Name] = true
 	}
 	assert.True(t, names["cursor"])
-	assert.False(t, names["page"], "an append-only resource pages by cursor only (I6, I8)")
+	assert.False(t, names["page"], "an append-only resource pages by cursor only")
 }

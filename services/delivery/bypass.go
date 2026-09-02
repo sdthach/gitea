@@ -14,13 +14,13 @@ import (
 )
 
 // CanBypassEnvironmentSequence reports whether the user may deploy past an environment's
-// sequence rule (E17, F10).
+// sequence rule.
 //
 // It mirrors CanBypassBranchProtection at models/git/protected_branch.go:213 branch for
 // branch, and reads branch protection's own fields under their own names: a repository
 // admin passes unless BlockAdminOverride is set, otherwise an opt-in allowlist of named
 // users and teams decides. Bypass is never admin-only, and no gate in this work models
-// permission a second way (F12).
+// permission a second way.
 //
 // It is fail-CLOSED throughout. Every branch that cannot answer the question returns false,
 // including a team lookup that errors: a gate that opens when its own check breaks is worse

@@ -26,7 +26,7 @@ import (
 
 // approvalRun inserts one waiting deploy run at a release tag, reading its workflow from the
 // commit the run records — the same path production takes, because jobparser.Job carries no
-// environment field and the declaration has to be re-read from the file (F4, F5e).
+// environment field and the declaration has to be re-read from the file.
 func approvalRun(t *testing.T, repo *repo_model.Repository, sha string, index int64) *actions_model.ActionRun {
 	t.Helper()
 	run := &actions_model.ActionRun{
@@ -67,7 +67,7 @@ func approvalRunner(t *testing.T, repo *repo_model.Repository, name string) *act
 }
 
 // gridCell reads one release × environment cell over the documented grid endpoint, which is
-// the same projection the page renders (E18, I14).
+// the same projection the page renders.
 func gridCell(t *testing.T, token string, repoID int64, releaseTag, environment string) (state, symbol string) {
 	t.Helper()
 	var rows []struct {
@@ -94,7 +94,7 @@ func gridCell(t *testing.T, token string, repoID int64, releaseTag, environment 
 	return "", ""
 }
 
-// TestDeliveryApprovalGateHoldsJobsUntilApproved is SC 18, SC 20 and SC 21 through the
+// TestDeliveryApprovalGateHoldsJobsUntilApproved runs the gate through the
 // production path: a real workflow file, real run and job rows, and Gitea's own
 // CreateTaskForRunner — the function the spoke delegates from. Nothing here calls the gate
 // directly, so a spoke that stopped delegating would fail every assertion.
@@ -103,7 +103,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
 
-		// prod is gated; nothing else is, so an ordinary job is unaffected (F5b).
+		// prod is gated; nothing else is, so an ordinary job is unaffected.
 		require.NoError(t, db.Insert(ctx, &delivery.Environment{
 			RepoID: repo.ID, Name: "prod", SortOrder: 50,
 			ApprovalPolicy: delivery.PolicyAnyApprover, RequiredApprovals: 1,
@@ -133,7 +133,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 
 		_, ok, err = actions_model.CreateTaskForRunner(ctx, runner)
 		require.NoError(t, err)
-		assert.False(t, ok, "no runner picks up the held job (SC 20)")
+		assert.False(t, ok, "no runner picks up the held job")
 
 		held := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionRunJob{ID: gated.ID})
 		assert.Equal(t, actions_model.StatusWaiting, held.Status)
@@ -190,7 +190,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			assert.Zero(t, stillHeld.TaskID)
 		})
 
-		// The gate recorded the hold, and it is what the API publishes (E16, E18/I14).
+		// The gate recorded the hold, and it is what the API publishes.
 		var listed []struct {
 			ID                int64  `json:"id"`
 			Environment       string `json:"environment"`
@@ -233,7 +233,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			req := NewRequest(t, "GET", deliveryv1.BasePath+"/approvals?expand=deployment").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &expanded)
 			require.Len(t, expanded, 1)
-			require.NotNil(t, expanded[0].Deployment, "?expand=deployment resolves the run's deployment (I9)")
+			require.NotNil(t, expanded[0].Deployment, "?expand=deployment resolves the run's deployment")
 			assert.Equal(t, "v1.1", expanded[0].Deployment.ReleaseTag)
 		})
 
@@ -241,8 +241,8 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			// This is the case only the SECOND source can answer. The run has already
 			// started — its ungated build job was claimed above, so the notifier records
 			// `started` — which makes the projection over the log alone say "in progress".
-			// The deploy job is nonetheless held, and the approvals table is what knows it
-			// (E15). A grid reading the log alone renders ⟳ here and is wrong.
+			// The deploy job is nonetheless held, and the approvals table is what knows it.
+			// A grid reading the log alone renders ⟳ here and is wrong.
 			for _, event := range []string{delivery.AuditRequested, delivery.AuditStarted} {
 				require.NoError(t, delivery.AppendAuditEvent(ctx, &delivery.AuditEvent{
 					Event: event, RepoID: repo.ID, Environment: "prod",
@@ -255,7 +255,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		})
 
 		t.Run("a user without approval rights is refused at the endpoint", func(t *testing.T) {
-			// Refused HERE, not merely offered no button (SC 21). user4 can read the public
+			// Refused HERE, not merely offered no button. user4 can read the public
 			// repository but has no write on its Actions unit.
 			otherSession := loginUser(t, "user4")
 			otherToken := getTokenForLoggedInUser(t, otherSession, auth_model.AccessTokenScopeWriteRepository)
@@ -268,7 +268,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			}
 			DecodeJSON(t, resp, &refusal)
 			assert.NotEmpty(t, refusal.Message)
-			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 			// And the job is still held after the refused call.
 			_, ok, err := actions_model.CreateTaskForRunner(ctx, runner)
@@ -290,14 +290,14 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			var events []*delivery.AuditEvent
 			req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?event=approved&sort_by=id&order=asc").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &events)
-			require.Len(t, events, 1, "approval is an audit event on the append-only log (F5c)")
+			require.Len(t, events, 1, "approval is an audit event on the append-only log")
 			assert.Equal(t, "user2", events[0].ActorLogin)
 			assert.Equal(t, int64(2), events[0].ActorID)
 			assert.NotZero(t, events[0].OccurredUnix)
 
 			task, ok, err := actions_model.CreateTaskForRunner(ctx, runner)
 			require.NoError(t, err)
-			require.True(t, ok, "an approved deploy proceeds (SC 18)")
+			require.True(t, ok, "an approved deploy proceeds")
 			assert.Equal(t, gated.ID, task.JobID)
 
 			// And the cell stops rendering ⏸ once nothing is held, which the projection
@@ -309,7 +309,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 	})
 }
 
-// TestDeliveryApprovalRejectionEndsTheDeploy is SC 20's other half: a rejection is terminal,
+// TestDeliveryApprovalRejectionEndsTheDeploy is the other half: a rejection is terminal,
 // the run does not proceed later, and the rejection names its approver on the audit log.
 func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
@@ -341,7 +341,7 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 		require.Len(t, listed, 1)
 
 		// user2 triggered the run and the policy is others_only, so their own approval is
-		// refused by the endpoint rather than silently ignored (SC 18).
+		// refused by the endpoint rather than silently ignored.
 		req = NewRequest(t, "POST",
 			fmt.Sprintf("%s/approvals/%d/approve", deliveryv1.BasePath, listed[0].ID)).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusForbidden)
@@ -366,16 +366,16 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 		for range 3 {
 			_, ok, err := actions_model.CreateTaskForRunner(ctx, runner)
 			require.NoError(t, err)
-			assert.False(t, ok, "a rejected deploy is never handed to a runner (SC 20)")
+			assert.False(t, ok, "a rejected deploy is never handed to a runner")
 		}
 		stillHeld := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionRunJob{ID: gated.ID})
 		assert.Zero(t, stillHeld.TaskID)
 	})
 }
 
-// TestDeliveryApprovalsPageIsAClientOfTheAPI is E18/I14 for the pending-approval view: the
+// TestDeliveryApprovalsPageIsAClientOfTheAPI covers the pending-approval view: the
 // handler serves the shell and every figure — requester, release, age, run link and whether
-// the viewer may act — arrives over the documented endpoint (E16).
+// the viewer may act — arrives over the documented endpoint.
 func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -387,19 +387,19 @@ func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
 	assert.Contains(t, body, deliveryv1.BasePath+"/approvals",
-		"the page fetches its rows from the documented endpoint (E18, I14)")
+		"the page fetches its rows from the documented endpoint")
 	assert.Contains(t, body, "suggested_action",
-		"the page surfaces the API's suggested next action (A21)")
+		"the page surfaces the API's suggested next action")
 	assert.Contains(t, body, "can_approve",
-		"a user without approval rights is offered no action (SC 21)")
+		"a user without approval rights is offered no action")
 
 	req = NewRequest(t, "GET", "/delivery/environments/prod/approvals")
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Body.String(), `"prod"`,
-		"the environment's own pending list is filtered to it, so an approver need not hunt the grid (E16)")
+		"the environment's own pending list is filtered to it, so an approver need not hunt the grid")
 }
 
-// TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone is SC 21's "with the fork absent"
+// TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone is the "with the fork absent"
 // case as closely as an integration test can reach it: with every environment's policy at
 // its default of none, the same run deploys with no gate at all.
 func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
@@ -409,7 +409,7 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 
 		gated, err := delivery.RepoHasGatedEnvironment(ctx, repo.ID)
 		require.NoError(t, err)
-		require.False(t, gated, "the seeded default environments all carry approval_policy none (F5b)")
+		require.False(t, gated, "the seeded default environments all carry approval_policy none")
 
 		runner := approvalRunner(t, repo, "ungated")
 		run := approvalRun(t, repo, sha, 9903)

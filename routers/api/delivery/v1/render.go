@@ -12,7 +12,7 @@ import (
 	"gitea.dev/services/delivery/query"
 )
 
-// apiError renders a rejection. Every rejection carries a suggested next action (A21).
+// apiError renders a rejection. Every rejection carries a suggested next action.
 func apiError(ctx *context.APIContext, status int, code, message, suggestion string) {
 	ctx.JSON(status, &query.Error{
 		Status:          status,
@@ -23,7 +23,7 @@ func apiError(ctx *context.APIContext, status int, code, message, suggestion str
 }
 
 // renderQueryError renders a grammar rejection verbatim: it already names the offender and
-// lists what is accepted (I4).
+// lists what is accepted.
 func renderQueryError(ctx *context.APIContext, err *query.Error) {
 	ctx.JSON(err.Status, err)
 }
@@ -65,7 +65,7 @@ func parseQuery(ctx *context.APIContext, spec query.Spec) (*query.Query, bool) {
 
 // parseCursorQuery reads the grammar for a cursor-paged resource and refuses a cursor that
 // was issued under a different sort. Following one would skip and repeat rows, which is the
-// exact failure cursor paging exists to prevent (I6).
+// exact failure cursor paging exists to prevent.
 func parseCursorQuery(ctx *context.APIContext, spec query.Spec) (*query.Query, bool) {
 	q, ok := parseQuery(ctx, spec)
 	if !ok {
@@ -80,21 +80,21 @@ func parseCursorQuery(ctx *context.APIContext, spec query.Spec) (*query.Query, b
 	return q, true
 }
 
-// renderPage writes an offset-paged response with Gitea's own headers (I7).
+// renderPage writes an offset-paged response with Gitea's own headers.
 func renderPage(ctx *context.APIContext, q *query.Query, total int64, payload any) {
 	ctx.SetTotalCountHeader(total)
 	ctx.SetLinkHeader(total, q.Limit)
 	ctx.JSON(http.StatusOK, payload)
 }
 
-// NextCursorHeader carries the opaque token that continues a cursor traversal (I6). It is a
+// NextCursorHeader carries the opaque token that continues a cursor traversal. It is a
 // header rather than an envelope around the rows so a cursor-paged resource and an
 // offset-paged one return the same JSON shape and one client renders both.
 const NextCursorHeader = "X-Next-Cursor"
 
 // renderCursorPage writes a cursor-paged response. It carries NO total: counting a table
 // that is receiving concurrent inserts answers a question that was already stale when it
-// was asked (I6).
+// was asked.
 //
 // sortValue and lastID are the last row's sort value and primary key, which is what makes
 // the traversal return each row exactly once while rows are being appended.
@@ -114,7 +114,7 @@ func renderCursorPage(ctx *context.APIContext, q *query.Query, rowCount int, sor
 // equalityFilter reads a bare `field=value` out of a parsed query. The grid is a projection
 // rather than a table, so its filters select what to project instead of rendering into a
 // SQL condition; they still go through the one grammar, so an unknown field is rejected by
-// the same parser every other resource uses (I2, I4).
+// the same parser every other resource uses.
 func equalityFilter(q *query.Query, name string) (any, bool) {
 	for _, f := range q.Filters {
 		if f.Field.Name == name && f.Op == query.OpEq && len(f.Values) == 1 {

@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// deployWorkflowContent declares one job per case SC 17 names.
+// deployWorkflowContent declares one job per scoping case.
 const deployWorkflowContent = `name: deploy
 on: workflow_dispatch
 jobs:
@@ -102,7 +102,7 @@ func TestDeliveryJobEnvironmentReadsTheWorkflowFile(t *testing.T) {
 	})
 }
 
-// TestDeliverySecretNarrowingEndToEnd is SC 17 through the production path: a real
+// TestDeliverySecretNarrowingEndToEnd runs scoping through the production path: a real
 // workflow file in a real repository, the real scope table, and the exported function the
 // spoke in models/secret/secret.go calls, with no dependency injected.
 func TestDeliverySecretNarrowingEndToEnd(t *testing.T) {
@@ -129,19 +129,19 @@ func TestDeliverySecretNarrowingEndToEnd(t *testing.T) {
 		assert.Contains(t, prod, "SHARED_API_KEY")
 
 		qa := delivery.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "to-qa"), secrets())
-		assert.NotContains(t, qa, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring environment: qa (SC 17)")
+		assert.NotContains(t, qa, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring environment: qa")
 		assert.Equal(t, "qa-value", qa["QA_DB_PASS"])
 
 		none := delivery.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "build"), secrets())
-		assert.NotContains(t, none, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring no environment (SC 17)")
+		assert.NotContains(t, none, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring no environment")
 		assert.NotContains(t, none, "QA_DB_PASS")
 		assert.Contains(t, none, "SHARED_API_KEY", "an unscoped secret is unaffected")
 	})
 }
 
-// TestDeliverySecretScopeWritesAreRepoAdminOnly covers the pair of endpoints that make F4
-// configurable at all: binding a secret name to an environment, and unbinding it. Neither
-// ever accepts or returns a secret value (I12).
+// TestDeliverySecretScopeWritesAreRepoAdminOnly covers the pair of endpoints that make
+// scoping configurable at all: binding a secret name to an environment, and unbinding it. Neither
+// ever accepts or returns a secret value.
 func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -154,7 +154,7 @@ func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
 	assert.Equal(t, "forbidden", refusal.Code)
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	// A refused bind writes nothing.
 	unittest.AssertNotExistsBean(t, &delivery.SecretScope{RepoID: 1, SecretName: "DEPLOY_KEY"})
 

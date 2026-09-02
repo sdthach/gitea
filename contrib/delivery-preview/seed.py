@@ -270,7 +270,7 @@ def make_repo(api, fake, org, repo_name, users, failure_rate):
 
 
 def make_workflows(api, full, failure_rate):
-    """A deploy dispatches deploy-<env>.yaml, so the tag must already carry the file (D4)."""
+    """A deploy dispatches deploy-<env>.yaml, so the tag must already carry the file."""
     for env in ENVIRONMENTS:
         # act defaults every run step to bash, which the tiny runner image has not got.
         fail = "\n      - run: exit 1\n" if random.random() < failure_rate else ""
@@ -320,7 +320,7 @@ def make_issues(api, fake, full, labels, milestone, project, columns, users, cou
         if itype == "epic":
             epics.append(issue)
         elif epics and random.random() < 0.6:
-            parent = random.choice(epics)  # an epic: label is a board lane key (O4)
+            parent = random.choice(epics)  # an epic: label is a board lane key
             api("POST", f"{V1}/repos/{full}/labels",
                 {"name": f"epic:{parent['number']}", "color": "ededed"}, ok=(201, 422))
             api("POST", f"{V1}/repos/{full}/issues/{issue['number']}/labels",
@@ -348,7 +348,7 @@ def promote(api, fake, full, release_count, totals, verbose):
                               file=sys.stderr)
                     break
                 # The sequence rule speaking: no runner has made the predecessor live, so
-                # bypass it with a reason, which lands on the audit log (E17).
+                # bypass it with a reason, which lands on the audit log.
                 body["override_reason"] = f"preview seed: {fake.sentence()}"
                 try:
                     res = api("POST", f"{DV1}/deployments", body, ok=(200, 201)) or {}

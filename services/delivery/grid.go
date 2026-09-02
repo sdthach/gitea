@@ -16,13 +16,12 @@ import (
 	"xorm.io/builder"
 )
 
-// CellState is one release × environment cell of the grid (E7).
+// CellState is one release × environment cell of the grid.
 //
 // Every state is a PROJECTION over the append-only audit log; none of them is stored, and
-// no row carries an updatable status column the grid reads (E3, E5). The `✔ ×N` rendering
-// the requirement lists is the repeat count decorating a deployed cell rather than a state
-// of its own — a cell can be both current and deployed twice, which SC 14 asks for
-// explicitly, so the count cannot be mutually exclusive with `✔ now`.
+// no row carries an updatable status column the grid reads. The `✔ ×N` rendering is the
+// repeat count decorating a deployed cell rather than a state of its own — a cell can be
+// both current and deployed twice, so the count cannot be mutually exclusive with `✔ now`.
 type CellState string
 
 const (
@@ -37,9 +36,9 @@ const (
 // Cell is one grid cell.
 type Cell struct {
 	Environment string    `json:"environment"`
-	SortOrder   int64     `json:"sort_order"` // the configured column order, so a grid spanning repositories can merge columns (E7)
+	SortOrder   int64     `json:"sort_order"` // the configured column order, so a grid spanning repositories can merge columns
 	State       CellState `json:"state"`
-	// Symbol is the rendering E7 tabulates. It is computed here rather than in the
+	// Symbol is the cell's rendering. It is computed here rather than in the
 	// template so the CLI, the page and the tests all read the same string.
 	Symbol string `json:"symbol"`
 	// Successes counts how many times this release reached this environment. `✔ ×N`.
@@ -49,7 +48,7 @@ type Cell struct {
 	OccurredUnix int64  `json:"occurred_unix"`
 }
 
-// GridRow is one release, with one cell per environment in configured order (E7).
+// GridRow is one release, with one cell per environment in configured order.
 type GridRow struct {
 	RepoID       int64  `json:"repo_id"`
 	RepoFullName string `json:"repo_full_name"`
@@ -61,7 +60,7 @@ type GridRow struct {
 
 // Event is the projection's input: one audit row reduced to what a cell state depends on.
 // Taking a reduced struct rather than the model keeps the projection pure and testable with
-// no database (J5, J10).
+// no database.
 type Event struct {
 	ID           int64
 	ReleaseTag   string
@@ -72,7 +71,7 @@ type Event struct {
 	RunURL       string
 }
 
-// cellSymbol renders a cell. It is the single spelling of the seven renderings E7 lists.
+// cellSymbol renders a cell. It is the single spelling of the seven renderings.
 func cellSymbol(state CellState, successes int) string {
 	switch state {
 	case CellNever:
@@ -113,12 +112,12 @@ type key struct {
 //
 // policies maps an environment name to its approval policy. `⏸` renders from the
 // environment record, never inferred from run status, which cannot distinguish a held
-// deploy from a queued one (E15). Slice 6 gives the state a second source; the projection
-// already answers it here so the grid does not change shape when it arrives.
+// deploy from a queued one. The projection answers it here so the grid does not change
+// shape when the approval gate gives the state a second source.
 //
 // The result is keyed by release tag, and each slice holds one cell per environment in the
 // order environments were given — sequence is configuration, since nothing in Gitea
-// expresses it (E7).
+// expresses it.
 func ProjectCells(environments, releases []string, events []Event, policies map[string]string) map[string][]Cell {
 	ordered := append([]Event(nil), events...)
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -198,7 +197,7 @@ func projectOne(environment, release string, agg *aggregate, liveRelease, policy
 		cell.State = CellFailed
 	case delivery_model.AuditRequested:
 		// A requested deploy into a gated environment is held, not queued. The distinction
-		// comes from the environment record; run status cannot express it (E15).
+		// comes from the environment record; run status cannot express it.
 		cell.State = CellInProgress
 		if policy != "" && policy != delivery_model.PolicyNone {
 			cell.State = CellHeld
@@ -213,7 +212,7 @@ func projectOne(environment, release string, agg *aggregate, liveRelease, policy
 
 // GridOptions narrows the grid. The grid spans the repositories the viewer can see, so
 // RepoIDs is always the caller's own accessible set, resolved by Gitea's existing
-// permission filtering before it reaches here (E10, E12).
+// permission filtering before it reaches here.
 type GridOptions struct {
 	RepoIDs     []int64
 	RepoID      int64 // 0 means every repository in RepoIDs
@@ -226,7 +225,7 @@ type GridOptions struct {
 // BuildGrid assembles the release × environment grid.
 //
 // Releases are read from Gitea's own Release model at render time. Nothing is synced,
-// cached or mirrored, so a release cut outside this feature appears immediately (E6).
+// cached or mirrored, so a release cut outside this feature appears immediately.
 func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error) {
 	if len(opts.RepoIDs) == 0 {
 		return []*GridRow{}, 0, nil
@@ -300,7 +299,7 @@ func BuildGrid(ctx context.Context, opts GridOptions) ([]*GridRow, int64, error)
 }
 
 // environmentsOf reads a repository's environment column order, falling back to the
-// instance-wide default set when the repository has declared none of its own (E7).
+// instance-wide default set when the repository has declared none of its own.
 func environmentsOf(ctx context.Context, repoID int64, only string) ([]string, map[string]string, map[string]int64, error) {
 	envs, _, err := delivery_model.FindEnvironments(ctx, builder.Eq{"repo_id": repoID}, "sort_order ASC, id ASC", 0, 0)
 	if err != nil {
@@ -327,7 +326,7 @@ func environmentsOf(ctx context.Context, repoID int64, only string) ([]string, m
 	return names, policies, orders, nil
 }
 
-// applySortOrders stamps each cell with its configured column order, which a grid spanning repositories needs (E7).
+// applySortOrders stamps each cell with its configured column order, which a grid spanning repositories needs.
 func applySortOrders(cells map[string][]Cell, orders map[string]int64) map[string][]Cell {
 	for _, row := range cells {
 		for i := range row {

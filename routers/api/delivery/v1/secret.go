@@ -16,7 +16,7 @@ import (
 )
 
 // SecretName is what a secret endpoint returns: names, environment scope and metadata.
-// A secret VALUE is never readable over any endpoint at any scope (I12), which is why this
+// A secret VALUE is never readable over any endpoint at any scope, which is why this
 // type has no value field to forget to strip.
 type SecretName struct {
 	ID          int64  `json:"id"` // the row DELETE /secret-scopes/{id} takes; 0 when the name carries no scope
@@ -51,7 +51,7 @@ func listRepoEnvironmentSecretsEndpoint() *endpoint {
 			Path:    "/repos/{owner}/{repo}/environments/{name}/secrets",
 			Summary: "List the secret NAMES scoped to one environment",
 			Description: "Returns names, environment scope and metadata only. A secret value is never readable " +
-				"over any endpoint at any scope (I12). Requires write on the repository's Actions unit.",
+				"over any endpoint at any scope. Requires write on the repository's Actions unit.",
 			Tag: "secrets",
 			PathParams: append(append([]Param{}, ownerRepoParams...),
 				Param{Name: "name", In: "path", Type: "string", Description: "Environment name.", Required: true}),

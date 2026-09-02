@@ -39,7 +39,7 @@ func parse(t *testing.T, raw string) (*Query, *Error) {
 	return Parse(values, testSpec())
 }
 
-// TestParseEveryOperator covers each operator in I3, including the bare form meaning eq.
+// TestParseEveryOperator covers each operator, including the bare form meaning eq.
 func TestParseEveryOperator(t *testing.T) {
 	cases := []struct {
 		raw       string
@@ -77,7 +77,7 @@ func TestParseInOperatorSplitsValues(t *testing.T) {
 	assert.Equal(t, []any{"qa", "prod"}, q.Filters[0].Values)
 }
 
-// TestRepeatingAFieldAnds covers I3's "repeating a field ANDs the conditions".
+// TestRepeatingAFieldAnds covers "repeating a field ANDs the conditions".
 func TestRepeatingAFieldAnds(t *testing.T) {
 	q, err := parse(t, "created_at[gte]=10&created_at[gte]=20")
 	require.Nil(t, err)
@@ -88,7 +88,7 @@ func TestRepeatingAFieldAnds(t *testing.T) {
 	assert.Equal(t, []any{int64(10), int64(20)}, args)
 }
 
-// TestRejections covers every rejection in I4. Each must name the offender and say what is
+// TestRejections covers every rejection. Each must name the offender and say what is
 // accepted; a filter is never silently dropped.
 func TestRejections(t *testing.T) {
 	cases := []struct {
@@ -124,7 +124,7 @@ func TestRejections(t *testing.T) {
 			if c.wantInMsg != "" {
 				assert.Contains(t, err.Message, c.wantInMsg, "the message must name the offender")
 			}
-			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, err.SuggestedAction, "every error carries a suggested next action")
 			if c.wantAccepted {
 				assert.NotEmpty(t, err.Accepted, "the rejection must list what is accepted")
 			}
@@ -150,7 +150,7 @@ func TestExpandDeduplicatesAndKeepsOrder(t *testing.T) {
 	assert.Equal(t, []string{"audit", "release"}, q.Expand)
 }
 
-// TestSortIsAlwaysTieBroken covers I5: without the tie-breaker, pagination repeats and
+// TestSortIsAlwaysTieBroken: without the tie-breaker, pagination repeats and
 // skips rows.
 func TestSortIsAlwaysTieBroken(t *testing.T) {
 	q, err := parse(t, "sort_by=environment&order=asc")

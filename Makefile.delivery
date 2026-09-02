@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # The delivery fork's own make targets. The upstream Makefile carries one line including
-# this file, so the fork adds no target to it (F2).
-# See planning/slices/03-environments.md.
+# this file, so the fork adds no target to it.
 
 DELIVERY_TEST_PACKAGES := gitea.dev/models/delivery/... gitea.dev/services/delivery/... gitea.dev/routers/api/delivery/... gitea.dev/routers/web/delivery/... gitea.dev/cmd/gitea-delivery/...
 
@@ -35,5 +34,5 @@ delivery-check: delivery-test delivery-generate-check delivery-parity delivery-s
 # One unanchored pattern, not a list of prefixes: enumerating them silently dropped
 # TestDeliverySecretNarrowingEndToEnd and TestDeliveryJobEnvironmentReadsTheWorkflowFile,
 # which matched neither. Every delivery test carries "Delivery" in its name.
-delivery-integration: ## run the delivery fork's integration tests under Gitea's own harness (J8)
+delivery-integration: ## run the delivery fork's integration tests under Gitea's own harness
 	@$(MAKE) --no-print-directory "test-integration#Delivery"

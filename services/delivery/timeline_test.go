@@ -24,7 +24,7 @@ func managed(in BarInput) BarInput {
 	return in
 }
 
-// SC 39: each of the three start sources, with the source label asserted.
+// Each of the three start sources, with the source label asserted.
 func TestDeliveryResolveBarNamesItsStartSource(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, EffortSeconds: 2 * 86400}))
 	require.True(t, ok)
@@ -43,7 +43,7 @@ func TestDeliveryResolveBarNamesItsStartSource(t *testing.T) {
 	assert.Equal(t, []string{"ccpm_started", "issue_created", "none"}, StartSources)
 }
 
-// SC 39: each of the three end sources, with the source label asserted, and the inferred one
+// Each of the three end sources, with the source label asserted, and the inferred one
 // distinguishable from the recorded ones.
 func TestDeliveryResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed, DeadlineUnix: deadline}))
@@ -66,7 +66,7 @@ func TestDeliveryResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) 
 	assert.Equal(t, []string{"closed", "deadline", "effort_estimate"}, EndSources)
 }
 
-// SC 39: a task with a recorded start and a close time draws from actuals; one with neither
+// A task with a recorded start and a close time draws from actuals; one with neither
 // draws from created plus estimate and is visually distinct.
 func TestDeliveryResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing.T) {
 	actual, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed}))
@@ -90,7 +90,7 @@ func TestDeliveryResolveBarClampsAnEndThatPrecedesItsStart(t *testing.T) {
 	assert.Equal(t, bar.StartUnix, bar.EndUnix, "the bar is clamped rather than drawn backwards")
 }
 
-// SC 39, O10: an issue ccpm does not manage is listed with the reason, never given a bar.
+// An issue ccpm does not manage is listed with the reason, never given a bar.
 func TestDeliveryUnmanagedIssueGetsNoBarAndOneStatedReason(t *testing.T) {
 	in := BarInput{IssueID: 9002, Number: 7, Title: "filed by hand", URL: "/acme/widgets/issues/7", CreatedUnix: created}
 
@@ -101,22 +101,22 @@ func TestDeliveryUnmanagedIssueGetsNoBarAndOneStatedReason(t *testing.T) {
 	assert.Equal(t, int64(7), listed.Number)
 	assert.Contains(t, listed.Reason, "ccpm does not manage this issue")
 	assert.Contains(t, listed.Reason, EpicLabelPrefix)
-	assert.NotEmpty(t, listed.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, listed.SuggestedAction, "every error carries a suggested next action")
 }
 
-// O9: a hard gate and a sequencing hint do not read the same on a schedule.
+// A hard gate and a sequencing hint do not read the same on a schedule.
 func TestDeliveryArrowKindPerRelationType(t *testing.T) {
 	for _, word := range []string{"depends_on", "blocked-by", "blocked_by", "blocks"} {
 		kind, ok := ArrowKindFor(word)
 		require.True(t, ok, word)
 		assert.Equal(t, ArrowGate, kind)
-		assert.True(t, NewArrow(1, 2, kind).Enforced, "the forge itself refuses the close (N1, N3)")
+		assert.True(t, NewArrow(1, 2, kind).Enforced, "the forge itself refuses the close")
 	}
 	for _, word := range []string{"predecessor", "successor", "PREDECESSOR"} {
 		kind, ok := ArrowKindFor(word)
 		require.True(t, ok, word)
 		assert.Equal(t, ArrowSequence, kind)
-		assert.False(t, NewArrow(1, 2, kind).Enforced, "sequencing is enforced by nothing (N9, N10)")
+		assert.False(t, NewArrow(1, 2, kind).Enforced, "sequencing is enforced by nothing")
 	}
 	// Vocabulary words that say nothing about a schedule draw no arrow at all.
 	for _, word := range []string{"related", "duplicate-of", "caused-by", "causes", "parent", "child", ""} {
@@ -143,7 +143,7 @@ func TestDeliveryParseEffortSecondsReadsTheRenderedSection(t *testing.T) {
 	assert.Equal(t, DefaultEffortDays*86400, ParseEffortSeconds("- Size: enormous"))
 }
 
-// N8: the sequencing edges come from the rendered body, the enforced ones from
+// The sequencing edges come from the rendered body, the enforced ones from
 // issue_dependency, so the timeline can always say which source an edge came from.
 func TestDeliveryParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T) {
 	body := "### Relations\n\nPredecessor #12\nSuccessor #13\nBlocked by #14\nRelated to #15\nCaused by #16\n"
@@ -151,7 +151,7 @@ func TestDeliveryParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T)
 	assert.Empty(t, ParseSequenceRelations("### Description\n\nnothing here\n"))
 }
 
-// O11: an epic or milestone row spans earliest start to latest end of its children, and its
+// An epic or milestone row spans earliest start to latest end of its children, and its
 // progress is ccpm's existing task-close percentage.
 func TestDeliveryBuildSpanCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) {
 	bars := []Bar{

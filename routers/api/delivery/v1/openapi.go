@@ -16,10 +16,10 @@ import (
 )
 
 // APIVersion is the fork's own API version. Gitea's swagger group at routers/api/v1 is
-// untouched; this namespace publishes its own document (F3, I15).
+// untouched; this namespace publishes its own document.
 const APIVersion = "1.0.0"
 
-// BasePath is where the namespace mounts (F3).
+// BasePath is where the namespace mounts.
 const BasePath = "/api/delivery/v1"
 
 // Param is one documented request parameter.
@@ -34,7 +34,7 @@ type Param struct {
 
 // Operation is the contract for one endpoint. The document is generated from these, so an
 // endpoint cannot be served without being documented: Routes mounts operations, not
-// handlers (I15, I16).
+// handlers.
 type Operation struct {
 	ID          string
 	Method      string
@@ -50,7 +50,7 @@ type Operation struct {
 	QueryParams []Param
 	// Body is the request body, one Param per member, for the operations that take one.
 	// The CLI's generated request layer renders each as a flag, so a body member cannot be
-	// published without a way to send it (K2, K7).
+	// published without a way to send it.
 	Body []Param
 	// CLINames overrides the command name derived from ID, and may name more than one:
 	// deploy and rollback are the same operation, because rolling back is deploying a prior
@@ -59,7 +59,7 @@ type Operation struct {
 }
 
 // GrammarParams renders the section I grammar for the operation's resource. The grammar is
-// declared once, in services/delivery/query; a resource restates only its whitelists (I2).
+// declared once, in services/delivery/query; a resource restates only its whitelists.
 func (op *Operation) GrammarParams() []Param {
 	if op.Query == nil {
 		return nil
@@ -71,53 +71,53 @@ func (op *Operation) GrammarParams() []Param {
 			Name:        f.Name,
 			In:          "query",
 			Type:        openAPIType(f.Kind),
-			Description: fmt.Sprintf("Filter on %s. Bare form means the eq operator (I3).", f.Name),
+			Description: fmt.Sprintf("Filter on %s. Bare form means the eq operator.", f.Name),
 		})
 		for _, op := range fieldOps(f) {
 			params = append(params, Param{
 				Name:        fmt.Sprintf("%s[%s]", f.Name, op),
 				In:          "query",
 				Type:        openAPIType(f.Kind),
-				Description: fmt.Sprintf("Filter %s with the %s operator. Repeating the field ANDs the conditions (I3).", f.Name, op),
+				Description: fmt.Sprintf("Filter %s with the %s operator. Repeating the field ANDs the conditions.", f.Name, op),
 			})
 		}
 	}
 	if len(spec.SearchFields) > 0 {
 		params = append(params, Param{
 			Name: "q", In: "query", Type: "string",
-			Description: "Free-text search over " + strings.Join(spec.SearchFields, ", ") + " (I10).",
+			Description: "Free-text search over " + strings.Join(spec.SearchFields, ", ") + ".",
 		})
 	}
 	if len(spec.SortFields) > 0 {
 		params = append(params,
 			Param{
 				Name: "sort_by", In: "query", Type: "string", Enum: spec.SortFields,
-				Description: "Sort field. Every sort is tie-broken on the primary key (I5).",
+				Description: "Sort field. Every sort is tie-broken on the primary key.",
 			},
 			Param{
 				Name: "order", In: "query", Type: "string", Enum: []string{query.OrderAsc, query.OrderDesc},
-				Description: "Sort direction (I5).",
+				Description: "Sort direction.",
 			})
 	}
 	params = append(params, Param{
 		Name: "limit", In: "query", Type: "integer",
-		Description: fmt.Sprintf("Page size. Defaults to %d, caps at %d (I7).", query.DefaultLimit, query.MaxLimit),
+		Description: fmt.Sprintf("Page size. Defaults to %d, caps at %d.", query.DefaultLimit, query.MaxLimit),
 	})
 	if spec.Paging == query.PagingCursor {
 		params = append(params, Param{
 			Name: "cursor", In: "query", Type: "string",
-			Description: "Opaque cursor from a previous response's next token. Append-only resources page by cursor, never by page (I6, I8).",
+			Description: "Opaque cursor from a previous response's next token. Append-only resources page by cursor, never by page.",
 		})
 	} else {
 		params = append(params, Param{
 			Name: "page", In: "query", Type: "integer",
-			Description: "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header (I7).",
+			Description: "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
 		})
 	}
 	if len(spec.Expands) > 0 {
 		params = append(params, Param{
 			Name: "expand", In: "query", Type: "string", Enum: spec.Expands,
-			Description: fmt.Sprintf("Comma-separated sub-resources, one level deep, at most %d (I9).", query.MaxExpands),
+			Description: fmt.Sprintf("Comma-separated sub-resources, one level deep, at most %d.", query.MaxExpands),
 		})
 	}
 	return params
@@ -162,7 +162,7 @@ var componentSchemas = map[string]any{
 	}, "id", "repo_id", "name", "sort_order", "approval_policy", "required_approvals", "can_write"),
 	"SecretName": objectSchema(map[string]any{
 		"id":          prop("integer", "Scope row id, which is what DELETE /secret-scopes/{id} takes. 0 when the name carries no scope row."),
-		"name":        prop("string", "Secret name. A secret VALUE is never readable over any endpoint at any scope (I12)."),
+		"name":        prop("string", "Secret name. A secret VALUE is never readable over any endpoint at any scope."),
 		"repo_id":     prop("integer", "Repository the secret belongs to."),
 		"environment": prop("string", "Environment the secret is scoped to; empty means unscoped."),
 		"scoped":      prop("boolean", "Whether an environment scope is configured for this secret."),
@@ -177,23 +177,23 @@ var componentSchemas = map[string]any{
 		"id":           prop("integer", "Primary key."),
 		"repo_id":      prop("integer", "Repository the deployment belongs to."),
 		"environment":  prop("string", "Environment deployed to, lower-cased."),
-		"release_tag":  prop("string", "Release tag deployed. Releases own version identity; no version string is parsed (D1)."),
+		"release_tag":  prop("string", "Release tag deployed. Releases own version identity; no version string is parsed."),
 		"sha":          prop("string", "Commit the run built."),
 		"branch":       prop("string", "Branch, when the run was not dispatched against a tag."),
 		"run_id":       prop("integer", "Gitea's own Actions run id."),
 		"run_url":      prop("string", "Link to the run."),
-		"status":       prop("string", "Run status at the moment the deployment was first recorded. Written once, never updated: the current state of a cell is projected from the audit log (E3, E5)."),
+		"status":       prop("string", "Run status at the moment the deployment was first recorded. Written once, never updated: the current state of a cell is projected from the audit log."),
 		"created_unix": prop("integer", "When the row was appended, unix seconds."),
-		"release":      prop("object", "The release, when ?expand=release was asked for (I9)."),
-		"audit":        arrayProp("object", "The run's audit events, when ?expand=audit was asked for (I9)."),
-		"approval":     prop("object", "The approval gate's hold on this run, when ?expand=approval was asked for (I9)."),
+		"release":      prop("object", "The release, when ?expand=release was asked for."),
+		"audit":        arrayProp("object", "The run's audit events, when ?expand=audit was asked for."),
+		"approval":     prop("object", "The approval gate's hold on this run, when ?expand=approval was asked for."),
 	}, "id", "repo_id", "environment", "release_tag", "run_id", "status", "created_unix"),
 	"AuditEvent": objectSchema(map[string]any{
 		"id":            prop("integer", "Primary key."),
 		"event":         enumProp("What happened.", delivery.AuditEvents),
 		"occurred_unix": prop("integer", "When it happened, UTC unix seconds."),
 		"actor_id":      prop("integer", "Gitea user id of the actor."),
-		"actor_login":   prop("string", "Actor login, denormalized so deleting the user from Gitea does not erase who deployed (E5)."),
+		"actor_login":   prop("string", "Actor login, denormalized so deleting the user from Gitea does not erase who deployed."),
 		"repo_id":       prop("integer", "Repository the event belongs to."),
 		"environment":   prop("string", "Environment, lower-cased."),
 		"release_tag":   prop("string", "Release tag."),
@@ -207,41 +207,41 @@ var componentSchemas = map[string]any{
 	"Release": objectSchema(map[string]any{
 		"id":            prop("integer", "Release id."),
 		"repo_id":       prop("integer", "Repository the release belongs to."),
-		"tag_name":      prop("string", "Release tag, the identity a deployment points at (D1)."),
+		"tag_name":      prop("string", "Release tag, the identity a deployment points at."),
 		"title":         prop("string", "Release title."),
-		"target":        prop("string", "The release's own commitish. The deploy job posts its commit status against this SHA (D2)."),
+		"target":        prop("string", "The release's own commitish. The deploy job posts its commit status against this SHA."),
 		"sha":           prop("string", "Commit the tag resolves to."),
 		"url":           prop("string", "Link to the release."),
 		"is_prerelease": prop("boolean", "Whether the release is marked as a prerelease."),
 		"created_unix":  prop("integer", "Creation time, unix seconds."),
-		"artifacts":     arrayProp("object", "The release's attachments (E9)."),
-		"deployments":   arrayProp("object", "Deployments of this release, when ?expand=deployments was asked for (I9)."),
+		"artifacts":     arrayProp("object", "The release's attachments."),
+		"deployments":   arrayProp("object", "Deployments of this release, when ?expand=deployments was asked for."),
 	}, "id", "repo_id", "tag_name", "target", "url", "created_unix"),
 	"GridRow": objectSchema(map[string]any{
 		"repo_id":        prop("integer", "Repository the release belongs to."),
 		"repo_full_name": prop("string", "owner/name."),
 		"release_tag":    prop("string", "The release this row renders."),
-		"release_url":    prop("string", "Link to the release; a release row opens the release (E8)."),
+		"release_url":    prop("string", "Link to the release; a release row opens the release."),
 		"created_unix":   prop("integer", "Release creation time, unix seconds."),
-		"cells":          arrayProp("object", "One cell per environment, in configured order (E7). Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run (E8)."),
+		"cells":          arrayProp("object", "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run."),
 	}, "repo_id", "repo_full_name", "release_tag", "cells"),
 	"Promotion": objectSchema(map[string]any{
 		"repo_id":                  prop("integer", "Repository the deploy targets."),
 		"repo_full_name":           prop("string", "owner/name."),
 		"environment":              prop("string", "Target environment, lower-cased."),
-		"release_tag":              prop("string", "Release tag being deployed. Rolling back names a prior tag; it is the same request (E14)."),
+		"release_tag":              prop("string", "Release tag being deployed. Rolling back names a prior tag; it is the same request."),
 		"is_prerelease":            prop("boolean", "Whether the release is marked as a prerelease. Prereleases reach only the configured prerelease environments."),
-		"currently_live":           prop("string", "The release live in the target environment right now, empty when nothing has ever succeeded there. The confirm step names it before anything is dispatched (E14)."),
+		"currently_live":           prop("string", "The release live in the target environment right now, empty when nothing has ever succeeded there. The confirm step names it before anything is dispatched."),
 		"is_rollback":              prop("boolean", "Whether the target release predates what is live there. A label on the request, never a second code path."),
-		"predecessor":              prop("string", "The environment this one names as its predecessor, empty when it names none (E17)."),
+		"predecessor":              prop("string", "The environment this one names as its predecessor, empty when it names none."),
 		"predecessor_state":        enumProp("What the predecessor has done with this release: none, never, held or live.", []string{"none", "never", "held", "live"}),
-		"outcome":                  enumProp("The sequence rule's decision: proceed, warn, override or refuse (E17).", []string{"proceed", "warn", "override", "refuse"}),
+		"outcome":                  enumProp("The sequence rule's decision: proceed, warn, override or refuse.", []string{"proceed", "warn", "override", "refuse"}),
 		"message":                  prop("string", "What the decision was, in words, for the confirm step to show."),
-		"suggested_action":         prop("string", "What to do about it. Every decision carries one (A21)."),
-		"requires_override_reason": prop("boolean", "Whether a confirmed deploy must carry override_reason. The reason is written to the audit log (E17)."),
-		"workflow_id":              prop("string", "The workflow file the deploy dispatches, named for the environment (D4)."),
+		"suggested_action":         prop("string", "What to do about it. Every decision carries one."),
+		"requires_override_reason": prop("boolean", "Whether a confirmed deploy must carry override_reason. The reason is written to the audit log."),
+		"workflow_id":              prop("string", "The workflow file the deploy dispatches, named for the environment."),
 		"ref":                      prop("string", "The ref dispatched. Deploy and rollback compose the identical request and differ only here."),
-		"confirmed":                prop("boolean", "Whether this call dispatched. False on the first of E14's two steps."),
+		"confirmed":                prop("boolean", "Whether this call dispatched. False on the first of the two steps."),
 		"override_reason":          prop("string", "The reason given for bypassing the sequence rule."),
 		"run_id":                   prop("integer", "Gitea's own Actions run id, once dispatched."),
 		"run_url":                  prop("string", "Link to the run, once dispatched."),
@@ -249,15 +249,15 @@ var componentSchemas = map[string]any{
 	"Run": objectSchema(map[string]any{
 		"id":               prop("integer", "Gitea's own Actions run id."),
 		"repo_id":          prop("integer", "Repository the run belongs to."),
-		"repo_full_name":   prop("string", "owner/name, so the row links out to Gitea's own repository page (P1)."),
+		"repo_full_name":   prop("string", "owner/name, so the row links out to Gitea's own repository page."),
 		"index":            prop("integer", "The run's per-repository number, as Gitea's own run page shows it."),
 		"title":            prop("string", "Run title."),
 		"workflow_id":      prop("string", "The workflow file that produced the run."),
 		"event":            prop("string", "The webhook event that caused the run."),
 		"ref":              prop("string", "The commit, branch or tag that caused the run."),
 		"commit_sha":       prop("string", "Commit the run built."),
-		"status":           enumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer (P2, P8).", delivery_service.RunStateNames()),
-		"run_url":          prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page (P1, P3)."),
+		"status":           enumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer.", delivery_service.RunStateNames()),
+		"run_url":          prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page."),
 		"created_unix":     prop("integer", "When the run was created, unix seconds."),
 		"started_unix":     prop("integer", "When the run started, unix seconds; 0 if it has not."),
 		"stopped_unix":     prop("integer", "When the run stopped, unix seconds; 0 if it has not."),
@@ -286,7 +286,7 @@ var componentSchemas = map[string]any{
 	"Summary": objectSchema(map[string]any{
 		"window":                 prop("object", "The half-open window the figures cover: from_unix, to_unix and days."),
 		"total_runs":             prop("integer", "Runs in the window."),
-		"runs":                   prop("object", "Run count per state: "+strings.Join(delivery_service.RunStateNames(), ", ")+" (P2)."),
+		"runs":                   prop("object", "Run count per state: "+strings.Join(delivery_service.RunStateNames(), ", ")+"."),
 		"success_rate":           prop("number", "Successes over runs that reached a result."),
 		"total_duration_seconds": prop("integer", "Summed run duration."),
 		"active_repositories":    prop("integer", "Repositories with at least one run in the window."),
@@ -297,7 +297,7 @@ var componentSchemas = map[string]any{
 		"active_repositories", "inactive_repositories", "active_workflows", "disabled_workflows"),
 	"Overview": objectSchema(map[string]any{
 		"summary":   prop("object", "The selected window's Summary."),
-		"previous":  prop("object", "The previous window of equal length, shown beside each tile for comparison (P2)."),
+		"previous":  prop("object", "The previous window of equal length, shown beside each tile for comparison."),
 		"truncated": prop("boolean", "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so."),
 	}, "summary", "previous", "truncated"),
 	"TrendPoint": objectSchema(map[string]any{
@@ -307,38 +307,38 @@ var componentSchemas = map[string]any{
 		"successes":                prop("integer", "Runs that succeeded."),
 		"failures":                 prop("integer", "Runs that failed."),
 		"average_duration_seconds": prop("integer", "Mean duration over the runs that finished."),
-		"deployments":              prop("integer", "Deployments appended that day, read from the fork's own table so both dashboards share one source of truth (P5, E3)."),
+		"deployments":              prop("integer", "Deployments appended that day, read from the fork's own table so both dashboards share one source of truth."),
 	}, "date", "day_unix", "runs", "successes", "failures", "average_duration_seconds", "deployments"),
 	"Approval": objectSchema(map[string]any{
 		"id":                 prop("integer", "Primary key."),
 		"repo_id":            prop("integer", "Repository the held run belongs to."),
 		"environment":        prop("string", "Environment the held job declares, lower-cased."),
 		"run_id":             prop("integer", "Gitea's own Actions run id."),
-		"job_id":             prop("integer", "Gitea's own Actions job id. The gate holds exactly this job (F5e)."),
+		"job_id":             prop("integer", "Gitea's own Actions job id. The gate holds exactly this job."),
 		"release_tag":        prop("string", "Release tag the run was dispatched at; empty when it was dispatched against a branch."),
 		"sha":                prop("string", "Commit the run builds."),
 		"run_url":            prop("string", "Link to the held run."),
 		"requester_id":       prop("integer", "Gitea user id of whoever asked for the deploy."),
 		"requester_login":    prop("string", "Requester login, denormalized so deleting the user does not erase who asked."),
 		"created_unix":       prop("integer", "When the hold was recorded, unix seconds."),
-		"state":              enumProp("Projected over the append-only audit log, never a stored column (E15).", delivery.ApprovalStates),
+		"state":              enumProp("Projected over the append-only audit log, never a stored column.", delivery.ApprovalStates),
 		"approval_policy":    enumProp("The environment's live approval policy.", delivery.ApprovalPolicies),
 		"approvals_count":    prop("integer", "Distinct approvers so far, counted under the environment's policy."),
 		"required_approvals": prop("integer", "Approvals this deploy needs before the job is assigned."),
-		"age_seconds":        prop("integer", "How long the deploy has been held (E16)."),
-		"can_approve":        prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces (SC 21)."),
-		"deployment":         prop("object", "The deployment row for this run, when ?expand=deployment was asked for (I9)."),
+		"age_seconds":        prop("integer", "How long the deploy has been held."),
+		"can_approve":        prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces."),
+		"deployment":         prop("object", "The deployment row for this run, when ?expand=deployment was asked for."),
 	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "approvals_count", "required_approvals", "created_unix", "can_approve"),
 	"Board": objectSchema(map[string]any{
 		"repo_id":        prop("integer", "Repository the board belongs to."),
 		"repo_full_name": prop("string", "owner/name."),
 		"project_id":     prop("integer", "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json."),
 		"title":          prop("string", "The board's title."),
-		"group_by":       enumProp("The active lane grouping. A view setting, never stored on the project (O2).", delivery_service.Groupings),
+		"group_by":       enumProp("The active lane grouping. A view setting, never stored on the project.", delivery_service.Groupings),
 		"columns":        arrayProp("object", "Gitea's own project columns, in its own order. Each carries column_id, title, color and default."),
-		"lanes": arrayProp("object", "The horizontal lanes Gitea does not model (O1). Each carries key, label, is_empty_value, "+
+		"lanes": arrayProp("object", "The horizontal lanes Gitea does not model. Each carries key, label, is_empty_value, "+
 			"cards and one entry per column, so the result is a rectangle. The lane whose is_empty_value is true holds the "+
-			"issues with no value for the active grouping (O3)."),
+			"issues with no value for the active grouping."),
 		"can_write":      prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
 		"can_edit_issue": prop("boolean", "Whether the caller may move a card between lanes, which edits the issue's own label or assignee."),
 	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "lanes", "can_write", "can_edit_issue"),
@@ -403,7 +403,7 @@ var componentSchemas = map[string]any{
 	"Error": objectSchema(map[string]any{
 		"code":             prop("string", "Machine-readable rejection code."),
 		"message":          prop("string", "What went wrong."),
-		"suggested_action": prop("string", "What to do about it. Every error carries one (A21)."),
+		"suggested_action": prop("string", "What to do about it. Every error carries one."),
 		"parameter":        prop("string", "The offending parameter, when the rejection names one."),
 		"accepted":         arrayProp("string", "What the endpoint would have accepted instead."),
 	}, "code", "message", "suggested_action"),
@@ -427,8 +427,8 @@ func objectSchema(props map[string]any, required ...string) map[string]any {
 }
 
 // OpenAPI renders the OpenAPI 3 document for the namespace. Map keys marshal in sorted
-// order, so regenerating an unchanged registry is byte-identical and the diff gate of I16
-// shows only real changes.
+// order, so regenerating an unchanged registry is byte-identical and the diff gate shows
+// only real changes.
 func OpenAPI() ([]byte, error) {
 	paths := map[string]any{}
 	for _, op := range Operations() {
@@ -457,8 +457,8 @@ func OpenAPI() ([]byte, error) {
 					"description": "Success.",
 					"content":     map[string]any{"application/json": map[string]any{"schema": schema}},
 				},
-				"400": errorResponse("The request was refused, naming the offender and what is accepted (I4)."),
-				"403": errorResponse("The calling user is not permitted, by Gitea's own permission check (I13)."),
+				"400": errorResponse("The request was refused, naming the offender and what is accepted."),
+				"403": errorResponse("The calling user is not permitted, by Gitea's own permission check."),
 				"404": errorResponse("No such resource."),
 			},
 		}
@@ -478,7 +478,7 @@ func OpenAPI() ([]byte, error) {
 		"info": map[string]any{
 			"title":       "Gitea delivery API",
 			"version":     APIVersion,
-			"description": "The fork's own namespace. Every view is a client of an endpoint here (E18, I14); Gitea's swagger group at /api/v1 is untouched (F3, I15).",
+			"description": "The fork's own namespace. Every view is a client of an endpoint here; Gitea's swagger group at /api/v1 is untouched.",
 		},
 		"servers":    []any{map[string]any{"url": BasePath}},
 		"paths":      paths,
@@ -496,7 +496,7 @@ func OpenAPI() ([]byte, error) {
 //
 // It exists because encoding/json/v2 — what modules/json wraps at the pin — does not order
 // map keys, so marshalling the document twice produced two different byte strings. A
-// generated artifact whose bytes move between runs cannot be diff-gated (I16): the gate
+// generated artifact whose bytes move between runs cannot be diff-gated: the gate
 // would fail for no reason and be turned off.
 func encodeDeterministic(buf *bytes.Buffer, value any, indent string) error {
 	inner := indent + "  "

@@ -34,7 +34,7 @@ const (
 	GroupEpic Grouping = "epic"
 )
 
-// Groupings is the accepted set, in the order O2 lists it. The API rejects anything else
+// Groupings is the accepted set, in declaration order. The API rejects anything else
 // naming this list, so an unknown grouping is refused rather than silently treated as none.
 var Groupings = []string{string(GroupType), string(GroupAssignee), string(GroupEpic), string(GroupNone)}
 
@@ -191,7 +191,7 @@ func BuildLanes(columns []BoardColumn, cards []Card, grouping Grouping) []Lane {
 	}
 
 	sort.Slice(order, func(i, j int) bool {
-		// O3: the empty-value lane is explicit, and it sorts last so the named lanes
+		// The empty-value lane is explicit, and it sorts last so the named lanes
 		// read first.
 		if (order[i] == emptyLaneKey) != (order[j] == emptyLaneKey) {
 			return order[j] == emptyLaneKey

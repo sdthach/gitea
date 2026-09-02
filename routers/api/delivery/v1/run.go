@@ -20,11 +20,11 @@ import (
 
 // runSpec is the cross-repository run list's whitelist declaration — the list Gitea has no
 // endpoint for, since its own Actions API lists runs one repository and one workflow at a
-// time (P8, P10).
+// time.
 //
 // It pages by page rather than by cursor: unlike the audit log this is not an append-only
 // table being traversed, it is a filtered view whose caller wants a total to show beside the
-// tiles, and X-Total-Count is what carries it (I7, I8).
+// tiles, and X-Total-Count is what carries it.
 var runSpec = query.Spec{
 	Resource: "runs",
 	Fields: []query.Field{
@@ -34,7 +34,7 @@ var runSpec = query.Spec{
 		// status is filtered by the state NAME the overview publishes, never by Gitea's
 		// internal integer. mapRunStatusFilters rewrites the value before the condition is
 		// rendered; declaring it here is what makes an unknown state a 400 that names the
-		// offender rather than a silently empty result (I4).
+		// offender rather than a silently empty result.
 		{Name: "status", Column: "status", Kind: query.KindString, Ops: []query.Op{query.OpEq, query.OpIn}},
 		{Name: "event", Column: "event", Kind: query.KindString},
 		{Name: "ref", Column: "ref", Kind: query.KindString},
@@ -52,7 +52,7 @@ var runSpec = query.Spec{
 }
 
 // Run is the delivery view of an Actions run. It carries run_url so every row links out to
-// Gitea's own run page: the overview duplicates no Gitea page (P1, P3).
+// Gitea's own run page: the overview duplicates no Gitea page.
 type Run struct {
 	ID              int64  `json:"id"`
 	RepoID          int64  `json:"repo_id"`
@@ -77,11 +77,11 @@ func listRunsEndpoint() *endpoint {
 			ID: "listRuns", Method: http.MethodGet, Path: "/runs",
 			Summary: "List Actions runs across every repository the caller can see",
 			Description: "The cross-repository run list Gitea has no endpoint of its own for: its Actions API lists runs " +
-				"one repository and one workflow at a time (P8, P10). " +
+				"one repository and one workflow at a time. " +
 				"status filters on the state name the overview publishes — " + strings.Join(delivery_service.RunStateNames(), ", ") +
 				" — not on Gitea's internal integer. " +
-				"Every row carries run_url; the overview duplicates no Gitea page (P1). " +
-				"Scoped by Gitea's own permission filtering on the Actions unit (P6, E12, I13).",
+				"Every row carries run_url; the overview duplicates no Gitea page. " +
+				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "runs", Query: &runSpec, Response: "Run", ResponseIs: "array",
 		},
 		Handler: ListRuns,
@@ -169,7 +169,7 @@ func mapRunStatusFilters(q *query.Query) *query.Error {
 }
 
 // convertRuns renders the rows, resolving each run's repository so it can carry the link out
-// to Gitea's own run page (P1).
+// to Gitea's own run page.
 func convertRuns(ctx *context.APIContext, runs []*actions_model.ActionRun) ([]*Run, error) {
 	if len(runs) == 0 {
 		return []*Run{}, nil

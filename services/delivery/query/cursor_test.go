@@ -94,7 +94,7 @@ func (tb *table) pageByCursor(c Cursor, limit int) ([]row, Cursor) {
 	return page, NewCursor(Sort{Column: "sort_value", Order: OrderDesc, TieBreaker: "id"}, last.sortValue, last.id)
 }
 
-// pageByOffset reads one page by row offset, as I7's form does.
+// pageByOffset reads one page by row offset, as offset paging does.
 func (tb *table) pageByOffset(offset, limit int) []row {
 	ordered := tb.ordered()
 	if offset >= len(ordered) {
@@ -113,7 +113,7 @@ func toInt64(v any) int64 {
 	return 0
 }
 
-// TestCursorPagingUnderConcurrentInsert is SC 24's first clause: paging by cursor while
+// TestCursorPagingUnderConcurrentInsert: paging by cursor while
 // rows are being written returns each row exactly once, and the same traversal by offset is
 // shown to duplicate and skip.
 //

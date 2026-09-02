@@ -15,7 +15,7 @@ import (
 // rejected rather than silently misread.
 const cursorVersion = 1
 
-// Cursor is the opaque position of a cursor-paged traversal (I6). It carries the last
+// Cursor is the opaque position of a cursor-paged traversal. It carries the last
 // row's sort value and primary key, so paging while rows are being written returns each
 // row exactly once: an offset traversal over the same table duplicates and skips.
 type Cursor struct {

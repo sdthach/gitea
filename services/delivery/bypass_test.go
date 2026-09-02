@@ -13,10 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDeliveryCanBypassEnvironmentSequence is F10's table, each row in its accepting AND its
-// refusing case (J9). It mirrors models/git/protected_branch_test.go's shape because the
+// TestDeliveryCanBypassEnvironmentSequence covers the bypass table, each row in its
+// accepting AND its
+// refusing case. It mirrors models/git/protected_branch_test.go's shape because the
 // helper mirrors CanBypassBranchProtection: a gate that invents its own notion of who may
-// pass is a defect (F12).
+// pass is a defect.
 //
 // The team rows use Gitea's own fixtures: user2 is in team 1 of org 3, user4 is not.
 func TestDeliveryCanBypassEnvironmentSequence(t *testing.T) {

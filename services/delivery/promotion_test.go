@@ -17,7 +17,7 @@ func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
 	assert.Empty(t, WorkflowIDForEnvironment("  "), "an unnamed environment names no workflow")
 
 	// It is the inverse of the notifier's reader, so a run this dispatches is recorded
-	// against the environment it was dispatched for. One convention, read both ways (D4).
+	// against the environment it was dispatched for. One convention, read both ways.
 	for _, name := range []string{"dev", "qa", "uat", "staging", "prod"} {
 		assert.Equal(t, name, EnvironmentFromWorkflowID(WorkflowIDForEnvironment(name)))
 	}
@@ -25,7 +25,7 @@ func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
 
 // TestDeliveryAcceptsRelease is the offer rule, which reads one column and no name: an
 // environment takes anything unless it has asked for finished releases only. Both
-// directions per environment (J9).
+// directions per environment.
 func TestDeliveryAcceptsRelease(t *testing.T) {
 	open := &delivery_model.Environment{Name: "anything-at-all"}
 	assert.True(t, AcceptsRelease(open, true), "an environment offers prereleases by default")
@@ -43,7 +43,7 @@ func succeeded(id int64, environment, tag string, at int64) Event {
 	return Event{ID: id, Environment: environment, ReleaseTag: tag, Event: delivery_model.AuditSucceeded, OccurredUnix: at}
 }
 
-// TestDeliveryEvaluatePredecessor covers the three states E17 distinguishes: never held,
+// TestDeliveryEvaluatePredecessor covers the three states the sequence rule distinguishes: never held,
 // held previously, and currently live.
 func TestDeliveryEvaluatePredecessor(t *testing.T) {
 	assert.Equal(t, PredecessorNone, EvaluatePredecessor("", "v1.0", nil),
@@ -70,8 +70,8 @@ func TestDeliveryEvaluatePredecessor(t *testing.T) {
 	}), "a later failure does not unmake the success that already happened")
 }
 
-// TestDeliveryDecidePromotion is E17's table, every row, in its accepting and its refusing
-// case (J9, SC 40).
+// TestDeliveryDecidePromotion covers the sequence-rule table, every row, in its accepting
+// and its refusing case.
 func TestDeliveryDecidePromotion(t *testing.T) {
 	warnOnly := &delivery_model.Environment{Name: "prod", Predecessor: "staging"}
 	gated := &delivery_model.Environment{Name: "prod", Predecessor: "staging", RequirePredecessor: true}
@@ -84,7 +84,7 @@ func TestDeliveryDecidePromotion(t *testing.T) {
 		want       Outcome
 		needReason bool
 	}{
-		{name: "flag off, never held, cannot bypass — warned only (F11)", env: warnOnly, state: PredecessorNever, want: OutcomeWarn},
+		{name: "flag off, never held, cannot bypass — warned only", env: warnOnly, state: PredecessorNever, want: OutcomeWarn},
 		{name: "flag off, never held, can bypass — still only a warning", env: warnOnly, state: PredecessorNever, canBypass: true, want: OutcomeWarn},
 		{name: "flag off, held — nothing to warn about", env: warnOnly, state: PredecessorHeld, want: OutcomeProceed},
 		{name: "flag on, held — proceeds", env: gated, state: PredecessorHeld, want: OutcomeProceed},
@@ -103,7 +103,7 @@ func TestDeliveryDecidePromotion(t *testing.T) {
 			assert.Equal(t, tc.state, d.PredecessorState)
 			if tc.want != OutcomeProceed {
 				assert.NotEmpty(t, d.Message)
-				assert.NotEmpty(t, d.SuggestedAction, "every decision carries a suggested next action (A21)")
+				assert.NotEmpty(t, d.SuggestedAction, "every decision carries a suggested next action")
 			}
 		})
 	}

@@ -146,7 +146,7 @@ function renderTiles(overview) {
 	$('delivery-truncated').classList.toggle('tw-hidden', !overview.truncated);
 }
 
-// Each run row links to the run in Gitea rather than rendering it here (P1, P3).
+// Each run row links to the run in Gitea rather than rendering it here.
 function renderRuns(target, runs, emptyText) {
 	if (!runs.length) {
 		$(target).replaceChildren(row([emptyText]));
@@ -185,7 +185,7 @@ async function load() {
 	const windowParam = `window_days=${encodeURIComponent(days)}`;
 	try {
 		// Five documented endpoints, no private data path: the composite saves the page a
-		// round trip, and each list is independently queryable (P8, P9).
+		// round trip, and each list is independently queryable.
 		const [overview, recent, failed, repos, trends] = await Promise.all([
 			get(`/overview?${windowParam}`),
 			get(`/runs?limit=10&sort_by=created_unix&order=desc`),

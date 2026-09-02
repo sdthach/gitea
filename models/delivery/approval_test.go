@@ -37,7 +37,7 @@ func rejected(actor int64) Vote { return Vote{ActorID: actor, Event: AuditReject
 
 // TestDeliveryProjectApprovalStateCoversEveryPolicy exercises each policy in BOTH its
 // accepting and its refusing case. A suite covering only the accepting path is treated as
-// absent (J7, J9).
+// absent.
 func TestDeliveryProjectApprovalStateCoversEveryPolicy(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -229,7 +229,7 @@ func TestDeliveryJobIsHeldForApprovalFailsClosed(t *testing.T) {
 }
 
 // TestDeliveryJobIsHeldForApprovalLeavesUngatedJobsAlone is the "adding the fork changes no
-// behaviour" property (F5b, SC 21): a repository with no gated environment, and a job that
+// behaviour" property: a repository with no gated environment, and a job that
 // declares no environment, are both assigned without a workflow read.
 func TestDeliveryJobIsHeldForApprovalLeavesUngatedJobsAlone(t *testing.T) {
 	t.Run("no environment of the repository is gated", func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestDeliveryApprovalGateSeamIsWired(t *testing.T) {
 	approvalgate.Register(nil)
 	t.Cleanup(func() { approvalgate.Register(JobIsHeldForApproval) })
 	assert.False(t, approvalgate.Held(t.Context(), 7, 5),
-		"with the fork absent the dispatcher claims jobs exactly as stock Gitea does (SC 21)")
+		"with the fork absent the dispatcher claims jobs exactly as stock Gitea does")
 }
 
 // TestDeliveryApprovalTableIsAppendOnly holds the same guarantee deployments and audit hold:
@@ -290,7 +290,7 @@ func TestDeliveryApprovalTableIsAppendOnly(t *testing.T) {
 	require.Error(t, err)
 	var hubErr *Error
 	require.ErrorAs(t, err, &hubErr)
-	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 
 	// A hold naming no run cannot release anything, so it is refused rather than stored.
 	require.Error(t, AppendApproval(t.Context(), &Approval{RepoID: 7, Environment: "prod"}))
@@ -325,7 +325,7 @@ func TestDeliveryRepoHasGatedEnvironmentIsTheFastPath(t *testing.T) {
 }
 
 // TestDeliveryVotesForApprovalReadsTheAuditLog proves approvals are not stored a second
-// time: the gate's inputs are the audit rows the approve and reject endpoints append (F5c).
+// time: the gate's inputs are the audit rows the approve and reject endpoints append.
 func TestDeliveryVotesForApprovalReadsTheAuditLog(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
@@ -348,7 +348,7 @@ func TestDeliveryVotesForApprovalReadsTheAuditLog(t *testing.T) {
 }
 
 // TestDeliveryReleaseTagOfRef covers what the hold records about a deploy dispatched at a
-// tag and one dispatched at a branch, which carries no release identity (D1).
+// tag and one dispatched at a branch, which carries no release identity.
 func TestDeliveryReleaseTagOfRef(t *testing.T) {
 	assert.Equal(t, "v1.2.3", releaseTagOfRef("refs/tags/v1.2.3"))
 	assert.Empty(t, releaseTagOfRef("refs/heads/main"))

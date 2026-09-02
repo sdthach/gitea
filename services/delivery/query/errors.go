@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Error is a rejected request. Every Error carries a suggested next action (A21):
+// Error is a rejected request. Every Error carries a suggested next action:
 // a message that only states what went wrong is incomplete.
 type Error struct {
 	Status          int      `json:"-"`

@@ -65,27 +65,27 @@ gitea-delivery approvals — List held deploys and their approval state
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery approve
@@ -99,27 +99,27 @@ Positional arguments: id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery audit
@@ -131,27 +131,27 @@ gitea-delivery audit — List delivery audit events across every repository the 
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery board
@@ -163,27 +163,27 @@ gitea-delivery board — A project board with horizontal swimlanes
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery board-move-column
@@ -199,33 +199,33 @@ Flags:
   -column-id string
     	required. The column to move the card into.
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -project-id string
     	required. The board the card is on.
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -sorting string
     	Position within the column. Omit to append.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery board-move-lane
@@ -239,35 +239,35 @@ Positional arguments: issue_id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -group-by string
-    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write (O4).
+    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write.
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -lane string
     	The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -project-id string
     	required. The board the card is on.
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery deploy
@@ -279,37 +279,37 @@ gitea-delivery deploy — Plan or dispatch a deploy of a release to an environme
 
 Flags:
   -confirm
-    	False, the default, returns the plan and dispatches nothing — the first of E14's two steps. True dispatches.
+    	False, the default, returns the deploy plan and dispatches nothing — the first of the two confirm steps. True dispatches.
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -environment string
     	required. Target environment, for example prod.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -override-reason string
-    	Why the environment's sequence rule is being bypassed. Required when the plan reports outcome "override"; it is written to the audit log (E17).
+    	Why the environment's sequence rule is being bypassed. Required when the deploy plan reports outcome "override"; it is written to the audit log.
   -q string
-    	free-text search (I10)
+    	free-text search
   -release-tag string
-    	required. Release tag to deploy. A prior tag is a rollback; it is the same request (E14).
+    	required. Release tag to deploy. A prior tag is a rollback; it is the same request.
   -repo string
     	required. Target repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery deployment-summary
@@ -321,27 +321,27 @@ gitea-delivery deployment-summary — Deployment summary view
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery deployments
@@ -353,27 +353,27 @@ gitea-delivery deployments — List deployments across every repository the call
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery environment
@@ -387,27 +387,27 @@ Positional arguments: id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery environment-create
@@ -427,27 +427,27 @@ Flags:
   -bypass-allowlist-user-ids string
     	User IDs allowed to bypass.
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -enable-bypass-allowlist
     	Enable bypass allowlist.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -name string
     	required. Environment name.
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -predecessor string
-    	Environment a release must pass through first (E17).
+    	Environment a release must pass through first.
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
   -require-full-release
@@ -459,11 +459,11 @@ Flags:
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -sort-order string
     	Render order.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery environment-delete
@@ -477,27 +477,27 @@ Positional arguments: id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery environment-update
@@ -519,27 +519,27 @@ Flags:
   -bypass-allowlist-user-ids string
     	User IDs allowed to bypass.
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -enable-bypass-allowlist
     	Enable bypass allowlist.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -name string
     	required. Environment name.
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -predecessor string
-    	Environment a release must pass through first (E17).
+    	Environment a release must pass through first.
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
   -require-full-release
@@ -551,11 +551,11 @@ Flags:
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -sort-order string
     	Render order.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery environments
@@ -567,27 +567,27 @@ gitea-delivery environments — List environments across every repository the ca
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery grid
@@ -599,27 +599,27 @@ gitea-delivery grid — The release × environment grid
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery overview
@@ -631,27 +631,27 @@ gitea-delivery overview — The cross-repository CI summary and its comparison w
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery overview-repos
@@ -663,27 +663,27 @@ gitea-delivery overview-repos — List repositories by run volume, with success 
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery overview-trends
@@ -695,27 +695,27 @@ gitea-delivery overview-trends — The daily trend series: total, successful and
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery reject
@@ -729,27 +729,27 @@ Positional arguments: id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery releases
@@ -763,27 +763,27 @@ Positional arguments: owner repo
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery repo-environment
@@ -797,27 +797,27 @@ Positional arguments: owner repo name
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery repo-environment-secrets
@@ -831,27 +831,27 @@ Positional arguments: owner repo name
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery repo-environments
@@ -865,27 +865,27 @@ Positional arguments: owner repo
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery repos
@@ -897,27 +897,27 @@ gitea-delivery repos — List the repositories the caller can see delivery data 
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery rollback
@@ -929,37 +929,37 @@ gitea-delivery rollback — Plan or dispatch a deploy of a release to an environ
 
 Flags:
   -confirm
-    	False, the default, returns the plan and dispatches nothing — the first of E14's two steps. True dispatches.
+    	False, the default, returns the deploy plan and dispatches nothing — the first of the two confirm steps. True dispatches.
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -environment string
     	required. Target environment, for example prod.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -override-reason string
-    	Why the environment's sequence rule is being bypassed. Required when the plan reports outcome "override"; it is written to the audit log (E17).
+    	Why the environment's sequence rule is being bypassed. Required when the deploy plan reports outcome "override"; it is written to the audit log.
   -q string
-    	free-text search (I10)
+    	free-text search
   -release-tag string
-    	required. Release tag to deploy. A prior tag is a rollback; it is the same request (E14).
+    	required. Release tag to deploy. A prior tag is a rollback; it is the same request.
   -repo string
     	required. Target repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery runs
@@ -971,27 +971,27 @@ gitea-delivery runs — List Actions runs across every repository the caller can
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery secret-scope-create
@@ -1003,23 +1003,23 @@ gitea-delivery secret-scope-create — Bind a secret to an environment
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -environment string
     	required. Environment to scope the secret to.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo-id string
     	required. Repository id.
   -secret-name string
@@ -1027,9 +1027,9 @@ Flags:
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery secret-scope-delete
@@ -1043,27 +1043,27 @@ Positional arguments: id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline
@@ -1075,27 +1075,27 @@ gitea-delivery timeline — The delivery timeline: one bar per issue, with depen
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline-create-issue
@@ -1107,37 +1107,37 @@ gitea-delivery timeline-create-issue — Create an issue on a row
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -description string
     	Issue body.
   -epic string
     	Epic name; the issue is labelled epic:<name> so the chart draws it.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -milestone-id string
     	Milestone row to file it under.
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -title string
     	required. Issue title.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline-create-milestone
@@ -1149,35 +1149,35 @@ gitea-delivery timeline-create-milestone — Create a milestone row
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -description string
     	Milestone description.
   -end string
     	Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -title string
     	required. Milestone title.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline-move-lane
@@ -1191,33 +1191,33 @@ Positional arguments: issue_id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -group-by string
     	required. The active grouping. A lane move is refused when this is none, because there is nothing to write.
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -lane string
     	The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline-move-milestone
@@ -1231,31 +1231,31 @@ Positional arguments: issue_id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -milestone-id string
     	Target milestone; 0 removes the issue from its row.
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery timeline-set-dates
@@ -1269,33 +1269,33 @@ Positional arguments: issue_id
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -end string
     	Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -repo string
     	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -start string
     	Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```
 
 ## gitea-delivery workflows
@@ -1307,25 +1307,25 @@ gitea-delivery workflows — List workflows with their run counts, success rate 
 
 Flags:
   -cursor string
-    	opaque cursor from a previous response (I6)
+    	opaque cursor from a previous response
   -expand string
-    	comma-separated sub-resources, one level deep (I9)
+    	comma-separated sub-resources, one level deep
   -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+    	repeatable field[op]=value filter; sent to the server verbatim
   -json
-    	emit the API response verbatim and unshaped (K5)
+    	emit the API response verbatim and unshaped
   -limit int
-    	page size; the server defaults to 50 and caps at 200 (I7)
+    	page size; the server defaults to 50 and caps at 200
   -offset int
-    	row offset, converted to the 1-based page the API takes (I7)
+    	row offset, converted to the 1-based page the API takes
   -order string
-    	asc or desc (I5)
+    	asc or desc
   -q string
-    	free-text search (I10)
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
   -sort-by string
-    	sort field (I5)
+    	sort field
   -token string
-    	API token; resolved by the same precedence detect.sh implements (K8)
+    	API token; resolved by the same precedence detect.sh implements
 ```

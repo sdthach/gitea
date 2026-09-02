@@ -16,7 +16,7 @@ import (
 // overviewSpec is the composite's whitelist declaration. The composite is not a list, so it
 // declares only the two parameters that narrow it — and it declares them through the one
 // grammar, so an unknown parameter is a 400 that names the offender rather than a silently
-// ignored word (I2, I4).
+// ignored word.
 var overviewSpec = query.Spec{
 	Resource: "overview",
 	Fields: []query.Field{
@@ -27,7 +27,7 @@ var overviewSpec = query.Spec{
 	Paging:     query.PagingOffset,
 }
 
-// overviewRepoSpec is the per-repository statistics resource (P4, P8). The slice-3 `repos`
+// overviewRepoSpec is the per-repository statistics resource. The `repos`
 // resource already publishes repository IDENTITY; this publishes their run STATISTICS over a
 // window, which is a different shape with a different lifetime, so it is a resource of its
 // own rather than a second meaning for the same rows.
@@ -72,14 +72,14 @@ func getOverviewEndpoint() *endpoint {
 			ID: "getOverview", Method: http.MethodGet, Path: "/overview",
 			Summary: "The cross-repository CI summary and its comparison window",
 			Description: "Repositories active/inactive, workflows active/disabled, and runs by state with success rate " +
-				"and total duration, beside the previous window of equal length (P2). " +
+				"and total duration, beside the previous window of equal length. " +
 				"The composite exists to save round trips, NEVER as the only way to reach the data: every number in " +
-				"it is independently queryable from /runs, /workflows and /overview/repos (P9). " +
+				"it is independently queryable from /runs, /workflows and /overview/repos. " +
 				"Aggregates are computed in process over Gitea's own action_run, since its Actions API lists runs " +
-				"one repository and one workflow at a time and cannot group (P10). " +
+				"one repository and one workflow at a time and cannot group. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit: a run in a repository the viewer " +
-				"cannot read appears in no figure (P6, E12, I13). " +
-				"The /delivery/ci page is a client of this endpoint (E18, I14).",
+				"cannot read appears in no figure. " +
+				"The /delivery/ci page is a client of this endpoint.",
 			Tag: "overview", Query: &overviewSpec, Response: "Overview", ResponseIs: "object",
 		},
 		Handler: GetOverview,
@@ -92,11 +92,11 @@ func getOverviewTrendsEndpoint() *endpoint {
 			ID: "getOverviewTrends", Method: http.MethodGet, Path: "/overview/trends",
 			Summary: "The daily trend series: total, successful and failed runs, average duration and deployments",
 			Description: "One point per UTC day across the window, including days with no run — a gap would read as " +
-				"missing data rather than as a quiet day (P5). " +
+				"missing data rather than as a quiet day. " +
 				"The deployment count reads the fork's own delivery_deployment table rather than counting deploy " +
-				"runs, so this dashboard and the delivery grid share one source of truth (P5, E3). " +
+				"runs, so this dashboard and the delivery grid share one source of truth. " +
 				"Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and " +
-				"one schema has to answer both (M3, P10).",
+				"one schema has to answer both.",
 			Tag: "overview", Query: &overviewSpec, Response: "TrendPoint", ResponseIs: "array",
 		},
 		Handler: GetOverviewTrends,
@@ -108,11 +108,11 @@ func listOverviewReposEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "listOverviewRepos", Method: http.MethodGet, Path: "/overview/repos",
 			Summary: "List repositories by run volume, with success rate and average duration",
-			Description: "The top-repositories list of P4, reachable as a queryable resource rather than only as a " +
-				"panel on the page (P8, P9). Sorting defaults to run volume descending. " +
+			Description: "The top-repositories list, reachable as a queryable resource rather than only as a " +
+				"panel on the page. Sorting defaults to run volume descending. " +
 				"Each row carries repo_full_name so it links out to Gitea's own repository page; the overview " +
-				"duplicates no Gitea page (P1). " +
-				"Scoped by Gitea's own permission filtering on the Actions unit (P6, E12, I13).",
+				"duplicates no Gitea page. " +
+				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "overview", Query: &overviewRepoSpec, Response: "RepoStat", ResponseIs: "array",
 		},
 		Handler: ListOverviewRepos,
@@ -124,7 +124,7 @@ func listOverviewReposEndpoint() *endpoint {
 //
 // It is the one place the CI overview's permission filter is applied. It is fail-CLOSED: a
 // caller who can see no repository aggregates nothing, and a repo_id outside the accessible
-// set narrows to nothing rather than widening to every repository (P6, E12, I13).
+// set narrows to nothing rather than widening to every repository.
 func overviewOptions(ctx *context.APIContext, q *query.Query) (delivery_service.OverviewOptions, bool) {
 	repoIDs, ok := accessibleRepoIDs(ctx)
 	if !ok {
@@ -196,7 +196,7 @@ func ListOverviewRepos(ctx *context.APIContext) {
 // filterProjection applies the grammar's filters and free-text search to rows computed in
 // process. The projections are not tables, so their conditions cannot be pushed into SQL —
 // but every field a caller may filter on is still the resource's own declared whitelist, and
-// an unknown one was already refused by the one parser (I2, I4).
+// an unknown one was already refused by the one parser.
 //
 // A declared field that this cannot read is a defect rather than a silent no-op: a filter
 // that quietly matches everything is worse than one that is rejected.

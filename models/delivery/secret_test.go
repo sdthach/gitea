@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestApplyEnvironmentScope is SC 17: PROD_DB_PASS scoped to prod is present under
+// TestApplyEnvironmentScope: PROD_DB_PASS scoped to prod is present under
 // environment: prod, absent from a job declaring environment: qa, and absent from a job
 // declaring no environment at all.
 func TestApplyEnvironmentScope(t *testing.T) {

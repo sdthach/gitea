@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDeliveryApprovalGateDefaultsOpen is SC 21's fork-absent case: nothing registered means
+// TestDeliveryApprovalGateDefaultsOpen is the fork-absent case: nothing registered means
 // the dispatcher claims jobs exactly as stock Gitea does. Any other default would hold every
 // job in an instance that does not run the fork's hub.
 func TestDeliveryApprovalGateDefaultsOpen(t *testing.T) {

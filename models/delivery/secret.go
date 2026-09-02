@@ -21,9 +21,9 @@ import (
 // never narrowed away.
 var autoTokens = []string{"GITHUB_TOKEN", "GITEA_TOKEN"}
 
-// SecretScope binds a repository secret name to one environment (F4). It is a fork table:
+// SecretScope binds a repository secret name to one environment. It is a fork table:
 // upstream's Secret is unique on (OwnerID, RepoID, Name) with no environment dimension, and
-// adding a column to it would be a second edit to an upstream file (F2).
+// adding a column to it would be a second edit to an upstream file.
 type SecretScope struct {
 	ID          int64              `xorm:"pk autoincr" json:"id"`
 	RepoID      int64              `xorm:"INDEX UNIQUE(repo_secret) NOT NULL" json:"repo_id"`
@@ -43,7 +43,7 @@ func init() {
 func NormalizeSecretName(name string) string { return strings.ToUpper(strings.TrimSpace(name)) }
 
 // applyEnvironmentScope drops every secret scoped to an environment other than jobEnv, and
-// every scoped secret when the job declares no environment. It is pure so SC 17's three
+// every scoped secret when the job declares no environment. It is pure so its three
 // cases are testable without a database, a runner or a network.
 //
 // scopes maps secret name to the environment it is scoped to. A secret with no entry is
@@ -118,7 +118,7 @@ func failClosed(secrets map[string]string) map[string]string {
 // narrowDeps are the three lookups the narrowing performs. They are a struct of functions
 // rather than direct calls so that every branch — including the ones that run only when a
 // lookup fails — is reachable from a unit test with no database, no git repository and no
-// network (J10, J11).
+// network.
 type narrowDeps struct {
 	loadRun     func(context.Context, *actions_model.ActionRunJob) error
 	scopesOf    func(ctx context.Context, repoID int64) (map[string]string, error)
@@ -137,7 +137,7 @@ var productionNarrowDeps = narrowDeps{
 var narrowSecretDeps = productionNarrowDeps
 
 // NarrowSecretsToJobEnvironment is the fork's tail of models/secret.GetSecretsOfTask — the
-// single existing chokepoint every task's secrets already pass through (F4). It is the
+// single existing chokepoint every task's secrets already pass through. It is the
 // function the spoke at models/secret/secret.go names.
 //
 // It fails closed. When the job's declared environment cannot be resolved, every

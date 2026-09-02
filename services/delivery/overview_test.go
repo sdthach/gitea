@@ -77,13 +77,13 @@ func TestDeliveryWindowIsHalfOpenAndItsPredecessorAdjoinsIt(t *testing.T) {
 	previous := w.Previous()
 	assert.Equal(t, w.FromUnix, previous.ToUnix, "the previous window ends exactly where this one begins")
 	assert.Equal(t, w.ToUnix-w.FromUnix, previous.ToUnix-previous.FromUnix,
-		"the comparison window is of equal length (P2)")
+		"the comparison window is of equal length")
 
 	assert.Equal(t, DefaultWindowDays, NewWindow(0, now).Days, "no window asked for is the default window")
 	assert.Equal(t, MaxWindowDays, NewWindow(100000, now).Days, "an absurd window is clamped, not refused")
 }
 
-// TestDeliverySummarizeRunsCountsEveryState is P2's tile set over a fixture run set.
+// TestDeliverySummarizeRunsCountsEveryState covers the tile set over a fixture run set.
 func TestDeliverySummarizeRunsCountsEveryState(t *testing.T) {
 	facts := []delivery_model.RunFact{
 		runAt(1, 10, "ci.yaml", actions_model.StatusSuccess, 10, 30),
@@ -134,7 +134,7 @@ func TestDeliveryAggregateReposRanksByVolumeAndCarriesTheRate(t *testing.T) {
 	rows := AggregateRepos(facts, map[int64]string{10: "acme/web", 11: "acme/api"})
 	require.Len(t, rows, 2)
 
-	assert.Equal(t, "acme/web", rows[0].RepoFullName, "top repositories are by run volume (P4)")
+	assert.Equal(t, "acme/web", rows[0].RepoFullName, "top repositories are by run volume")
 	assert.Equal(t, int64(3), rows[0].Runs)
 	assert.InDelta(t, 2.0/3.0, rows[0].SuccessRate, 1e-9)
 	assert.Equal(t, int64(30), rows[0].AverageDurationSeconds, "(30+50+10)/3")
@@ -164,7 +164,7 @@ func TestDeliveryAggregateWorkflowsMarksTheDisabledOnes(t *testing.T) {
 		"a disabled workflow that still ran in the window is shown as disabled, never hidden — hiding it would lose its run from the total")
 }
 
-// TestDeliveryDailyTrendIncludesQuietDaysAndDeployments is P5. The deployment count comes
+// TestDeliveryDailyTrendIncludesQuietDaysAndDeployments: the deployment count comes
 // from the fork's own table, so this dashboard and the delivery grid cannot disagree.
 func TestDeliveryDailyTrendIncludesQuietDaysAndDeployments(t *testing.T) {
 	window := Window{FromUnix: day, ToUnix: day + 2*86400, Days: 2}
@@ -235,7 +235,7 @@ func TestDeliveryBuildOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	onlyPublic, err := BuildOverview(ctx, OverviewOptions{RepoIDs: []int64{publicRepo}, Window: window})
 	require.NoError(t, err)
 	assert.Less(t, onlyPublic.Summary.TotalRuns, both.Summary.TotalRuns,
-		"a run in a repository outside the accessible set must not be counted (P6, E12)")
+		"a run in a repository outside the accessible set must not be counted")
 	assert.Equal(t, int64(1), onlyPublic.Summary.ActiveRepositories)
 
 	none, err := BuildOverview(ctx, OverviewOptions{RepoIDs: nil, Window: window})
@@ -244,7 +244,7 @@ func TestDeliveryBuildOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	assert.Equal(t, int64(0), none.Summary.InactiveRepositories)
 }
 
-// TestDeliveryBuildOverviewCountsMatchThePerRepositoryQuery is SC 41: the aggregate has to
+// TestDeliveryBuildOverviewCountsMatchThePerRepositoryQuery: the aggregate has to
 // agree with the same question asked one repository at a time.
 func TestDeliveryBuildOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -267,13 +267,13 @@ func TestDeliveryBuildOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 		}
 	}
 	assert.Equal(t, aggregate.Summary.TotalRuns, perRepo,
-		"the cross-repository total is the sum of the same query run per repository (SC 41)")
+		"the cross-repository total is the sum of the same query run per repository")
 	for state, n := range perRepoStates {
 		assert.Equal(t, aggregate.Summary.Runs[state], n, "state %q", state)
 	}
 }
 
-// TestDeliveryBuildTrendsMatchesTheDeliveryTables is SC 41's deployment half: the trend's
+// TestDeliveryBuildTrendsMatchesTheDeliveryTables is the deployment half: the trend's
 // deployment count is the fork's own table, read back.
 func TestDeliveryBuildTrendsMatchesTheDeliveryTables(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -297,7 +297,7 @@ func TestDeliveryBuildTrendsMatchesTheDeliveryTables(t *testing.T) {
 	rows, err := delivery_model.FindDeploymentFacts(ctx, []int64{4}, window.FromUnix, window.ToUnix)
 	require.NoError(t, err)
 	assert.Equal(t, int64(len(rows)), deployments,
-		"the trend's deployment count is the delivery table, so both dashboards share one source of truth (P5)")
+		"the trend's deployment count is the delivery table, so both dashboards share one source of truth")
 	assert.Equal(t, int64(2), deployments)
 
 	elsewhere, _, err := BuildTrends(ctx, OverviewOptions{RepoIDs: []int64{2}, Window: window})
@@ -320,7 +320,7 @@ func TestDeliveryBuildRepoStatsAndWorkflowStatsAreScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, repos, 1)
 	assert.Equal(t, int64(4), repos[0].RepoID)
-	assert.NotEmpty(t, repos[0].RepoFullName, "the row carries the name it links out to Gitea by (P1)")
+	assert.NotEmpty(t, repos[0].RepoFullName, "the row carries the name it links out to Gitea by")
 	assert.Positive(t, repos[0].Runs)
 
 	workflows, _, err := BuildWorkflowStats(ctx, OverviewOptions{RepoIDs: []int64{4}, Window: window})
@@ -352,7 +352,7 @@ func TestDeliverySortWorkflowStatsOrdersAndTieBreaks(t *testing.T) {
 
 	SortWorkflowStats(rows, "runs", query.OrderDesc)
 	assert.Equal(t, []string{"a.yaml", "c.yaml", "b.yaml"}, workflowOrder(rows),
-		"volume first; the two one-run rows tie and are broken on repo_id ascending, so the same page asked for twice holds the same rows (I5)")
+		"volume first; the two one-run rows tie and are broken on repo_id ascending, so the same page asked for twice holds the same rows")
 
 	SortWorkflowStats(rows, "runs", query.OrderAsc)
 	assert.Equal(t, []string{"c.yaml", "b.yaml", "a.yaml"}, workflowOrder(rows))
@@ -381,7 +381,7 @@ func TestDeliverySortRepoStatsOrdersAndTieBreaks(t *testing.T) {
 	}
 
 	SortRepoStats(rows, "runs", query.OrderDesc)
-	assert.Equal(t, []int64{1, 2, 3}, repoOrder(rows), "the tie between the two 1-run rows is broken on repo_id (I5)")
+	assert.Equal(t, []int64{1, 2, 3}, repoOrder(rows), "the tie between the two 1-run rows is broken on repo_id")
 
 	SortRepoStats(rows, "repo_full_name", query.OrderDesc)
 	assert.Equal(t, []int64{3, 2, 1}, repoOrder(rows))

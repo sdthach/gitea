@@ -11,14 +11,14 @@ import (
 	"gitea.dev/services/delivery/query"
 )
 
-// workflowSpec is the per-workflow statistics resource's whitelist declaration (P8).
+// workflowSpec is the per-workflow statistics resource's whitelist declaration.
 //
 // Like the grid, these rows are a PROJECTION rather than a table: run counts, success rate
 // and average duration are computed in process over the window's runs, because bucketing and
-// averaging in SQL would need constructs SQLite and PostgreSQL spell differently (P10, M3).
+// averaging in SQL would need constructs SQLite and PostgreSQL spell differently.
 // Filtering and sorting therefore select what to project instead of rendering into a SQL
 // condition — but they still go through the one grammar, so an unknown field or an
-// unsortable one is rejected by the same parser every other resource uses (I2, I4, I5).
+// unsortable one is rejected by the same parser every other resource uses.
 var workflowSpec = query.Spec{
 	Resource: "workflows",
 	Fields: []query.Field{
@@ -67,9 +67,9 @@ func listWorkflowsEndpoint() *endpoint {
 			Summary: "List workflows with their run counts, success rate and average duration",
 			Description: "One row per (repository, workflow file) over the selected window, so every figure the " +
 				"overview's tiles aggregate is independently queryable rather than reachable only through the " +
-				"composite (P8, P9). window_days selects the window and defaults to " +
+				"composite. window_days selects the window and defaults to " +
 				"7 days. Rows carry disabled, read from Gitea's own Actions unit configuration. " +
-				"Scoped by Gitea's own permission filtering on the Actions unit (P6, E12, I13).",
+				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "workflows", Query: &workflowSpec, Response: "WorkflowStat", ResponseIs: "array",
 		},
 		Handler: ListWorkflows,
@@ -99,7 +99,7 @@ func ListWorkflows(ctx *context.APIContext) {
 
 // pageOf applies the requested page to a projection. The rows are computed in process, so
 // the slice is taken here rather than in SQL; the sort is tie-broken first, so the same page
-// asked for twice holds the same rows (I5, I7).
+// asked for twice holds the same rows.
 func pageOf[T any](rows []T, q *query.Query) []T {
 	offset := q.Offset()
 	if offset >= len(rows) {

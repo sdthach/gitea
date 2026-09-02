@@ -22,7 +22,7 @@ import (
 )
 
 // The fork's integration tests run under Gitea's own harness, so they execute the way
-// upstream's do and survive a rebase (J8).
+// upstream's do and survive a rebase.
 
 // deliveryFixtureEnvironments is how many rows models/fixtures/delivery_environment.yml
 // defines at repo_id 0. Nothing about the count or the names is a fork default; an operator
@@ -45,11 +45,11 @@ func TestAPIDeliveryEnvironmentsAreListed(t *testing.T) {
 	names := make([]string, len(envs))
 	for i, env := range envs {
 		names[i] = env.Name
-		assert.Equal(t, delivery.PolicyNone, env.ApprovalPolicy, "adding the fork gates nothing until a policy is set (F5b)")
+		assert.Equal(t, delivery.PolicyNone, env.ApprovalPolicy, "adding the fork gates nothing until a policy is set")
 	}
-	assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, names, "environments render in configured order (F9)")
+	assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, names, "environments render in configured order")
 
-	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "offset-paged resources carry X-Total-Count (I7)")
+	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "offset-paged resources carry X-Total-Count")
 }
 
 func TestAPIDeliveryRejectsAnUnknownFilterField(t *testing.T) {
@@ -69,9 +69,9 @@ func TestAPIDeliveryRejectsAnUnknownFilterField(t *testing.T) {
 	}
 	DecodeJSON(t, resp, &payload)
 	assert.Equal(t, "unknown_filter_field", payload.Code)
-	assert.Contains(t, payload.Message, "colour", "the rejection names the offender (I4)")
-	assert.NotEmpty(t, payload.SuggestedAction, "every error carries a suggested next action (A21)")
-	assert.NotEmpty(t, payload.Accepted, "the rejection lists what is accepted (I4)")
+	assert.Contains(t, payload.Message, "colour", "the rejection names the offender")
+	assert.NotEmpty(t, payload.SuggestedAction, "every error carries a suggested next action")
+	assert.NotEmpty(t, payload.Accepted, "the rejection lists what is accepted")
 }
 
 func TestAPIDeliveryAppliesFiltersSortAndPaging(t *testing.T) {
@@ -101,7 +101,7 @@ func TestAPIDeliveryAppliesFiltersSortAndPaging(t *testing.T) {
 	DecodeJSON(t, resp, &paged)
 	require.Len(t, paged, 2)
 	assert.Equal(t, "uat", paged[0].Name, "page 2 of the sort-order sequence starts at the third environment")
-	assert.NotEmpty(t, resp.Header().Get("Link"), "offset paging carries an RFC 5988 Link header (I7)")
+	assert.NotEmpty(t, resp.Header().Get("Link"), "offset paging carries an RFC 5988 Link header")
 }
 
 func TestAPIDeliveryRequiresSignIn(t *testing.T) {
@@ -112,7 +112,7 @@ func TestAPIDeliveryRequiresSignIn(t *testing.T) {
 	assert.Contains(t, resp.Body.String(), "suggested_action")
 }
 
-// TestDeliveryPageIsBehindSignIn covers F13: each page sits behind reqSignIn and a settings
+// TestDeliveryPageIsBehindSignIn: each page sits behind reqSignIn and a settings
 // gate, and the page itself is a client of the API rather than a second data path.
 func TestDeliveryPageIsBehindSignIn(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -124,7 +124,7 @@ func TestDeliveryPageIsBehindSignIn(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/environments/prod")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint (E18, I14)")
+	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint")
 }
 
 // TestDeliveryEnvironmentPagesAreClientsOfTheAPI covers the editor's two screens: the list
@@ -140,7 +140,7 @@ func TestDeliveryEnvironmentPagesAreClientsOfTheAPI(t *testing.T) {
 
 	resp := session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments"), http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the list is a client of the documented endpoint (E18, I14)")
+	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the list is a client of the documented endpoint")
 	assert.Contains(t, body, `const envID = "";`, "the list screen names no single row")
 
 	resp = session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments/1/edit"), http.StatusOK)
@@ -151,7 +151,7 @@ func TestDeliveryEnvironmentPagesAreClientsOfTheAPI(t *testing.T) {
 
 // The tests below cover the repository-scoped endpoints and, with them, repoWithActions —
 // the authorization helper that resolves permission through Gitea's own check on the
-// Actions unit rather than a second model of permissions (E10, I13).
+// Actions unit rather than a second model of permissions.
 
 func TestAPIDeliveryRepoEnvironmentsFallBackToTheDefaultSet(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -182,8 +182,8 @@ func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
 	assert.Equal(t, "prod", env.Name, "environment names are identifiers, matched case-insensitively")
 	assert.Equal(t, delivery.PolicyNone, env.ApprovalPolicy)
 
-	// An unknown name is a hub error rendered through renderHubError, which carries the
-	// suggested next action A21 requires.
+	// An unknown name is a hub error rendered through renderHubError, which carries a
+	// suggested next action.
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments/nowhere").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusNotFound)
 	var failure struct {
@@ -299,7 +299,7 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 	hidden := deliveryEnvironmentRefusal(t, "user4", envs[2].ID)
 	missing := deliveryEnvironmentRefusal(t, "user4", 999999)
 	assert.Equal(t, missing.Code, hidden.Code)
-	assert.NotEmpty(t, missing.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, missing.SuggestedAction, "every error carries a suggested next action")
 }
 
 func deliveryEnvironmentRefusal(t *testing.T, login string, id int64) deliveryRefusal {
@@ -334,7 +334,8 @@ func TestAPIDeliveryRepos(t *testing.T) {
 	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"))
 }
 
-// TestAPIDeliverySecretNamesNeverCarryAValue is I12 over the wire.
+// TestAPIDeliverySecretNamesNeverCarryAValue asserts over the wire that a secret value is
+// never readable at any scope.
 func TestAPIDeliverySecretNamesNeverCarryAValue(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -355,7 +356,7 @@ func TestAPIDeliverySecretNamesNeverCarryAValue(t *testing.T) {
 	assert.Equal(t, true, names[0]["scoped"])
 	assert.Equal(t, false, names[0]["exists"], "no secret of that name is configured in this repository yet")
 	for _, forbidden := range []string{"value", "data", "secret", "plaintext"} {
-		assert.NotContains(t, names[0], forbidden, "a secret value is never readable over any endpoint at any scope (I12)")
+		assert.NotContains(t, names[0], forbidden, "a secret value is never readable over any endpoint at any scope")
 	}
 	assert.NotContains(t, resp.Body.String(), "prod-value")
 }
@@ -384,7 +385,7 @@ func TestAPIDeliveryAuthorizesThroughGiteasOwnCheck(t *testing.T) {
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "forbidden", refusal.Code)
 	assert.Contains(t, refusal.Message, "write")
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	// A repository the caller cannot see is a 404, not a 403 that would confirm it exists.
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/no-such-repo/environments").AddTokenAuth(token)
@@ -394,7 +395,7 @@ func TestAPIDeliveryAuthorizesThroughGiteasOwnCheck(t *testing.T) {
 	assert.NotEmpty(t, refusal.SuggestedAction)
 }
 
-// TestDeliveryPagesCanBeSwitchedOff is F13's settings gate: the whole feature can be turned
+// TestDeliveryPagesCanBeSwitchedOff covers the settings gate: the whole feature can be turned
 // off with one app.ini key, mirroring reqMilestonesDashboardPageEnabled.
 func TestDeliveryPagesCanBeSwitchedOff(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()

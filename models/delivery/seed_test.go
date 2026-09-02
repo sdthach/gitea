@@ -64,7 +64,7 @@ func names(envs []SeededEnvironment) []string {
 	return out
 }
 
-// TestSeedIsIdempotentAndRestoring is SC 31: starting twice seeds no duplicate row and does
+// TestSeedIsIdempotentAndRestoring: starting twice seeds no duplicate row and does
 // not overwrite an edited row; deleting a seeded row and restarting restores it.
 func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -81,7 +81,7 @@ func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	assert.Equal(t, []string{"sandbox", "live"}, envNames(first),
 		"the environment set is seeded in the order it was configured")
 	for _, env := range first {
-		assert.Equal(t, PolicyNone, env.ApprovalPolicy, "a new environment gates nothing (F5b)")
+		assert.Equal(t, PolicyNone, env.ApprovalPolicy, "a new environment gates nothing")
 		assert.EqualValues(t, 1, env.RequiredApprovals)
 		assert.False(t, env.RequireFullRelease, "and refuses no release kind")
 	}

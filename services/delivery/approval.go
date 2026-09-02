@@ -14,8 +14,7 @@ import (
 	"xorm.io/builder"
 )
 
-// CanApproveEnvironment reports whether user may approve or reject a deploy held by env
-// (F5a, F12).
+// CanApproveEnvironment reports whether user may approve or reject a deploy held by env.
 //
 // The approver set DEFAULTS to the users Gitea already permits to dispatch — write on the
 // Actions unit, which the caller resolves through Gitea's own permission check and passes
@@ -41,7 +40,7 @@ func CanApproveEnvironment(ctx context.Context, env *delivery_model.Environment,
 
 // ErrApprovalRefused marks a refusal the caller is not permitted to make, so the API answers
 // 403 rather than 500. A user the forge does not permit to approve is refused at the
-// endpoint, not merely offered no button (F5d, SC 21).
+// endpoint, not merely offered no button.
 type ErrApprovalRefused struct {
 	Err *delivery_model.Error
 }
@@ -79,8 +78,8 @@ type ApprovalDecision struct {
 // Decide records one approval or rejection.
 //
 // It is the ONLY way to release a held job: the gate reads the audit log this writes, and
-// there is no flag anywhere that says "let it through" (F5d). Every decision is an audit
-// event naming the approver, their denormalized login and the time (F5c).
+// there is no flag anywhere that says "let it through". Every decision is an audit
+// event naming the approver, their denormalized login and the time.
 func Decide(ctx context.Context, req ApprovalRequest) (*ApprovalDecision, error) {
 	if req.Approval == nil || req.Environment == nil || req.Actor == nil {
 		return nil, refuse("the approval, its environment or the acting user is missing",
@@ -219,7 +218,7 @@ func PendingApprovalRuns(ctx context.Context, repoID int64) (map[int64]bool, err
 
 // applyHeldRuns overwrites a cell that looks queued with `⏸` when the approvals table says
 // its run is still waiting on an approval. It is pure, so the second source of the held
-// state is testable with no database (J10).
+// state is testable with no database.
 //
 // It only ever narrows an in-progress cell. A cell whose last event is a success, a failure
 // or a rejection has already reached a terminal state, and a stale hold row must not repaint
@@ -240,7 +239,7 @@ func applyHeldRuns(cells map[string][]Cell, heldRuns map[int64]bool) map[string]
 	return cells
 }
 
-// ProjectCellsHeld is ProjectCells with the approvals table as `⏸`'s SECOND source (E15).
+// ProjectCellsHeld is ProjectCells with the approvals table as `⏸`'s SECOND source.
 //
 // The first source is the environment's own policy: a requested deploy into a gated
 // environment is held rather than queued. That is a projection over the log alone, and it

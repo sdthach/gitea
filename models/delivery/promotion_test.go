@@ -25,7 +25,7 @@ func TestDeliveryNormalizePromotionPolicyLowerCasesThePredecessor(t *testing.T) 
 }
 
 // TestDeliveryValidatePromotionPolicy is the write path's negative case in both directions:
-// every refusal AND the accepting case each policy shape reaches (J9).
+// every refusal AND the accepting case each policy shape reaches.
 func TestDeliveryValidatePromotionPolicy(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -34,11 +34,11 @@ func TestDeliveryValidatePromotionPolicy(t *testing.T) {
 		says    string
 	}{
 		{
-			name: "no policy at all is accepted, which is what F11's default means",
+			name: "no policy at all is accepted, which is what the default means",
 			env:  &Environment{Name: "prod"},
 		},
 		{
-			name: "a predecessor without the gate is accepted; it is a warning only (F11)",
+			name: "a predecessor without the gate is accepted; it is a warning only",
 			env:  &Environment{Name: "prod", Predecessor: "staging"},
 		},
 		{
@@ -76,7 +76,7 @@ func TestDeliveryValidatePromotionPolicy(t *testing.T) {
 			var hubErr *Error
 			require.ErrorAs(t, err, &hubErr)
 			assert.Contains(t, hubErr.Message, tc.says)
-			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 }
@@ -91,9 +91,9 @@ func TestDeliveryValidateEnvironmentAppliesThePromotionPolicy(t *testing.T) {
 	assert.Contains(t, err.Error(), "declares no predecessor")
 }
 
-// TestDeliveryOverrideEventNeedsItsReason is E17's whole point at the write path: an
+// TestDeliveryOverrideEventNeedsItsReason covers the write path: an
 // override that records no reason answers nothing the log is kept for, so AppendAuditEvent
-// refuses it. The accepting case is asserted beside it (J9).
+// refuses it. The accepting case is asserted beside it.
 func TestDeliveryOverrideEventNeedsItsReason(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 
@@ -122,7 +122,7 @@ func TestDeliveryOverrideEventNeedsItsReason(t *testing.T) {
 }
 
 // TestDeliveryEnvironmentPolicyColumnsRoundTrip measures what an upgraded database looks
-// like: Sync adds the slice 5 columns, and the JSON allowlists read back as empty when they
+// like: Sync adds the sequence-policy columns, and the JSON allowlists read back as empty when they
 // hold the NULL an existing row was given. Reading a struct tag is not measuring behaviour.
 func TestDeliveryEnvironmentPolicyColumnsRoundTrip(t *testing.T) {
 	unittest.PrepareTestEnv(t)

@@ -17,7 +17,7 @@ import (
 
 // deploymentSpec is the deployments resource's whitelist declaration. The table is
 // append-only, so it pages by cursor: an offset traversal over a table receiving concurrent
-// inserts returns rows twice and misses others (I6, I8).
+// inserts returns rows twice and misses others.
 var deploymentSpec = query.Spec{
 	Resource: "deployments",
 	Fields: []query.Field{
@@ -36,20 +36,19 @@ var deploymentSpec = query.Spec{
 	DefaultOrder: query.OrderDesc,
 	PrimaryKey:   "id",
 	SearchFields: []string{"release_tag", "environment"},
-	// approval joined the list in slice 6, which is where the approvals resource is
-	// declared. Whitelisting it before then would have published an expansion that always
-	// returned nothing, which no test could tell from a broken one.
+	// an expansion is whitelisted only once its resource is declared; before that it would
+	// always return nothing, which no test could tell from a broken one.
 	Expands: []string{"release", "audit", "approval"},
 	Paging:  query.PagingCursor,
 }
 
 // Deployment is the deployments resource's response shape: the model, plus whatever the
-// request expanded (I9).
+// request expanded.
 type Deployment struct {
 	delivery.Deployment
 	Release *Release               `json:"release,omitempty"`
 	Audit   []*delivery.AuditEvent `json:"audit,omitempty"`
-	// Approval is the hold the approval gate placed on this run, when there was one (F5).
+	// Approval is the hold the approval gate placed on this run, when there was one.
 	Approval *delivery.Approval `json:"approval,omitempty"`
 }
 
@@ -59,9 +58,9 @@ func listDeploymentsEndpoint() *endpoint {
 			ID: "listDeployments", Method: http.MethodGet, Path: "/deployments",
 			Summary: "List deployments across every repository the caller can see",
 			Description: "Append-only: deploying a release to an environment twice leaves two rows, never one upserted row, " +
-				"or the grid could not show that a version was deployed somewhere previously (E3). " +
-				"Pages by cursor; the continuation token is in the " + NextCursorHeader + " header and in Link rel=next (I6). " +
-				"Scoped by Gitea's own permission filtering on the Actions unit (E10, E12, I13).",
+				"or the grid could not show that a version was deployed somewhere previously. " +
+				"Pages by cursor; the continuation token is in the " + NextCursorHeader + " header and in Link rel=next. " +
+				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "deployments", Query: &deploymentSpec, Response: "Deployment", ResponseIs: "array",
 		},
 		Handler: ListDeployments,
@@ -122,7 +121,7 @@ func deploymentSortValue(column string, d *delivery.Deployment) any {
 	return int64(d.CreatedUnix)
 }
 
-// expandDeployments fills the whitelisted sub-resources, one level deep (I9).
+// expandDeployments fills the whitelisted sub-resources, one level deep.
 func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deployment) error {
 	if len(rows) == 0 || len(expand) == 0 {
 		return nil
@@ -165,7 +164,7 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 }
 
 // accessibleRepoIDs resolves the repositories the caller can see, through Gitea's existing
-// permission filtering on the Actions unit — the same filter the grid uses (E10, E12, I13).
+// permission filtering on the Actions unit — the same filter the grid uses.
 func accessibleRepoIDs(ctx *context.APIContext) ([]int64, bool) {
 	ids, err := repo_model.SearchRepositoryIDsByCondition(ctx,
 		repo_model.AccessibleRepositoryCondition(ctx.Doer, unit.TypeActions))

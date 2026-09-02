@@ -1,8 +1,7 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Package approvalgate is the seam models/actions/task.go delegates job assignment through
-// (F5e, F2).
+// Package approvalgate is the seam models/actions/task.go delegates job assignment through.
 //
 // It is deliberately a LEAF: it imports nothing of Gitea's. models/delivery imports
 // models/actions (secret.go and jobenv.go both take an *actions_model.ActionRunJob), so a
@@ -40,7 +39,7 @@ func Register(f HeldFunc) {
 // Held is the question CreateTaskForRunner asks of every candidate job.
 //
 // With NO gate registered it answers false. That is stock Gitea with the fork absent, which
-// must claim jobs exactly as it does today (SC 21). With a gate registered, failing closed
+// must claim jobs exactly as it does today. With a gate registered, failing closed
 // is the gate's own responsibility, not this dispatcher's.
 func Held(ctx context.Context, repoID, jobID int64) bool {
 	f := registered.Load()

@@ -28,9 +28,8 @@ func requestBody(t *testing.T, req *http.Request) string {
 	return string(raw)
 }
 
-// TestDeliveryDeployAndRollbackComposeTheIdenticalRequest is the slice's own success
-// criterion: rolling back is deploying a prior release tag, so the two commands compose the
-// same request and differ only in the tag. A second dispatch path would fail this.
+// TestDeliveryDeployAndRollbackComposeTheIdenticalRequest: rolling back is deploying a
+// prior release tag, so the two commands compose the same request and differ only in the tag. A second dispatch path would fail this.
 func TestDeliveryDeployAndRollbackComposeTheIdenticalRequest(t *testing.T) {
 	args := func(command, tag string) []string {
 		return []string{command, "--repo", "acme/web", "--environment", "prod", "--release-tag", tag, "--confirm"}
@@ -77,8 +76,8 @@ func TestDeliveryDeployAndRollbackComposeTheIdenticalRequest(t *testing.T) {
 		"body members are written in sorted order")
 }
 
-// TestDeliveryDeployWithoutConfirmSendsTheFirstStep covers E14 at the CLI: the default is
-// the plan, and nothing is dispatched until --confirm is given. The two-step is the server's
+// TestDeliveryDeployWithoutConfirmSendsTheFirstStep covers the CLI's half of the two-step
+// deploy: the default is a plan, and nothing is dispatched until --confirm is given. It is the server's
 // rule, so the CLI expresses it rather than enforcing a second copy of it.
 func TestDeliveryDeployWithoutConfirmSendsTheFirstStep(t *testing.T) {
 	rec := &recorder{body: `{"outcome":"warn","confirmed":false}`}
@@ -94,7 +93,7 @@ func TestDeliveryDeployWithoutConfirmSendsTheFirstStep(t *testing.T) {
 }
 
 // TestDeliveryOverrideReasonIsSentVerbatim: the reason reaches the API, which is what puts
-// it on the audit log (E17). The CLI holds no copy of the rule that demands it.
+// it on the audit log. The CLI holds no copy of the rule that demands it.
 func TestDeliveryOverrideReasonIsSentVerbatim(t *testing.T) {
 	rec := &recorder{body: "{}", status: http.StatusCreated}
 	withRecorder(t, rec)
@@ -108,7 +107,7 @@ func TestDeliveryOverrideReasonIsSentVerbatim(t *testing.T) {
 }
 
 // TestDeliveryDeployNamesItsMissingArguments: a request the endpoint would refuse is refused
-// before the round-trip, naming what is missing and how to call it (A21).
+// before the round-trip, naming what is missing and how to call it.
 func TestDeliveryDeployNamesItsMissingArguments(t *testing.T) {
 	rec := &recorder{body: "{}"}
 	withRecorder(t, rec)
@@ -122,7 +121,7 @@ func TestDeliveryDeployNamesItsMissingArguments(t *testing.T) {
 	assert.Empty(t, rec.requests, "nothing was sent")
 }
 
-// TestDeliveryCLIRefusalCarriesTheAPIsOwnAction covers K6: a deploy the API refuses is
+// TestDeliveryCLIRefusalCarriesTheAPIsOwnAction: a deploy the API refuses is
 // refused at the CLI with the API's own words, and the CLI applies no rule of its own.
 func TestDeliveryCLIRefusalCarriesTheAPIsOwnAction(t *testing.T) {
 	rec := &recorder{

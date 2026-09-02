@@ -39,7 +39,7 @@ var environmentBodyParams = []Param{
 	{Name: "sort_order", In: "body", Type: "integer", Description: "Render order."},
 	{Name: "approval_policy", In: "body", Type: "string", Description: "Approval policy. Defaults to none.", Enum: delivery.ApprovalPolicies},
 	{Name: "required_approvals", In: "body", Type: "integer", Description: "Approvals needed. Defaults to 1."},
-	{Name: "predecessor", In: "body", Type: "string", Description: "Environment a release must pass through first (E17)."},
+	{Name: "predecessor", In: "body", Type: "string", Description: "Environment a release must pass through first."},
 	{Name: "require_predecessor", In: "body", Type: "boolean", Description: "Gate when the predecessor hasn't held the release."},
 	{Name: "require_full_release", In: "body", Type: "boolean", Description: "Refuse prereleases; this environment takes finished releases only."},
 	{Name: "block_admin_override", In: "body", Type: "boolean", Description: "Block repo admin from bypassing the gate."},

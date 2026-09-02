@@ -9,7 +9,7 @@ import (
 )
 
 // tokenSources is the credential precedence, matching what ccpm's detect.sh resolves, so
-// one token serves the adapter and the CLI. The CLI stores nothing new (K8, B4).
+// one token serves the adapter and the CLI. The CLI stores nothing new.
 var tokenSources = []string{"GITEA_DELIVERY_TOKEN", "FORGE_TOKEN", "GITEA_TOKEN"}
 
 // serverSources is the same idea for the base URL.

@@ -71,7 +71,7 @@ func TestDeliveryRecordsForRun(t *testing.T) {
 		require.True(t, ok)
 
 		assert.Equal(t, "prod", deployment.Environment)
-		assert.Equal(t, "v1.2.3", deployment.ReleaseTag, "a deployment points at a release tag, never a parsed version string (D1)")
+		assert.Equal(t, "v1.2.3", deployment.ReleaseTag, "a deployment points at a release tag, never a parsed version string")
 		assert.Equal(t, int64(4242), deployment.RunID)
 		assert.Equal(t, "success", deployment.Status)
 		assert.Empty(t, deployment.Branch)
@@ -79,13 +79,13 @@ func TestDeliveryRecordsForRun(t *testing.T) {
 		assert.Equal(t, delivery_model.AuditSucceeded, audit.Event)
 		assert.Equal(t, delivery_model.SourceNotifier, audit.Source)
 		assert.Equal(t, int64(2), audit.ActorID)
-		assert.Equal(t, "user2", audit.ActorLogin, "the login is denormalized so deleting the user does not erase who deployed (SC 19)")
+		assert.Equal(t, "user2", audit.ActorLogin, "the login is denormalized so deleting the user does not erase who deployed")
 		assert.Equal(t, int64(1700), int64(audit.OccurredUnix))
 		assert.Equal(t, deployment.RunURL, audit.RunURL)
 	})
 
 	t.Run("a push-triggered run is recorded by the same hook with source notifier", func(t *testing.T) {
-		// E11: one code path, so the grid is complete by construction rather than by
+		// One code path, so the grid is complete by construction rather than by
 		// reconciliation. Nothing in the input says who started it.
 		run := deployRun("deploy-qa.yaml", "refs/tags/v2", actions_model.StatusRunning)
 		run.TriggerUser = &user_model.User{ID: 4, Name: "user4"}
@@ -105,7 +105,7 @@ func TestDeliveryRecordsForRun(t *testing.T) {
 
 	t.Run("a deploy dispatched against a branch records nothing", func(t *testing.T) {
 		_, _, ok := RecordsForRun(repo, sender, deployRun("deploy-prod.yaml", "refs/heads/main", actions_model.StatusSuccess))
-		assert.False(t, ok, "a deploy with no release identity has nothing to place in the grid (D1, D5)")
+		assert.False(t, ok, "a deploy with no release identity has nothing to place in the grid")
 	})
 
 	t.Run("an unmapped run status records nothing", func(t *testing.T) {

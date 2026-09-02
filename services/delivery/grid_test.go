@@ -17,7 +17,7 @@ func event(at int64, release, environment, name string) Event {
 	return Event{ID: at, OccurredUnix: at, ReleaseTag: release, Environment: environment, Event: name, RunID: at}
 }
 
-// TestDeliveryGridCellStatePerEventSequence is J5's table: one cell state per event
+// TestDeliveryGridCellStatePerEventSequence: one cell state per event
 // sequence, including ⏸ and ✔ ×N. Every state is projected; none is stored.
 func TestDeliveryGridCellStatePerEventSequence(t *testing.T) {
 	cases := []struct {
@@ -116,8 +116,9 @@ func TestDeliveryGridCellStatePerEventSequence(t *testing.T) {
 	}
 }
 
-// TestDeliveryGridProjectsSC14 is SC 14 exactly: v1 to qa, v2 to qa, v1 to qa.
-func TestDeliveryGridProjectsSC14(t *testing.T) {
+// TestDeliveryGridProjectsRepeatDeploys covers the repeat sequence exactly: v1 to qa, v2 to
+// qa, v1 to qa.
+func TestDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 	events := []Event{
 		event(10, "v1", "qa", delivery_model.AuditSucceeded),
 		event(20, "v2", "qa", delivery_model.AuditSucceeded),
@@ -142,7 +143,7 @@ func TestDeliveryGridColumnsFollowConfiguredOrder(t *testing.T) {
 	require.Len(t, cells["v1"], 3)
 	assert.Equal(t, []string{"dev", "qa", "prod"},
 		[]string{cells["v1"][0].Environment, cells["v1"][1].Environment, cells["v1"][2].Environment},
-		"environment sequence is configuration; nothing in Gitea expresses it (E7)")
+		"environment sequence is configuration; nothing in Gitea expresses it")
 	assert.Equal(t, "·", cells["v1"][0].Symbol)
 	assert.Equal(t, "·", cells["v1"][1].Symbol)
 	assert.Equal(t, "✔ now", cells["v1"][2].Symbol)
@@ -195,7 +196,7 @@ func TestDeliveryGridCarriesTheRunLink(t *testing.T) {
 	}}
 	cell := ProjectCells([]string{"qa"}, []string{"v1"}, events, nil)["v1"][0]
 
-	assert.Equal(t, int64(77), cell.RunID, "a cell opens its run (E8)")
+	assert.Equal(t, int64(77), cell.RunID, "a cell opens its run")
 	assert.Equal(t, "https://gitea.example.com/o/r/actions/runs/77", cell.RunURL)
 	assert.Equal(t, int64(5), cell.OccurredUnix)
 }

@@ -3,8 +3,8 @@
 
 //go:build ignore
 
-// delivery-spoke-check enforces F2: every edit the fork makes to an upstream file is a
-// single-line delegation into the hub. It diffs the working tree against the upstream pin
+// delivery-spoke-check enforces the spoke rule: every edit the fork makes to an upstream
+// file is a single-line delegation into the hub. It diffs the working tree against the upstream pin
 // and fails on any upstream file that is neither a declared spoke nor a declared override, on any spoke over its line
 // budget, and on any deleted line — a rewritten upstream line is not a delegation.
 //
@@ -20,7 +20,7 @@ import (
 	"strings"
 )
 
-// defaultPin is the upstream commit the fork branches from (F8).
+// defaultPin is the upstream commit the fork branches from.
 const defaultPin = "ee8f2b4039ef"
 
 // spoke is one permitted upstream edit. Budget counts inserted lines; a delegation needs
@@ -31,19 +31,19 @@ type spoke struct {
 }
 
 var spokes = map[string]spoke{
-	"routers/init.go":                  {4, "hub mount (F3/F6/M5) and API namespace mount (F3), each one call plus its import"},
-	"routers/web/web.go":               {2, "web route registration beside /milestones (F13), one call plus its import"},
-	"models/secret/secret.go":          {2, "secret narrowing tail call in GetSecretsOfTask (F4), one call plus its import"},
-	"templates/base/head_navbar.tmpl":  {1, "one navigation entry delegating to a hub template (F13)"},
-	"templates/repo/release/list.tmpl": {1, "one line delegating to a hub template that badges each release with the environments holding it (SC13)"},
-	"templates/projects/view.tmpl":     {2, "one swimlane block delegating to a hub template (D2), plus the blank line separating it"},
-	"routers/web/repo/projects.go":     {2, "the swimlane feature flag in the project page's data (D2), one assignment plus its import"},
-	"models/unit/unit.go":              {1, "at most one unit enum entry (F2); unused at slice 3"},
+	"routers/init.go":                  {4, "hub mount and API namespace mount, each one call plus its import"},
+	"routers/web/web.go":               {2, "web route registration beside /milestones, one call plus its import"},
+	"models/secret/secret.go":          {2, "secret narrowing tail call in GetSecretsOfTask, one call plus its import"},
+	"templates/base/head_navbar.tmpl":  {1, "one navigation entry delegating to a hub template"},
+	"templates/repo/release/list.tmpl": {1, "one line delegating to a hub template that badges each release with the environments holding it"},
+	"templates/projects/view.tmpl":     {2, "one swimlane block delegating to a hub template, plus the blank line separating it"},
+	"routers/web/repo/projects.go":     {2, "the swimlane feature flag in the project page's data, one assignment plus its import"},
+	"models/unit/unit.go":              {1, "at most one unit enum entry"},
 	// The other spokes are tail calls, which are one statement and so one line. This one is
 	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
 	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if
 	// body unconditionally). Import plus guard is therefore four, not two.
-	"models/actions/task.go": {4, "task-assignment gate (F5e), added by slice 6: one import plus a three-line `if ... { continue }` guard"},
+	"models/actions/task.go": {4, "task-assignment gate: one import plus a three-line `if ... { continue }` guard"},
 	".gitignore":             {4, "ignores the planning directory and the generated theme preview, with the preview's comment and separator; carries no fork logic"},
 	"Makefile":               {2, "one -include line per spoke makefile, Makefile.delivery and Makefile.themes, so neither adds a target to it"},
 }

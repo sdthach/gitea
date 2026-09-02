@@ -140,7 +140,7 @@ function render(board) {
 		const laneCell = document.createElement('th');
 		laneCell.textContent = lane.label;
 		if (lane.is_empty_value) {
-			// O3: the empty-value lane is explicit. It reads as a fact about the issues,
+			// The empty-value lane is explicit. It reads as a fact about the issues,
 			// not as a blank row.
 			laneCell.append(Object.assign(document.createElement('div'), {
 				className: 'tw-text-12',

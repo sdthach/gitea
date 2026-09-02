@@ -22,9 +22,9 @@ import (
 // approvalSpec is the approvals resource's whitelist declaration.
 //
 // A hold is one row per held job and nothing rewrites it, so the set is finite and stable
-// and pages by page+limit rather than by cursor (I7). `state` is NOT a filterable field: it
+// and pages by page+limit rather than by cursor. `state` is NOT a filterable field: it
 // is projected from the append-only audit log at render time, so there is no column to put
-// in a WHERE clause (E15).
+// in a WHERE clause.
 var approvalSpec = query.Spec{
 	Resource: "approvals",
 	Fields: []query.Field{
@@ -57,10 +57,10 @@ type Approval struct {
 	ApprovalsCount    int64  `json:"approvals_count"`
 	RequiredApprovals int64  `json:"required_approvals"`
 	// AgeSeconds is how long the deploy has been held, which is what the pending list
-	// sorts a reviewer's attention by (E16).
+	// sorts a reviewer's attention by.
 	AgeSeconds int64 `json:"age_seconds"`
 	// CanApprove is the calling user's own authorization, resolved by the same check the
-	// endpoint enforces, so a view offers no action it would be refused for (SC 21).
+	// endpoint enforces, so a view offers no action it would be refused for.
 	CanApprove bool                 `json:"can_approve"`
 	Deployment *delivery.Deployment `json:"deployment,omitempty"`
 }
@@ -75,10 +75,10 @@ func listApprovalsEndpoint() *endpoint {
 			ID: "listApprovals", Method: http.MethodGet, Path: "/approvals",
 			Summary: "List held deploys and their approval state",
 			Description: "One row per deploy the approval gate is holding, each carrying the state projected over the " +
-				"append-only audit log: pending, approved or rejected (F5, E15, E16). A row whose state is pending is " +
+				"append-only audit log: pending, approved or rejected. A row whose state is pending is " +
 				"waiting for an approver; can_approve says whether the calling user is one of them, resolved by the same " +
-				"check the approve endpoint enforces (SC 21). The environment view and the grid are clients of this " +
-				"endpoint (E18, I14). Finite and stable, so it pages by page+limit (I7).",
+				"check the approve endpoint enforces. The environment view and the grid are clients of this " +
+				"endpoint. Finite and stable, so it pages by page+limit.",
 			Tag: "approvals", Query: &approvalSpec, Response: "Approval", ResponseIs: "array",
 		},
 		Handler: ListApprovals,
@@ -90,10 +90,10 @@ func approveEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "approve", Method: http.MethodPost, Path: "/approvals/{id}/approve",
 			Summary: "Approve a held deploy",
-			Description: "Appends an approval to the audit log naming the approver and the time (F5c), which is the only " +
+			Description: "Appends an approval to the audit log naming the approver and the time, which is the only " +
 				"thing that releases the held job — there is no flag anywhere that says let it through, and no CLI path " +
-				"around the gate (F5d, K6). A user the forge does not permit to approve is refused HERE with 403, not " +
-				"merely offered no button (SC 21). Under others_only the requester's own approval is refused.",
+				"around the gate. A user the forge does not permit to approve is refused HERE with 403, not " +
+				"merely offered no button. Under others_only the requester's own approval is refused.",
 			Tag: "approvals", PathParams: approvalIDParam, Response: "Approval", ResponseIs: "object",
 		},
 		Handler: ApproveApproval,
@@ -106,7 +106,7 @@ func rejectEndpoint() *endpoint {
 			ID: "reject", Method: http.MethodPost, Path: "/approvals/{id}/reject",
 			Summary: "Reject a held deploy",
 			Description: "Ends the deploy: the run does not proceed later, and the rejection is an audit event naming the " +
-				"approver and the time (F5c, SC 20). Authorized by the same check as approve (SC 21).",
+				"approver and the time. Authorized by the same check as approve.",
 			Tag: "approvals", PathParams: approvalIDParam, Response: "Approval", ResponseIs: "object",
 		},
 		Handler: RejectApproval,
@@ -180,7 +180,7 @@ func approvalPolicyOf(ctx *context.APIContext, a *delivery.Approval) string {
 }
 
 // callerMayApprove answers the same question the approve endpoint enforces, so a view never
-// offers an action that would be refused (SC 21).
+// offers an action that would be refused.
 func callerMayApprove(ctx *context.APIContext, repoID int64, environment string) bool {
 	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 	if err != nil {
@@ -197,7 +197,7 @@ func callerMayApprove(ctx *context.APIContext, repoID int64, environment string)
 	return delivery_service.CanApproveEnvironment(ctx, env, ctx.Doer, perm.IsAdmin(), perm.CanWrite(unit.TypeActions))
 }
 
-// expandApprovals fills the whitelisted sub-resources, one level deep (I9).
+// expandApprovals fills the whitelisted sub-resources, one level deep.
 func expandApprovals(ctx *context.APIContext, expand []string, rows []*Approval) error {
 	if len(rows) == 0 || len(expand) == 0 {
 		return nil

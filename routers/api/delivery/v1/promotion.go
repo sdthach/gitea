@@ -22,7 +22,7 @@ import (
 const maxPromotionBody = 16 << 10
 
 // promotionBody is POST /deployments. Deploy and rollback send the same shape and differ
-// only in release_tag: rolling back is deploying a prior release, not a second path (E14).
+// only in release_tag: rolling back is deploying a prior release, not a second path.
 type promotionBody struct {
 	Repo           string `json:"repo"`
 	Environment    string `json:"environment"`
@@ -34,9 +34,9 @@ type promotionBody struct {
 var promotionBodyParams = []Param{
 	{Name: "repo", In: "body", Type: "string", Required: true, Description: "Target repository as owner/name."},
 	{Name: "environment", In: "body", Type: "string", Required: true, Description: "Target environment, for example prod."},
-	{Name: "release_tag", In: "body", Type: "string", Required: true, Description: "Release tag to deploy. A prior tag is a rollback; it is the same request (E14)."},
-	{Name: "override_reason", In: "body", Type: "string", Description: "Why the environment's sequence rule is being bypassed. Required when the plan reports outcome \"override\"; it is written to the audit log (E17)."},
-	{Name: "confirm", In: "body", Type: "boolean", Description: "False, the default, returns the plan and dispatches nothing — the first of E14's two steps. True dispatches."},
+	{Name: "release_tag", In: "body", Type: "string", Required: true, Description: "Release tag to deploy. A prior tag is a rollback; it is the same request."},
+	{Name: "override_reason", In: "body", Type: "string", Description: "Why the environment's sequence rule is being bypassed. Required when the deploy plan reports outcome \"override\"; it is written to the audit log."},
+	{Name: "confirm", In: "body", Type: "boolean", Description: "False, the default, returns the deploy plan and dispatches nothing — the first of the two confirm steps. True dispatches."},
 }
 
 func createDeploymentEndpoint() *endpoint {
@@ -44,19 +44,19 @@ func createDeploymentEndpoint() *endpoint {
 		Op: &Operation{
 			ID: "createDeployment", Method: http.MethodPost, Path: "/deployments",
 			Summary: "Plan or dispatch a deploy of a release to an environment",
-			Description: "Two steps (E14). With confirm false — the default — nothing is dispatched and the response names the " +
+			Description: "Two steps. With confirm false — the default — nothing is dispatched and the response names the " +
 				"target environment, the release tag, the release currently live there, and what the environment's sequence " +
 				"rule decided. With confirm true the environment's deploy workflow is dispatched at the release tag, as the " +
 				"calling user, so Gitea names the human who asked. " +
 				"Rolling back is this same call with a prior release tag; there is no separate rollback path. " +
 				"An environment that sets require_predecessor refuses a release its predecessor has never held, unless the " +
 				"caller can bypass — the same helper and the same allowlist fields branch protection uses — in which case the " +
-				"override and its reason are appended to the audit log (E17, F10, F12). " +
-				"Authorized by Gitea's own write check on the Actions unit (E10, I13).",
+				"override and its reason are appended to the audit log. " +
+				"Authorized by Gitea's own write check on the Actions unit.",
 			Tag: "deployments", Body: promotionBodyParams,
 			// deploy and rollback are one operation: the request they compose is identical
 			// but for release_tag, so publishing two endpoints would publish two ways to
-			// reach one rule (K6).
+			// reach one rule.
 			CLINames: []string{"deploy", "rollback"},
 			Response: "Promotion", ResponseIs: "object",
 		},
@@ -66,7 +66,7 @@ func createDeploymentEndpoint() *endpoint {
 
 // CreateDeployment answers POST /deployments. It is the only write path the API exposes onto
 // the deployment tables, and it reaches the dispatch through services/delivery.Promote, the
-// same call the page and the CLI make — there is no path around the sequence rule (K6).
+// same call the page and the CLI make — there is no path around the sequence rule.
 func CreateDeployment(ctx *context.APIContext) {
 	body, ok := readPromotionBody(ctx)
 	if !ok {
@@ -93,8 +93,8 @@ func CreateDeployment(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	// The same check the rest of Gitea makes for dispatching a workflow, applied in process
-	// (E10, I13). A CLI deploy is refused exactly where the grid refuses.
+	// The same check the rest of Gitea makes for dispatching a workflow, applied in process.
+	// A CLI deploy is refused exactly where the grid refuses.
 	if !perm.CanWrite(unit.TypeActions) {
 		apiError(ctx, http.StatusForbidden, "forbidden",
 			"your account has no write access to the Actions unit of "+repo.FullName(),
@@ -123,7 +123,7 @@ func CreateDeployment(ctx *context.APIContext) {
 	switch {
 	case result.Outcome == delivery_service.OutcomeRefuse:
 		// A refusal is the rule speaking, not a malformed request, so it renders as the
-		// permission answer it is — with the action that would make it succeed (A21).
+		// permission answer it is — with the action that would make it succeed.
 		ctx.JSON(http.StatusForbidden, result)
 	case body.Confirm && result.RequiresOverrideReason && !result.Confirmed:
 		ctx.JSON(http.StatusBadRequest, result)

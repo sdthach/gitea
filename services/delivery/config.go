@@ -3,7 +3,7 @@
 
 // Package delivery holds the fork's service layer. It reads its own configuration section
 // rather than adding a field to an upstream settings struct, which would be a second edit
-// to an upstream file (F2).
+// to an upstream file.
 package delivery
 
 import (
@@ -17,7 +17,7 @@ const SettingSection = delivery_model.SettingSection
 
 // PagesEnabled reports whether the delivery pages are served. It mirrors
 // reqMilestonesDashboardPageEnabled's shape, so the whole feature can be switched off with
-// one app.ini key (F13):
+// one app.ini key:
 //
 //	[delivery]
 //	ENABLE_PAGES = false

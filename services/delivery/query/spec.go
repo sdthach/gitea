@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 // Package query implements the one query grammar every /api/delivery/v1 list endpoint
-// answers (I2-I10). A resource declares its own whitelists in a Spec; it never restates
+// answers. A resource declares its own whitelists in a Spec; it never restates
 // the grammar.
 package query
 
 import "slices"
 
-// Op is a filter operator (I3).
+// Op is a filter operator.
 type Op string
 
 const (
@@ -22,7 +22,7 @@ const (
 	OpContains Op = "contains"
 )
 
-// AllOps is the complete operator set, in the order I3 lists it.
+// AllOps is the complete operator set.
 var AllOps = []Op{OpEq, OpNe, OpLt, OpLte, OpGt, OpGte, OpIn, OpContains}
 
 func opNames(ops []Op) []string {
@@ -33,7 +33,7 @@ func opNames(ops []Op) []string {
 	return names
 }
 
-// Kind is the value type of a filterable field. Only the types M3 allows appear here.
+// Kind is the value type of a filterable field. Only the filterable value types appear here.
 type Kind int
 
 const (
@@ -91,17 +91,17 @@ func (f Field) ops() []Op {
 func (f Field) allows(op Op) bool { return slices.Contains(f.ops(), op) }
 
 // Paging is the pagination form a resource uses. Cursor and Offset are the only
-// two forms; inventing a third breaks every existing Gitea client (I8).
+// two forms; inventing a third breaks every existing Gitea client.
 type Paging int
 
 const (
-	// PagingOffset is 1-based page + limit, with X-Total-Count and RFC 5988 Link (I7).
+	// PagingOffset is 1-based page + limit, with X-Total-Count and RFC 5988 Link.
 	PagingOffset Paging = iota
-	// PagingCursor is limit + opaque cursor, for append-only resources only (I6).
+	// PagingCursor is limit + opaque cursor, for append-only resources only.
 	PagingCursor
 )
 
-// Limits shared by every resource (I7).
+// Limits shared by every resource.
 const (
 	DefaultLimit = 50
 	MaxLimit     = 200
@@ -116,10 +116,10 @@ type Spec struct {
 	DefaultSort  string   // natural order; empty means PrimaryKey
 	DefaultOrder string   // "asc" or "desc"; empty means "asc"
 	// PrimaryKey is the column every sort is tie-broken on. Without it pagination
-	// repeats and skips rows (I5), so Parse refuses a Spec that omits it.
+	// repeats and skips rows, so Parse refuses a Spec that omits it.
 	PrimaryKey   string
-	SearchFields []string // columns ?q= searches (I10)
-	Expands      []string // whitelisted sub-resources (I9)
+	SearchFields []string // columns ?q= searches
+	Expands      []string // whitelisted sub-resources
 	Paging       Paging
 }
 

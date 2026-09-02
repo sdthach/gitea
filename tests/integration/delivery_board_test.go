@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The fork's integration tests run under Gitea's own harness (J8). Every name carries
+// The fork's integration tests run under Gitea's own harness. Every name carries
 // "Delivery", which is the one pattern `make delivery-integration` selects on.
 
 // boardPayload is the shape GET /board answers with, reduced to what these tests assert.
@@ -108,7 +108,7 @@ func getBoard(t *testing.T, token, query string) boardPayload {
 	return board
 }
 
-// TestAPIDeliveryBoardRendersLanesOverGiteasColumns is O1: the columns are Gitea's own and
+// TestAPIDeliveryBoardRendersLanesOverGiteasColumns: the columns are Gitea's own and
 // the lanes are a rendering over rows it already returns. Nothing is stored to make a lane.
 func TestAPIDeliveryBoardRendersLanesOverGiteasColumns(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -133,7 +133,7 @@ func TestAPIDeliveryBoardRendersLanesOverGiteasColumns(t *testing.T) {
 		"a card with no column lands in the default column, not off the board")
 }
 
-// TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic is SC 37's first half, over the wire.
+// TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic covers the three groupings over the wire.
 func TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -158,7 +158,7 @@ func TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 	assert.Equal(t, "user1", laneOf(t, byAssignee, 1))
 }
 
-// TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane is O3/SC 37: nothing disappears from
+// TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane: nothing disappears from
 // a board because a field is unset.
 func TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -186,7 +186,7 @@ func TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane(t *testing.T) {
 	assert.Positive(t, last.Cards)
 }
 
-// TestAPIDeliveryBoardRefusesAnUnknownGrouping is I4: the rejection names the offender and
+// TestAPIDeliveryBoardRefusesAnUnknownGrouping: the rejection names the offender and
 // lists what is accepted, rather than falling back to a board nobody asked for.
 func TestAPIDeliveryBoardRefusesAnUnknownGrouping(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -200,11 +200,11 @@ func TestAPIDeliveryBoardRefusesAnUnknownGrouping(t *testing.T) {
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "unknown_grouping", refusal.Code)
 	assert.Contains(t, refusal.Message, "milestone")
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	assert.Contains(t, refusal.Accepted, "assignee")
 }
 
-// TestAPIDeliveryBoardPerformsExactlyTwoWrites is O4/SC 37: a card moved between columns and
+// TestAPIDeliveryBoardPerformsExactlyTwoWrites: a card moved between columns and
 // a card moved between lanes, the second rewriting the underlying label.
 func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -251,7 +251,7 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	assert.NotContains(t, names, "type:task", "a card never carries two labels of the same grouping")
 }
 
-// TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff is O4/SC 37: with grouping off there
+// TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff: with grouping off there
 // is nothing to write, and the refusal says which write does still work.
 func TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -266,12 +266,12 @@ func TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff(t *testing.T) {
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
 		assert.Contains(t, refusal.Message, "not grouped")
-		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 		assert.Contains(t, refusal.SuggestedAction, "COLUMNS")
 	}
 }
 
-// TestDeliveryBoardDegradesWhileTheTimelineStillRenders is SC 38: against a repository whose
+// TestDeliveryBoardDegradesWhileTheTimelineStillRenders: against a repository whose
 // Projects unit is absent the board states the reason, and the timeline renders from the same
 // dataset — the two views are independently deliverable.
 //
@@ -293,7 +293,7 @@ func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "projects_unavailable", refusal.Code)
 	assert.Contains(t, refusal.Message, repo.FullName())
-	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it")
 	assert.Contains(t, refusal.SuggestedAction, "/timeline",
 		"the reason points at the view that still works")
 
@@ -399,7 +399,7 @@ type timelinePayload struct {
 	} `json:"unmanaged"`
 }
 
-// TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource is SC 39 over the wire: a task
+// TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource, over the wire: a task
 // with a recorded start and a close time draws from actuals; one with neither draws from
 // created plus estimate and is marked inferred; each bar names its start and end source.
 func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
@@ -436,8 +436,8 @@ func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	bars := map[int64]int{}
 	for i, bar := range payload.Bars {
 		bars[bar.IssueID] = i
-		assert.NotEmpty(t, bar.StartSource, "every bar names its start source (O8)")
-		assert.NotEmpty(t, bar.EndSource, "every bar names its end source (O8)")
+		assert.NotEmpty(t, bar.StartSource, "every bar names its start source")
+		assert.NotEmpty(t, bar.EndSource, "every bar names its end source")
 	}
 	require.Contains(t, bars, int64(1))
 	require.Contains(t, bars, int64(5))
@@ -451,15 +451,14 @@ func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	guess := payload.Bars[bars[5]]
 	assert.Equal(t, "issue_created", guess.StartSource)
 	assert.Equal(t, "effort_estimate", guess.EndSource)
-	assert.True(t, guess.EndInferred, "an inferred end is distinguishable from a recorded one (O8)")
+	assert.True(t, guess.EndInferred, "an inferred end is distinguishable from a recorded one")
 
 	require.NotEmpty(t, payload.Spans)
 	assert.Equal(t, "epic", payload.Spans[0].Kind)
 	assert.Equal(t, "checkout", payload.Spans[0].Key)
 }
 
-// TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason is SC 39/O10: never a fabricated
-// bar.
+// TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason: never a fabricated bar.
 func TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -475,11 +474,11 @@ func TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	require.NotEmpty(t, payload.Unmanaged, "the issues are listed rather than dropped")
 	for _, item := range payload.Unmanaged {
 		assert.Contains(t, item.Reason, "ccpm does not manage this issue")
-		assert.NotEmpty(t, item.SuggestedAction, "every error carries a suggested next action (A21)")
+		assert.NotEmpty(t, item.SuggestedAction, "every error carries a suggested next action")
 	}
 }
 
-// TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint is O9/N9: they do not read
+// TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint: they do not read
 // the same on a schedule, so they are not the same arrow.
 func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -527,8 +526,8 @@ func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) 
 	assert.False(t, sequencing, "sequencing is enforced by nothing")
 }
 
-// TestAPIDeliveryBoardRefusesBothWritesWithoutPermission is E10/I13 for the only two
-// operations in this slice that mutate a user's data.
+// TestAPIDeliveryBoardRefusesBothWritesWithoutPermission covers the only two board
+// operations that mutate a user's data.
 //
 // The happy-path test proves the writes HAPPEN; this proves they are REFUSED, which is the
 // half a permission guard actually exists for. Both refusals are checked twice: the status
@@ -586,7 +585,7 @@ func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 			assert.Equal(t, "forbidden", refusal.Code)
 			assert.Contains(t, refusal.Message, tc.unit, "the refusal names the unit it wanted")
 			assert.Contains(t, refusal.Message, "user2/repo1")
-			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+			assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 		})
 	}
 
@@ -633,7 +632,7 @@ func TestAPIDeliveryBoardRefusesAReadOfARepositoryTheCallerCannotSee(t *testing.
 		"a private repository's existence is hidden rather than reported as forbidden")
 	assert.NotContains(t, refusal.Message, "Projects",
 		"the refusal discloses nothing about how the repository is configured")
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	// The same board, to a member of the org, answers — so the refusal is about the caller
 	// and not about the board being broken.
@@ -643,7 +642,7 @@ func TestAPIDeliveryBoardRefusesAReadOfARepositoryTheCallerCannotSee(t *testing.
 }
 
 // TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead is the timeline's own guard:
-// the chart is scoped by Gitea's permission check on the Issues unit (E12, I13).
+// the chart is scoped by Gitea's permission check on the Issues unit.
 //
 // It answers 403 where the board answers 404, because the timeline has no visibility
 // pre-check of its own — the Issues unit read IS its visibility check.
@@ -659,7 +658,7 @@ func TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead(t *testing.T) 
 	assert.Equal(t, "forbidden", refusal.Code)
 	assert.Contains(t, refusal.Message, "Issues unit")
 	assert.Contains(t, refusal.Message, "org3/repo3")
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	// A member of the org reads the same chart.
 	memberToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
@@ -685,7 +684,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
 		assert.Equal(t, tc.code, refusal.Code, "GET %s", tc.path)
-		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	}
 
 	// A repository id that resolves to nothing, and a board that belongs to another
@@ -701,7 +700,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
 		assert.Equal(t, tc.code, refusal.Code, "GET %s", tc.path)
-		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	}
 }
 
@@ -733,7 +732,7 @@ func TestAPIDeliveryBoardWriteRefusesAMalformedRequest(t *testing.T) {
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
 		assert.Equal(t, tc.code, refusal.Code, "POST %s with %v", tc.path, tc.body)
-		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+		assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	}
 }
 
@@ -750,11 +749,11 @@ func TestAPIDeliveryTimelineRefusesAnUnknownState(t *testing.T) {
 	assert.Equal(t, "unknown_state", refusal.Code)
 	assert.Contains(t, refusal.Message, "archived")
 	assert.Contains(t, refusal.Accepted, "closed")
-	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 }
 
 // TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide is the second, coarser form of
-// the degradation of O5/SC 38: not one repository missing the unit, but the whole instance
+// the degradation: not one repository missing the unit, but the whole instance
 // switching Projects off — which is what a rollback to a build without them looks like.
 //
 // The board states the reason and points at the view that still works; the timeline renders
@@ -778,7 +777,7 @@ func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) 
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "projects_unavailable", refusal.Code)
 	assert.Contains(t, refusal.Message, "this instance disables the Projects unit")
-	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it (A21)")
+	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it")
 	assert.Contains(t, refusal.SuggestedAction, "/timeline",
 		"the reason points at the view that still works")
 

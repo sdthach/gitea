@@ -6,7 +6,7 @@
 // delivery-parity reads the PUBLISHED OpenAPI document — the committed file, not the
 // in-memory registry — and fails when an endpoint has no CLI command, or a command has no
 // endpoint. Reading the committed document is what makes the check able to fail: comparing
-// the registry to itself would pass by construction (K7, I16).
+// the registry to itself would pass by construction.
 //
 // Usage: go run ./tools/delivery-parity.go [-doc docs/delivery/openapi.json]
 package main

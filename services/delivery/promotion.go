@@ -22,7 +22,7 @@ import (
 
 // PredecessorState is what the predecessor environment has done with the release being
 // deployed. It is read from the append-only log by the same projection the grid renders, so
-// the confirm step and the cell can never disagree about what happened (E3, E5).
+// the confirm step and the cell can never disagree about what happened.
 type PredecessorState string
 
 const (
@@ -36,7 +36,7 @@ const (
 	PredecessorLive PredecessorState = "live"
 )
 
-// Outcome is what the sequence rule decided (E17).
+// Outcome is what the sequence rule decided.
 type Outcome string
 
 const (
@@ -46,13 +46,13 @@ const (
 	OutcomeRefuse   Outcome = "refuse"
 )
 
-// deployWorkflowSuffix completes the D4 convention deployWorkflowPrefix opens: one workflow
+// deployWorkflowSuffix completes the convention deployWorkflowPrefix opens: one workflow
 // file per environment, named for the environment it deploys to.
 const deployWorkflowSuffix = ".yaml"
 
 // WorkflowIDForEnvironment names the workflow a deploy to this environment dispatches. It is
 // the inverse of EnvironmentFromWorkflowID, so a run this dispatches is recorded against the
-// environment it was dispatched for — one convention, read in both directions (D4).
+// environment it was dispatched for — one convention, read in both directions.
 func WorkflowIDForEnvironment(environment string) string {
 	environment = delivery_model.NormalizeEnvironmentName(environment)
 	if environment == "" {
@@ -75,7 +75,7 @@ func AcceptsRelease(env *delivery_model.Environment, isPrerelease bool) bool {
 // predecessor held this release, and does it hold it now.
 //
 // It is pure and reuses ProjectCells, so the confirm step reads the release's history
-// through the same projection the grid draws it with (E3, E5, J5, J10).
+// through the same projection the grid draws it with.
 func EvaluatePredecessor(predecessor, releaseTag string, events []Event) PredecessorState {
 	predecessor = delivery_model.NormalizeEnvironmentName(predecessor)
 	if predecessor == "" {
@@ -102,7 +102,7 @@ type Decision struct {
 	RequiresOverrideReason bool             `json:"requires_override_reason"`
 }
 
-// DecidePromotion applies E17's table. It is pure: the state comes from the log and the
+// DecidePromotion applies the sequence-rule table. It is pure: the state comes from the log and the
 // permission from CanBypassEnvironmentSequence, and neither is re-derived here.
 //
 //	require_predecessor | predecessor held | can bypass | outcome
@@ -120,7 +120,7 @@ func DecidePromotion(env *delivery_model.Environment, state PredecessorState, ca
 
 	if !env.RequirePredecessor {
 		// With the flag off the sequence is a warning only, so an environment that has set
-		// no policy behaves exactly as it did before this slice (F11).
+		// no policy keeps the behaviour it had before the fork.
 		d.Outcome = OutcomeWarn
 		d.Message = fmt.Sprintf("%s has never held this release, and %s names it as its predecessor", predecessor, name)
 		d.SuggestedAction = fmt.Sprintf("Deploy to %s first, or continue — %s does not require its predecessor.", predecessor, name)
@@ -135,7 +135,7 @@ func DecidePromotion(env *delivery_model.Environment, state PredecessorState, ca
 	d.Outcome = OutcomeOverride
 	d.RequiresOverrideReason = true
 	d.Message = fmt.Sprintf("%s requires its predecessor %s to have held this release, and it never has; you may override", name, predecessor)
-	d.SuggestedAction = "Send override_reason saying why the sequence is being bypassed; it is recorded on the audit log (E17)."
+	d.SuggestedAction = "Send override_reason saying why the sequence is being bypassed; it is recorded on the audit log."
 	return d
 }
 
@@ -157,14 +157,14 @@ type PromotionRequest struct {
 	Environment    string
 	ReleaseTag     string
 	OverrideReason string
-	// Confirm is the second of E14's two steps. With it false nothing is dispatched and the
+	// Confirm is the second of the two steps. With it false nothing is dispatched and the
 	// plan is returned for the caller to show; the step is enforced here rather than in the
 	// page, so the CLI cannot skip it either.
 	Confirm bool
 }
 
 // Promotion is what a deploy request resolves to: everything the confirm step has to name
-// before anything is dispatched (E14), and the run once something has been.
+// before anything is dispatched, and the run once something has been.
 type Promotion struct {
 	RepoID       int64  `json:"repo_id"`
 	RepoFullName string `json:"repo_full_name"`
@@ -172,7 +172,7 @@ type Promotion struct {
 	ReleaseTag   string `json:"release_tag"`
 	IsPrerelease bool   `json:"is_prerelease"`
 	// CurrentlyLive is the release live in the target environment right now, empty when
-	// nothing has ever succeeded there. E14 asks the confirm step to name it.
+	// nothing has ever succeeded there. The confirm step names it.
 	CurrentlyLive string `json:"currently_live"`
 	// IsRollback reports that the target release is older than what is live there. Rolling
 	// back is deploying a prior release tag — the same action, so this labels the request
@@ -189,7 +189,7 @@ type Promotion struct {
 }
 
 // PlanPromotion resolves the request against the environment record and the log, and
-// dispatches nothing. It is the first of E14's two steps, and every field the confirm step
+// dispatches nothing. It is the first of the two steps, and every field the confirm step
 // has to name is on the value it returns.
 func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error) {
 	if req.Repo == nil {
@@ -208,7 +208,7 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 	if strings.TrimSpace(req.ReleaseTag) == "" {
 		return nil, &delivery_model.Error{
 			Message:         "no release tag was named",
-			SuggestedAction: "Send release_tag. A deployment points at a release, never at a version string (D1).",
+			SuggestedAction: "Send release_tag. A deployment points at a release, never at a version string.",
 		}
 	}
 
@@ -264,12 +264,11 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 }
 
 // Promote is the single entry point to a deploy. The grid, the API and the CLI all reach a
-// dispatch through it, so there is no path around the sequence rule (K6, F12). Rollback is
+// dispatch through it, so there is no path around the sequence rule. Rollback is
 // this same call with a prior release tag.
 //
 // It plans first and dispatches only on an explicit confirm, so nothing is dispatched before
-// the caller has been shown the target environment, the release tag and what is live there
-// (E14).
+// the caller has been shown the target environment, the release tag and what is live there.
 func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error) {
 	out, err := PlanPromotion(ctx, req)
 	if err != nil {
@@ -282,14 +281,14 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 	}
 	if out.RequiresOverrideReason && out.OverrideReason == "" {
 		// The override is offered only WITH a reason. Dispatching without one would leave
-		// the audit log unable to answer why the sequence was bypassed (E17).
+		// the audit log unable to answer why the sequence was bypassed.
 		return out, nil
 	}
 
 	// The bypass is recorded BEFORE the dispatch. Someone with the right to override used it
 	// at this moment for this reason, and that is true whether or not the dispatch then
 	// succeeded; recording it afterwards would lose the record exactly when a failed deploy
-	// makes it most worth having (E17).
+	// makes it most worth having.
 	if out.Outcome == OutcomeOverride {
 		if err := appendPromotionEvent(ctx, req, out, delivery_model.AuditOverridden, out.OverrideReason); err != nil {
 			return nil, err
@@ -308,7 +307,7 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 	if err != nil {
 		return nil, dispatchFailed(ctx, req, out,
 			fmt.Sprintf("dispatching %s at %s failed: %v", out.WorkflowID, out.Ref, err),
-			fmt.Sprintf("Add %s with a workflow_dispatch trigger on the branch the tag points at, and check the Actions unit is enabled (D4).",
+			fmt.Sprintf("Add %s with a workflow_dispatch trigger on the branch the tag points at, and check the Actions unit is enabled.",
 				out.WorkflowID))
 	}
 	out.RunID = runID
@@ -318,7 +317,7 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 	out.RunURL = fmt.Sprintf("%s/actions/runs/%d", req.Repo.HTMLURL(ctx), runID)
 
 	// The deployment row and its `requested` event are written by the notifier, which sees
-	// this run like any other — one code path, so the grid is complete by construction (E11).
+	// this run like any other — one code path, so the grid is complete by construction.
 	return out, nil
 }
 
@@ -333,7 +332,7 @@ func dispatchFailed(ctx reqctx.RequestContext, req PromotionRequest, out *Promot
 }
 
 // appendPromotionEvent puts one event on the same append-only log the deploy itself lands
-// on. It is the only writer slice 5 adds; nothing here updates a row (E5, E13).
+// on. It is this file's only writer; nothing here updates a row.
 func appendPromotionEvent(ctx reqctx.RequestContext, req PromotionRequest, out *Promotion, event, reason string) error {
 	actorID, actorLogin := int64(0), ""
 	if req.Doer != nil {
@@ -390,7 +389,7 @@ func liveRelease(ctx reqctx.RequestContext, repoID int64, environment string) st
 }
 
 // isRollback reports whether the target release predates what is live in the environment.
-// Release age is the release's own creation time, so nothing parses a version string (D1).
+// Release age is the release's own creation time, so nothing parses a version string.
 //
 // It returns no error: the release named as live can have been deleted since it was
 // deployed, and the log keeps that deploy either way. That is history to render, not a

@@ -22,11 +22,11 @@ import (
 )
 
 // The CI overview's integration tests run under Gitea's own harness, so they execute the way
-// upstream's do and survive a rebase (J8).
+// upstream's do and survive a rebase.
 //
 // Repository 4 is public and carries the Actions unit; repository 3 is private to org3. That
 // pair is what lets the permission test fail in both directions: a user outside org3 must see
-// the first and not the second (J9, P6).
+// the first and not the second.
 const (
 	ciPublicRepoID  = 4
 	ciPrivateRepoID = 3
@@ -83,7 +83,7 @@ func getDeliveryJSON(t *testing.T, token, path string, into any) {
 }
 
 // TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee is the security case, in both
-// its including and its excluding form (SC 41, P6, J9). A run in a repository the viewer
+// its including and its excluding form. A run in a repository the viewer
 // cannot read must appear in no list and in no aggregate.
 func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -105,7 +105,7 @@ func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	outsiderRepos := outsider.repoIDs()
 	assert.True(t, outsiderRepos[ciPublicRepoID], "a public repository's runs are visible to everyone signed in")
 	assert.False(t, outsiderRepos[ciPrivateRepoID],
-		"a run in a repository the viewer cannot read must not appear in the cross-repository list (P6, E12)")
+		"a run in a repository the viewer cannot read must not appear in the cross-repository list")
 
 	// The same exclusion has to hold for every aggregate, not only for the raw list.
 	var insiderRepoStats, outsiderRepoStats []struct {
@@ -137,10 +137,10 @@ func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	getDeliveryJSON(t, insiderToken, "/overview", &insiderOverview)
 	getDeliveryJSON(t, outsiderToken, "/overview", &outsiderOverview)
 	assert.Less(t, outsiderOverview.Summary.TotalRuns, insiderOverview.Summary.TotalRuns,
-		"the summary counts fewer runs for a viewer who can see fewer repositories (SC 41)")
+		"the summary counts fewer runs for a viewer who can see fewer repositories")
 }
 
-// TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery is SC 41: the aggregate has to
+// TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery: the aggregate has to
 // agree with the same question asked one repository at a time.
 func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -180,7 +180,7 @@ func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 		failures += r.Failures
 	}
 	assert.Equal(t, all.Summary.TotalRuns, summed,
-		"the summary is the sum of its per-repository rows, so every figure is independently queryable (P9, SC 41)")
+		"the summary is the sum of its per-repository rows, so every figure is independently queryable")
 	assert.Equal(t, all.Summary.Runs["success"], successes)
 	assert.Equal(t, all.Summary.Runs["failure"], failures)
 
@@ -208,11 +208,11 @@ func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 		byWorkflow += w.Runs
 	}
 	assert.Equal(t, all.Summary.TotalRuns, byWorkflow,
-		"grouping by workflow and grouping by repository count the same runs (P8)")
+		"grouping by workflow and grouping by repository count the same runs")
 }
 
-// TestAPIDeliveryRunsAnswerFiltersSortingAndPaging is SC 41's "those answer filters and
-// sorting", including the failed-runs list the CLI reproduces.
+// TestAPIDeliveryRunsAnswerFiltersSortingAndPaging covers filters, sorting and paging,
+// including the failed-runs list the CLI reproduces.
 func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -229,11 +229,11 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 		assert.Equal(t, "failure", r.Status, "the status filter narrows to the state it names")
 		if r.ID == failed.ID {
 			found = true
-			assert.NotEmpty(t, r.RunURL, "every row links out to Gitea's own run page (P1, P3)")
+			assert.NotEmpty(t, r.RunURL, "every row links out to Gitea's own run page")
 			assert.Equal(t, int64(60), r.Duration)
 		}
 	}
-	assert.True(t, found, "the run seeded as a failure is in the failed list the page shows (SC 41)")
+	assert.True(t, found, "the run seeded as a failure is in the failed list the page shows")
 
 	var byRepo runRows
 	getDeliveryJSON(t, token, fmt.Sprintf("/runs?limit=200&repo_id=%d&workflow_id=ci.yaml", ciPublicRepoID), &byRepo)
@@ -249,10 +249,10 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 	DecodeJSON(t, resp, &ascending)
 	require.Len(t, ascending, 2)
 	assert.Less(t, ascending[0].ID, ascending[1].ID, "sorting is answered, not ignored")
-	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "offset-paged resources carry X-Total-Count (I7)")
+	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "offset-paged resources carry X-Total-Count")
 
 	// An unknown state names the offender rather than returning an empty page a caller would
-	// read as "nothing failed" (I4, A21).
+	// read as "nothing failed".
 	req = NewRequest(t, "GET", deliveryv1.BasePath+"/runs?status[eq]=exploded").AddTokenAuth(token)
 	rejected := MakeRequest(t, req, http.StatusBadRequest)
 	var payload struct {
@@ -268,9 +268,9 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 	assert.Contains(t, payload.Accepted, "failure")
 }
 
-// TestAPIDeliveryCITrendMatchesTheDeliveryTables is SC 41's deployment half: the trend's
+// TestAPIDeliveryCITrendMatchesTheDeliveryTables is the deployment half: the trend's
 // deployment count is the fork's own delivery_deployment, so the CI dashboard and the delivery
-// grid share one source of truth (P5).
+// grid share one source of truth.
 func TestAPIDeliveryCITrendMatchesTheDeliveryTables(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -300,20 +300,20 @@ func TestAPIDeliveryCITrendMatchesTheDeliveryTables(t *testing.T) {
 	getDeliveryJSON(t, insiderToken, "/overview/trends", &insider)
 	getDeliveryJSON(t, outsiderToken, "/overview/trends", &outsider)
 
-	require.NotEmpty(t, insider, "the series has one point per UTC day, including quiet ones (P5)")
+	require.NotEmpty(t, insider, "the series has one point per UTC day, including quiet ones")
 	assert.Equal(t, int64(2), sum(insider), "both deployments are counted for a viewer who can see both repositories")
 	assert.Equal(t, int64(1), sum(outsider),
-		"the deployment in a repository the viewer cannot read reaches no trend (P6)")
+		"the deployment in a repository the viewer cannot read reaches no trend")
 
 	var deployments []struct {
 		RepoID int64 `json:"repo_id"`
 	}
 	getDeliveryJSON(t, insiderToken, "/deployments?limit=200", &deployments)
 	assert.Len(t, deployments, int(sum(insider)),
-		"the trend's deployment count is the deployments resource, read back (SC 41)")
+		"the trend's deployment count is the deployments resource, read back")
 }
 
-// TestDeliveryCIPageIsAClientOfItsAPI covers E18/I14 and F13 for the new page: it sits behind
+// TestDeliveryCIPageIsAClientOfItsAPI covers the new page: it sits behind
 // sign-in and serves only the shell, fetching every figure from documented endpoints.
 func TestDeliveryCIPageIsAClientOfItsAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -326,9 +326,9 @@ func TestDeliveryCIPageIsAClientOfItsAPI(t *testing.T) {
 	body := session.MakeRequest(t, req, http.StatusOK).Body.String()
 
 	for _, path := range []string{"/overview", "/overview/trends", "/overview/repos", "/runs"} {
-		assert.Contains(t, body, path, "the page reads %s over the documented API (E18, I14)", path)
+		assert.Contains(t, body, path, "the page reads %s over the documented API", path)
 	}
 	assert.Contains(t, body, `const base = "`+deliveryv1.BasePath+`"`,
 		"the handler hands the page the namespace's own base, so the page reaches the documented API and nothing else")
-	assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action (A21)")
+	assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action")
 }
