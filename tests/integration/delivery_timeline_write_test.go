@@ -159,6 +159,38 @@ func TestDeliveryTimelineCreatesARowAndAnIssueOnIt(t *testing.T) {
 	assert.Equal(t, "missing_title", refusal.Code)
 }
 
+// TestDeliveryTimelineTellsTheClientWhetherItMayEdit covers what the chart's controls are
+// gated on: can_write, and the rows an issue can be filed under. A milestone holding no
+// issue has no span, so without rows the chart could not name it as a destination.
+func TestDeliveryTimelineTellsTheClientWhetherItMayEdit(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	writerToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	readerToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+
+	var writerView, readerView timelinePayload
+	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(writerToken)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &writerView)
+	req = NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(readerToken)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &readerView)
+
+	assert.True(t, writerView.CanWrite, "user2 owns the repository")
+	assert.False(t, readerView.CanWrite, "user4 can read it and cannot write its Issues unit")
+
+	titles := make([]string, 0, len(writerView.Rows))
+	for _, row := range writerView.Rows {
+		titles = append(titles, row.Title)
+	}
+	assert.Contains(t, titles, "milestone2", "a milestone holding no issue is still a row an issue can move to")
+	assert.Equal(t, titles, func() []string {
+		out := make([]string, 0, len(readerView.Rows))
+		for _, row := range readerView.Rows {
+			out = append(out, row.Title)
+		}
+		return out
+	}(), "the rows are what the repository has, not what the caller may write")
+}
+
 // TestDeliveryTimelineRefusesEveryWriteWithoutIssueWrite asserts the refusal AND that
 // nothing was written: a 403 that had already written would be a worse defect than no guard.
 // user4 can read user2/repo1, which is public, and cannot write its Issues unit.

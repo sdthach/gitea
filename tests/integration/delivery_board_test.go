@@ -344,6 +344,11 @@ type timelinePayload struct {
 		Key      string `json:"key"`
 		Progress int    `json:"progress"`
 	} `json:"spans"`
+	Rows []struct {
+		MilestoneID int64  `json:"milestone_id"`
+		Title       string `json:"title"`
+	} `json:"rows"`
+	CanWrite  bool `json:"can_write"`
 	Unmanaged []struct {
 		Number          int64  `json:"number"`
 		Reason          string `json:"reason"`

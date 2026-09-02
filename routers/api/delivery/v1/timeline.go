@@ -45,10 +45,24 @@ type Timeline struct {
 	Arrows       []delivery_service.Arrow     `json:"arrows"`
 	Spans        []delivery_service.SpanRow   `json:"spans"`
 	Unmanaged    []delivery_service.Unmanaged `json:"unmanaged"`
+	// Rows are the repository's milestones, which are the rows an issue can be filed under.
+	// A milestone holding no issue has no span, so the chart could not otherwise name it as
+	// a destination.
+	Rows []TimelineRow `json:"rows"`
+	// CanWrite says whether the caller may write on the Issues unit, so a client offers the
+	// chart's edits only to someone the endpoints will accept them from.
+	CanWrite bool `json:"can_write"`
 	// Truncated says the issue set hit the page limit, so the chart is a prefix rather
 	// than the whole repository. A silently capped chart would be a wrong picture that
 	// does not say so.
 	Truncated bool `json:"truncated"`
+}
+
+// TimelineRow is one milestone the chart draws as a row.
+type TimelineRow struct {
+	MilestoneID int64  `json:"milestone_id"`
+	Title       string `json:"title"`
+	IsClosed    bool   `json:"is_closed"`
 }
 
 func getTimelineEndpoint() *endpoint {
@@ -82,7 +96,7 @@ func GetTimeline(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	repo, ok := timelineRepo(ctx, equalityFilterInt(q, "repo_id"))
+	repo, perm, ok := timelineRepo(ctx, equalityFilterInt(q, "repo_id"))
 	if !ok {
 		return
 	}
@@ -106,13 +120,13 @@ func GetTimeline(ctx *context.APIContext) {
 		opts.MilestoneIDs = []int64{milestoneID}
 	}
 
-	renderTimeline(ctx, repo, opts, q.Limit)
+	renderTimeline(ctx, repo, opts, q.Limit, perm.CanWrite(unit.TypeIssues))
 }
 
 // renderTimeline projects one repository's issues and answers with the chart. Every write
 // endpoint replies through it, so a caller never has to re-fetch to see what its write did,
 // and the chart it gets back is the one GET would have produced.
-func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int) {
+func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, canWrite bool) {
 	issues, err := issues_model.Issues(ctx, opts)
 	if err != nil {
 		ctx.APIErrorInternal(err)
@@ -133,7 +147,17 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		Bars: []delivery_service.Bar{}, Arrows: []delivery_service.Arrow{},
 		Spans: []delivery_service.SpanRow{}, Unmanaged: []delivery_service.Unmanaged{},
+		Rows: []TimelineRow{}, CanWrite: canWrite,
 		Truncated: len(issues) == limit,
+	}
+
+	milestones, err := db.Find[issues_model.Milestone](ctx, issues_model.FindMilestoneOptions{RepoID: repo.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	for _, m := range milestones {
+		out.Rows = append(out.Rows, TimelineRow{MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed})
 	}
 
 	byNumber := make(map[int64]int64, len(issues))
@@ -161,32 +185,33 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 }
 
 // timelineRepo resolves and authorizes the repository the chart covers.
-func timelineRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, bool) {
+func timelineRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, access.Permission, bool) {
+	var perm access.Permission
 	if repoID <= 0 {
 		apiError(ctx, http.StatusBadRequest, "missing_repo_id",
 			"repo_id is required: a timeline covers one repository's issues",
 			"Pass ?repo_id=<id>, listing "+BasePath+"/repos to find it.")
-		return nil, false
+		return nil, perm, false
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 	if err != nil {
 		apiError(ctx, http.StatusNotFound, "repo_not_found",
 			"no repository with that id is visible to you",
 			"Check the id against "+BasePath+"/repos.")
-		return nil, false
+		return nil, perm, false
 	}
-	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+	perm, err = access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
 	if err != nil {
 		ctx.APIErrorInternal(err)
-		return nil, false
+		return nil, perm, false
 	}
 	if !perm.CanRead(unit.TypeIssues) {
 		apiError(ctx, http.StatusForbidden, "forbidden",
 			"your account cannot read the Issues unit of "+repo.FullName(),
 			"Ask a repository administrator for read access.")
-		return nil, false
+		return nil, perm, false
 	}
-	return repo, true
+	return repo, perm, true
 }
 
 // timelineStates is the accepted set for ?state=.

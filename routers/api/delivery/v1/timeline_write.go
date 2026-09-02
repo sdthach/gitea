@@ -399,5 +399,5 @@ func renderTimelineAfterWrite(ctx *context.APIContext, repo *repo_model.Reposito
 		IsPull:    optional.Some(false),
 		Paginator: &db.ListOptions{Page: 1, PageSize: limit},
 		SortType:  "oldest",
-	}, limit)
+	}, limit, true) // every caller here has already passed the write check
 }

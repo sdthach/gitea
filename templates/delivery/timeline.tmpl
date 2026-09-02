@@ -55,11 +55,50 @@
 			</div>
 		</div>
 
+		<div id="delivery-edit" class="ui segment tw-hidden">
+			<div class="ui form">
+				<div class="inline fields">
+					<div class="field">
+						<label for="delivery-new-row">New row</label>
+						<input id="delivery-new-row" type="text" size="16" placeholder="Milestone title">
+					</div>
+					<div class="field">
+						<label for="delivery-new-row-end">Due</label>
+						<input id="delivery-new-row-end" type="date">
+					</div>
+					<div class="field">
+						<button id="delivery-add-row" class="ui button" type="button">Add row</button>
+					</div>
+					<div class="field">
+						<label for="delivery-new-issue">New issue</label>
+						<input id="delivery-new-issue" type="text" size="18" placeholder="Title">
+					</div>
+					<div class="field">
+						<label for="delivery-new-issue-epic">Epic</label>
+						<input id="delivery-new-issue-epic" type="text" size="10" placeholder="checkout">
+					</div>
+					<div class="field">
+						<label for="delivery-new-issue-row">On row</label>
+						<select id="delivery-new-issue-row" class="ui dropdown"></select>
+					</div>
+					<div class="field">
+						<button id="delivery-add-issue" class="ui button" type="button">Add issue</button>
+					</div>
+				</div>
+			</div>
+			<p class="tw-text-12">
+				Drag a bar to move the whole schedule; drag either end to move that end alone. A drag
+				writes the day it lands on — the end to the issue's deadline, the start to ccpm's
+				<code>started:</code> marker, because Gitea has nowhere else to keep one.
+			</p>
+		</div>
+
 		<div class="tw-overflow-x-auto">
 			<table class="ui table" id="delivery-timeline">
 				<thead>
 					<tr>
 						<th>Issue</th>
+						<th>Row</th>
 						<th>Start</th>
 						<th>End</th>
 						<th>Schedule</th>
@@ -67,7 +106,7 @@
 					</tr>
 				</thead>
 				<tbody id="delivery-timeline-body">
-					<tr><td colspan="5">Name a repository, then press Show timeline.</td></tr>
+					<tr><td colspan="6">Name a repository, then press Show timeline.</td></tr>
 				</tbody>
 			</table>
 		</div>
@@ -102,6 +141,12 @@ const tokenInput = document.querySelector('#delivery-token');
 const repoInput = document.querySelector('#delivery-repo');
 const epicInput = document.querySelector('#delivery-epic');
 const stateSelect = document.querySelector('#delivery-state');
+
+// What the last load said about the chart: whether this caller may edit it, the rows an
+// issue can be filed under, and the repository the writes name.
+let canWrite = false;
+let rows = [];
+let repoFullName = '';
 
 const tokenKey = 'delivery-api-token';
 function storedToken() {
@@ -141,8 +186,11 @@ function day(unix) {
 	return new Date(unix * 1000).toISOString().slice(0, 10);
 }
 
+const daySeconds = 86400;
+
 // bar draws the schedule cell. An inferred end is an open outline, a recorded one is solid,
-// so an estimated bar can never be read as a measured one.
+// so an estimated bar can never be read as a measured one. When the caller may write, the
+// bar is a drag handle: its body moves the whole schedule and either edge moves that end.
 function bar(row, span, item) {
 	const td = document.createElement('td');
 	const track = document.createElement('div');
@@ -168,9 +216,83 @@ function bar(row, span, item) {
 		drawn.style.background = 'currentColor';
 		drawn.title = `recorded end (${item.end_source})`;
 	}
+	if (canWrite) makeDraggable(drawn, track, span, item);
 	track.append(drawn);
 	td.append(track);
 	row.append(td);
+	return td;
+}
+
+// makeDraggable turns one bar into three grips: the left sixth moves the start, the right
+// sixth the end, and the middle both. Nothing is written until the pointer is released, and
+// what is written is the day the bar landed on — the chart's resolution is a day, so a
+// sub-day drag must not silently record a time nobody chose.
+function makeDraggable(drawn, track, span, item) {
+	drawn.style.cursor = 'grab';
+	drawn.style.touchAction = 'none';
+	drawn.addEventListener('pointerdown', (down) => {
+		down.preventDefault();
+		const rect = drawn.getBoundingClientRect();
+		const grip = rect.width < 12 ? 'move'
+			: down.clientX - rect.left < rect.width / 6 ? 'start'
+				: rect.right - down.clientX < rect.width / 6 ? 'end' : 'move';
+		const perPixel = Math.max(span.end - span.start, 1) / Math.max(track.getBoundingClientRect().width, 1);
+		let start = item.start_unix;
+		let end = item.end_unix;
+
+		const move = (at) => {
+			const shift = (at.clientX - down.clientX) * perPixel;
+			start = item.start_unix + (grip === 'end' ? 0 : shift);
+			end = item.end_unix + (grip === 'start' ? 0 : shift);
+			if (end - start < daySeconds) {
+				if (grip === 'start') start = end - daySeconds; else end = start + daySeconds;
+			}
+			const left = ((start - span.start) / Math.max(span.end - span.start, 1)) * 100;
+			const size = ((end - start) / Math.max(span.end - span.start, 1)) * 100;
+			drawn.style.left = `${left}%`;
+			drawn.style.width = `${Math.max(size, 1)}%`;
+		};
+
+		const up = async (at) => {
+			drawn.releasePointerCapture(at.pointerId);
+			drawn.removeEventListener('pointermove', move);
+			drawn.removeEventListener('pointerup', up);
+			drawn.style.cursor = 'grab';
+			const patch = {repo: repoFullName};
+			if (grip !== 'end' && day(start) !== day(item.start_unix)) patch.start = day(start);
+			if (grip !== 'start' && day(end) !== day(item.end_unix)) patch.end = day(end);
+			if (!patch.start && !patch.end) {
+				load();
+				return;
+			}
+			await write(`/timeline/issues/${item.issue_id}/dates`, patch);
+		};
+
+		drawn.style.cursor = 'grabbing';
+		drawn.setPointerCapture(down.pointerId);
+		drawn.addEventListener('pointermove', move);
+		drawn.addEventListener('pointerup', up);
+	});
+}
+
+// rowSelect is the milestone cell: a chart whose rows can only be read is half a chart.
+function rowSelect(item) {
+	const td = document.createElement('td');
+	if (!canWrite) {
+		td.textContent = item.milestone || '—';
+		return td;
+	}
+	const select = document.createElement('select');
+	select.className = 'ui dropdown';
+	select.append(new Option('—', '0', false, !item.milestone_id));
+	for (const row of rows) {
+		select.append(new Option(row.title, String(row.milestone_id), false, row.milestone_id === item.milestone_id));
+	}
+	select.addEventListener('change', () => {
+		write(`/timeline/issues/${item.issue_id}/milestone`,
+			{repo: repoFullName, milestone_id: Number(select.value)});
+	});
+	td.append(select);
 	return td;
 }
 
@@ -179,10 +301,17 @@ function sourceNote(item) {
 }
 
 function render(payload) {
+	canWrite = payload.can_write;
+	rows = payload.rows ?? [];
+	repoFullName = payload.repo_full_name;
+	document.querySelector('#delivery-edit').classList.toggle('tw-hidden', !canWrite);
+	const rowSelectNew = document.querySelector('#delivery-new-issue-row');
+	rowSelectNew.replaceChildren(new Option('—', '0'),
+		...rows.map((row) => new Option(row.title, String(row.milestone_id))));
+
 	if (!payload.bars.length) {
-		body.replaceChildren(Object.assign(document.createElement('tr'), {innerHTML: ''}));
 		const tr = document.createElement('tr');
-		cell(tr, 'no issue in this repository carries an epic label, so there is nothing to draw').colSpan = 5;
+		cell(tr, 'no issue in this repository carries an epic label, so there is nothing to draw').colSpan = 6;
 		body.replaceChildren(tr);
 	} else {
 		const span = {
@@ -205,6 +334,7 @@ function render(payload) {
 			issue.append(link);
 			tr.append(issue);
 
+			tr.append(rowSelect(item));
 			cell(tr, `${day(item.start_unix)} (${item.start_source})`);
 			cell(tr, `${day(item.end_unix)} (${item.end_source})`);
 			bar(tr, span, item).title = sourceNote(item);
@@ -281,6 +411,61 @@ async function load() {
 	tokenBox.classList.add('tw-hidden');
 	render(payload);
 }
+
+// write posts one of the chart's four edits. Every write endpoint answers with the chart it
+// produced, so the page renders the response rather than re-fetching and hoping.
+async function write(path, patch) {
+	let payload;
+	try {
+		const resp = await fetch(`${base}${path}`, {
+			method: 'POST',
+			headers: {...headers(), 'content-type': 'application/json'},
+			body: JSON.stringify(patch),
+		});
+		payload = await resp.json();
+		if (!resp.ok) {
+			if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
+			fail(payload.message ?? `the API returned ${resp.status}`,
+				payload.suggested_action ?? 'Reload the chart and try again.');
+			load();
+			return;
+		}
+	} catch (err) {
+		fail(String(err), `Check that the delivery API is reachable at ${base}.`);
+		load();
+		return;
+	}
+	clearError();
+	render(payload);
+}
+
+document.querySelector('#delivery-add-row').addEventListener('click', () => {
+	const title = document.querySelector('#delivery-new-row').value.trim();
+	if (!title) {
+		fail('a row needs a title', 'Type a milestone title, then press Add row.');
+		return;
+	}
+	write('/timeline/milestones', {
+		repo: repoFullName, title, end: document.querySelector('#delivery-new-row-end').value,
+	}).then(() => {
+		document.querySelector('#delivery-new-row').value = '';
+	});
+});
+
+document.querySelector('#delivery-add-issue').addEventListener('click', () => {
+	const title = document.querySelector('#delivery-new-issue').value.trim();
+	if (!title) {
+		fail('an issue needs a title', 'Type a title, then press Add issue.');
+		return;
+	}
+	write('/timeline/issues', {
+		repo: repoFullName, title,
+		epic: document.querySelector('#delivery-new-issue-epic').value.trim(),
+		milestone_id: Number(document.querySelector('#delivery-new-issue-row').value),
+	}).then(() => {
+		document.querySelector('#delivery-new-issue').value = '';
+	});
+});
 
 document.querySelector('#delivery-token-save').addEventListener('click', () => {
 	try {
