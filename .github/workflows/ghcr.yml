@@ -3,7 +3,7 @@ name: ghcr
 on:
   push:
     branches:
-      - feat/deployenv
+      - main
   workflow_dispatch:
 
 concurrency:
