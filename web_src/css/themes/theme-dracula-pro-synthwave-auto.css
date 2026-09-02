@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-synthwave-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-synthwave-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Synthwave Auto";
+  --theme-color-scheme: "auto";
+}

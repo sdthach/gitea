@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-emerald-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-emerald-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Emerald Auto";
+  --theme-color-scheme: "auto";
+}

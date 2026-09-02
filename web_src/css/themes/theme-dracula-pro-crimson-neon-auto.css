@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-crimson-neon-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-crimson-neon-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Crimson Neon Auto";
+  --theme-color-scheme: "auto";
+}

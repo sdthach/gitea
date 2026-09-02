@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-moonlight-castle-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-moonlight-castle-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Moonlight Castle Auto";
+  --theme-color-scheme: "auto";
+}
