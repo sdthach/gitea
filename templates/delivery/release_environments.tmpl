@@ -1,5 +1,5 @@
 {{if and .IsSigned .Repository}}
-<script type="module" data-delivery-release-environments data-repo-id="{{.Repository.ID}}"
+<script type="module" nonce="{{ctx.CspScriptNonce}}" data-delivery-release-environments data-repo-id="{{.Repository.ID}}"
 	data-api-base="{{AppSubUrl}}/api/delivery/v1">
 // SC13: a release says where it is running. The badges are drawn from the grid endpoint —
 // the same projection /delivery/grid renders — so the release page introduces no second

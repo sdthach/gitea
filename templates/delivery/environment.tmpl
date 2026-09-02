@@ -30,7 +30,7 @@
 		</table>
 	</div>
 </div>
-<script type="module">
+<script type="module" nonce="{{ctx.CspScriptNonce}}">
 const base = {{.DeliveryAPIBase}};
 const wanted = {{.EnvironmentName}};
 const body = document.querySelector('#delivery-environments-body');

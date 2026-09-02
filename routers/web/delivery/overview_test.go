@@ -24,9 +24,7 @@ func renderOverview(t *testing.T, data map[string]any) string {
 	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "overview.tmpl"))
 	require.NoError(t, err)
 
-	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap{
-		"AppSubUrl": func() string { return "" },
-	})
+	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap(templateStubs()))
 	_, err = tmpl.New("base/head").Parse("<html><body>")
 	require.NoError(t, err)
 	_, err = tmpl.New("base/footer").Parse("</body></html>")

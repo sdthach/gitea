@@ -34,6 +34,16 @@ func repoRoot(t *testing.T) string {
 
 func templateDir(t *testing.T) string { return filepath.Join(repoRoot(t), "templates") }
 
+// templateStubs stands in for the helpers Gitea injects at render time, so a fork template
+// can be parsed and executed outside a running server. ctx carries the CSP nonce every
+// inline script names.
+func templateStubs() map[string]any {
+	return map[string]any{
+		"AppSubUrl": func() string { return "" },
+		"ctx":       func() any { return struct{ CspScriptNonce string }{CspScriptNonce: "test-nonce"} },
+	}
+}
+
 // TestForkTemplatesParse catches a template that would only fail when a page is served.
 func TestForkTemplatesParse(t *testing.T) {
 	dir := filepath.Join(templateDir(t), "delivery")
@@ -45,9 +55,7 @@ func TestForkTemplatesParse(t *testing.T) {
 		t.Run(entry.Name(), func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 			require.NoError(t, err)
-			_, err = template.New(entry.Name()).Funcs(template.FuncMap{
-				"AppSubUrl": func() string { return "" },
-			}).Parse(string(raw))
+			_, err = template.New(entry.Name()).Funcs(template.FuncMap(templateStubs())).Parse(string(raw))
 			require.NoError(t, err)
 		})
 	}
@@ -68,6 +76,32 @@ func TestPagesInheritGiteasChrome(t *testing.T) {
 			assert.NotContains(t, body, "<style", "the fork ships no stylesheet")
 		})
 	}
+}
+
+// TestEveryInlineScriptCarriesTheCspNonce is what keeps the pages alive in a deployment
+// that sends Gitea's Content Security Policy: the policy admits an inline script only with
+// the request's nonce, so a script without one is dropped and the page renders a shell that
+// never loads. Nothing server-rendered says so, which is why this is checked in source.
+func TestEveryInlineScriptCarriesTheCspNonce(t *testing.T) {
+	dir := filepath.Join(templateDir(t), "delivery")
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+
+	scripts := 0
+	for _, entry := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		require.NoError(t, err)
+		for line := range strings.SplitSeq(string(raw), "\n") {
+			if !strings.Contains(line, "<script") {
+				continue
+			}
+			scripts++
+			assert.Contains(t, line, `nonce="{{ctx.CspScriptNonce}}"`,
+				"%s opens a script the policy would drop", entry.Name())
+		}
+	}
+	assert.Greater(t, scripts, 5, "the scan must actually have found the fork's scripts")
 }
 
 // forkPages is every page the fork serves, with the documented operation it is a client of.
@@ -218,9 +252,7 @@ func TestEnvironmentPageEscapesItsData(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "environment.tmpl"))
 	require.NoError(t, err)
 
-	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap{
-		"AppSubUrl": func() string { return "" },
-	})
+	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap(templateStubs()))
 	_, err = tmpl.New("base/head").Parse("<html><body>")
 	require.NoError(t, err)
 	_, err = tmpl.New("base/footer").Parse("</body></html>")
