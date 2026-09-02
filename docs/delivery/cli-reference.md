@@ -18,6 +18,7 @@ Commands:
   deploy                     Plan or dispatch a deploy of a release to an environment
   deployment-summary         Deployment summary view
   deployments                List deployments across every repository the caller can see
+  environment                Read one environment by id
   environment-create         Create an environment
   environment-delete         Delete an environment
   environment-update         Update an environment
@@ -348,6 +349,40 @@ Flags:
 gitea-delivery deployments — List deployments across every repository the caller can see
 
   GET /deployments
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response (I6)
+  -expand string
+    	comma-separated sub-resources, one level deep (I9)
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim (I3, K4)
+  -json
+    	emit the API response verbatim and unshaped (K5)
+  -limit int
+    	page size; the server defaults to 50 and caps at 200 (I7)
+  -offset int
+    	row offset, converted to the 1-based page the API takes (I7)
+  -order string
+    	asc or desc (I5)
+  -q string
+    	free-text search (I10)
+  -server string
+    	Gitea base URL; defaults to $GITEA_DELIVERY_SERVER or $GITEA_SERVER
+  -sort-by string
+    	sort field (I5)
+  -token string
+    	API token; resolved by the same precedence detect.sh implements (K8)
+```
+
+## gitea-delivery environment
+
+```
+gitea-delivery environment — Read one environment by id
+
+  GET /environments/{id}
+
+Positional arguments: id
 
 Flags:
   -cursor string

@@ -106,7 +106,6 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"board-move-lane", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--lane", "bug", "9042"},
 			"/api/delivery/v1/board/cards/9042/lane", http.MethodPost,
 		},
-		// phase 2: environment and secret-scope writes, and the denormalized summary view.
 		"environment-create": {
 			[]string{"environment-create", "--name", "staging"},
 			"/api/delivery/v1/environments", http.MethodPost,
@@ -128,7 +127,6 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			"/api/delivery/v1/secret-scopes/3", http.MethodDelete,
 		},
 		"deployment-summary": {[]string{"deployment-summary"}, "/api/delivery/v1/deployment-summary", ""},
-		// phase 4: the timeline's writes.
 		"timeline-move-milestone": {
 			[]string{"timeline-move-milestone", "--repo", "acme/widgets", "--milestone-id", "2", "9042"},
 			"/api/delivery/v1/timeline/issues/9042/milestone", http.MethodPost,
@@ -145,6 +143,7 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"timeline-create-issue", "--repo", "acme/widgets", "--title", "Wire it"},
 			"/api/delivery/v1/timeline/issues", http.MethodPost,
 		},
+		"environment": {[]string{"environment", "7"}, "/api/delivery/v1/environments/7", ""},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

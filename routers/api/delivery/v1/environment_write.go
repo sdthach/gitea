@@ -96,36 +96,53 @@ func deleteEnvironmentEndpoint() *endpoint {
 	}
 }
 
-// requireEnvironmentAdmin checks site admin for repo_id 0, repo admin otherwise.
-func requireEnvironmentAdmin(ctx *context.APIContext, repoID int64) bool {
+// canWriteEnvironment is the one write rule; the gate and each row's can_write both read it.
+func canWriteEnvironment(ctx *context.APIContext, repoID int64) (bool, error) {
 	if repoID == delivery.DefaultsRepoID {
-		if !ctx.Doer.IsAdmin {
-			apiError(ctx, http.StatusForbidden, "forbidden",
-				"only site administrators may manage instance-wide default environments",
-				"Ask a Gitea administrator, or create a repository-specific environment instead.")
-			return false
-		}
-		return true
+		return ctx.Doer.IsAdmin, nil
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 	if err != nil {
+		return false, err
+	}
+	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+	if err != nil {
+		return false, err
+	}
+	return perm.IsAdmin(), nil
+}
+
+// requireEnvironmentAdmin renders the refusal canWriteEnvironment implies.
+func requireEnvironmentAdmin(ctx *context.APIContext, repoID int64) bool {
+	allowed, err := canWriteEnvironment(ctx, repoID)
+	switch {
+	case repo_model.IsErrRepoNotExist(err):
 		apiError(ctx, http.StatusNotFound, "repo_not_found",
 			fmt.Sprintf("no repository with id %d is visible to you", repoID),
 			"Check the repo_id and that your token's account can see the repository.")
 		return false
-	}
-	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
-	if err != nil {
+	case err != nil:
 		ctx.APIErrorInternal(err)
 		return false
-	}
-	if !perm.IsAdmin() {
+	case allowed:
+		return true
+	case repoID == delivery.DefaultsRepoID:
 		apiError(ctx, http.StatusForbidden, "forbidden",
-			"only repository administrators may manage environments of "+repo.FullName(),
-			"Ask a repository administrator for admin access.")
+			"only site administrators may manage instance-wide default environments",
+			"Ask a Gitea administrator, or create a repository-specific environment instead.")
 		return false
 	}
-	return true
+	apiError(ctx, http.StatusForbidden, "forbidden",
+		"only repository administrators may manage environments of "+environmentRepoName(ctx, repoID),
+		"Ask a repository administrator for admin access.")
+	return false
+}
+
+func environmentRepoName(ctx *context.APIContext, repoID int64) string {
+	if repo, err := repo_model.GetRepositoryByID(ctx, repoID); err == nil {
+		return repo.FullName()
+	}
+	return fmt.Sprintf("repository %d", repoID)
 }
 
 // CreateEnvironmentHandler answers POST /environments.

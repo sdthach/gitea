@@ -147,6 +147,21 @@ var Commands = []Command{
 		IsList:       true,
 	},
 	{
+		Name:         "environment",
+		OperationID:  "getEnvironment",
+		Method:       "GET",
+		Path:         "/environments/{id}",
+		Summary:      "Read one environment by id",
+		PathParams:   []string{"id"},
+		QueryParams:  nil,
+		BodyParams:   nil,
+		RequiredBody: nil,
+		BoolBody:     nil,
+		BodyHelp:     nil,
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		IsList:       false,
+	},
+	{
 		Name:         "environment-create",
 		OperationID:  "createEnvironment",
 		Method:       "POST",
@@ -158,7 +173,7 @@ var Commands = []Command{
 		RequiredBody: []string{"name"},
 		BoolBody:     []string{"block_admin_override", "enable_bypass_allowlist", "require_full_release", "require_predecessor"},
 		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first (E17).", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
 	{
@@ -173,7 +188,7 @@ var Commands = []Command{
 		RequiredBody: nil,
 		BoolBody:     nil,
 		BodyHelp:     nil,
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
 	{
@@ -188,7 +203,7 @@ var Commands = []Command{
 		RequiredBody: []string{"name"},
 		BoolBody:     []string{"block_admin_override", "enable_bypass_allowlist", "require_full_release", "require_predecessor"},
 		BodyHelp:     map[string]string{"approval_policy": "Approval policy. Defaults to none.", "block_admin_override": "Block repo admin from bypassing the gate.", "bypass_allowlist_team_ids": "Team IDs allowed to bypass.", "bypass_allowlist_user_ids": "User IDs allowed to bypass.", "enable_bypass_allowlist": "Enable bypass allowlist.", "name": "Environment name.", "predecessor": "Environment a release must pass through first (E17).", "repo_id": "Repository id; 0 is the instance-wide default set.", "require_full_release": "Refuse prereleases; this environment takes finished releases only.", "require_predecessor": "Gate when the predecessor hasn't held the release.", "required_approvals": "Approvals needed. Defaults to 1.", "sort_order": "Render order."},
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
 	{
@@ -203,7 +218,7 @@ var Commands = []Command{
 		RequiredBody: nil,
 		BoolBody:     nil,
 		BodyHelp:     nil,
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       true,
 	},
 	{
@@ -308,7 +323,7 @@ var Commands = []Command{
 		RequiredBody: nil,
 		BoolBody:     nil,
 		BodyHelp:     nil,
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       false,
 	},
 	{
@@ -338,7 +353,7 @@ var Commands = []Command{
 		RequiredBody: nil,
 		BoolBody:     nil,
 		BodyHelp:     nil,
-		Columns:      []string{"approval_policy", "id", "name", "repo_id", "required_approvals", "sort_order"},
+		Columns:      []string{"approval_policy", "can_write", "id", "name", "repo_id", "required_approvals", "sort_order"},
 		IsList:       true,
 	},
 	{

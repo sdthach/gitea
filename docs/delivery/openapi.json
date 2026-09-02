@@ -405,6 +405,10 @@
             ],
             "type": "string"
           },
+          "can_write": {
+            "description": "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true.",
+            "type": "boolean"
+          },
           "created_unix": {
             "description": "Creation time, unix seconds.",
             "type": "integer"
@@ -436,6 +440,7 @@
         },
         "required": [
           "approval_policy",
+          "can_write",
           "id",
           "name",
           "repo_id",
@@ -4618,6 +4623,67 @@
           }
         },
         "summary": "Delete an environment",
+        "tags": [
+          "environments"
+        ]
+      },
+      "get": {
+        "description": "Identity is the id, which is what tells two repositories naming an environment alike apart. A row the caller cannot see is answered as one that does not exist.",
+        "operationId": "getEnvironment",
+        "parameters": [
+          {
+            "description": "Environment id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted (I4)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check (I13)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Read one environment by id",
         "tags": [
           "environments"
         ]

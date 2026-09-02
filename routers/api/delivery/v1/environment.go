@@ -5,6 +5,8 @@ package v1
 
 import (
 	"net/http"
+	"slices"
+	"strconv"
 
 	"gitea.dev/models/delivery"
 	"gitea.dev/models/perm/access"
@@ -70,6 +72,20 @@ func listRepoEnvironmentsEndpoint() *endpoint {
 	}
 }
 
+func getEnvironmentEndpoint() *endpoint {
+	return &endpoint{
+		Op: &Operation{
+			ID: "getEnvironment", Method: http.MethodGet, Path: "/environments/{id}",
+			Summary: "Read one environment by id",
+			Description: "Identity is the id, which is what tells two repositories naming an environment alike apart. " +
+				"A row the caller cannot see is answered as one that does not exist.",
+			Tag: "environments", PathParams: environmentIDParam,
+			Response: "Environment", ResponseIs: "object",
+		},
+		Handler: GetEnvironment,
+	}
+}
+
 func getRepoEnvironmentEndpoint() *endpoint {
 	return &endpoint{
 		Op: &Operation{
@@ -85,14 +101,60 @@ func getRepoEnvironmentEndpoint() *endpoint {
 	}
 }
 
+// EnvironmentRow is the stored row plus whether the caller's write to it would be accepted.
+type EnvironmentRow struct {
+	*delivery.Environment
+	CanWrite bool `json:"can_write"`
+}
+
+func environmentRows(ctx *context.APIContext, envs []*delivery.Environment) ([]*EnvironmentRow, error) {
+	byRepo := make(map[int64]bool, 4) // one permission lookup per repository, not per row
+	rows := make([]*EnvironmentRow, 0, len(envs))
+	for _, env := range envs {
+		canWrite, resolved := byRepo[env.RepoID]
+		if !resolved {
+			var err error
+			if canWrite, err = canWriteEnvironment(ctx, env.RepoID); err != nil && !repo_model.IsErrRepoNotExist(err) { // a gone repository is unwritable, not an error
+				return nil, err
+			}
+			byRepo[env.RepoID] = canWrite
+		}
+		rows = append(rows, &EnvironmentRow{Environment: env, CanWrite: canWrite})
+	}
+	return rows, nil
+}
+
+func renderEnvironments(ctx *context.APIContext, q *query.Query, total int64, envs []*delivery.Environment) {
+	rows, err := environmentRows(ctx, envs)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	renderPage(ctx, q, total, rows)
+}
+
+func renderEnvironment(ctx *context.APIContext, env *delivery.Environment) {
+	rows, err := environmentRows(ctx, []*delivery.Environment{env})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, rows[0])
+}
+
+// actionsReadableRepoIDs is the environment read rule: Gitea's own Actions-unit visibility.
+func actionsReadableRepoIDs(ctx *context.APIContext) ([]int64, error) {
+	return repo_model.SearchRepositoryIDsByCondition(ctx,
+		repo_model.AccessibleRepositoryCondition(ctx.Doer, unit.TypeActions))
+}
+
 // ListEnvironments answers GET /environments.
 func ListEnvironments(ctx *context.APIContext) {
 	q, ok := parseQuery(ctx, environmentSpec)
 	if !ok {
 		return
 	}
-	repoIDs, err := repo_model.SearchRepositoryIDsByCondition(ctx,
-		repo_model.AccessibleRepositoryCondition(ctx.Doer, unit.TypeActions))
+	repoIDs, err := actionsReadableRepoIDs(ctx)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -105,7 +167,48 @@ func ListEnvironments(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	renderPage(ctx, q, total, envs)
+	renderEnvironments(ctx, q, total, envs)
+}
+
+// GetEnvironment answers GET /environments/{id}, applying the read rule ListEnvironments
+// applies to the same row.
+func GetEnvironment(ctx *context.APIContext) {
+	id, err := strconv.ParseInt(ctx.PathParam("id"), 10, 64)
+	if err != nil || id <= 0 {
+		apiError(ctx, http.StatusBadRequest, "bad_id", "the id in the path is not a number",
+			"Call GET "+BasePath+"/environments/{id} with an id from "+BasePath+"/environments.")
+		return
+	}
+	env, err := delivery.GetEnvironmentByID(ctx, id)
+	if err == nil {
+		var visible bool
+		if visible, err = environmentIsVisible(ctx, env.RepoID); err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		} else if !visible {
+			env = nil
+		}
+	}
+	if env == nil {
+		// One refusal for both causes: a row the caller cannot see must not be told apart
+		// from one that does not exist.
+		apiError(ctx, http.StatusNotFound, "environment_not_found",
+			"no environment with id "+strconv.FormatInt(id, 10)+" is visible to you",
+			"List "+BasePath+"/environments to see the environments you can read.")
+		return
+	}
+	renderEnvironment(ctx, env)
+}
+
+func environmentIsVisible(ctx *context.APIContext, repoID int64) (bool, error) {
+	if repoID == delivery.DefaultsRepoID {
+		return true, nil
+	}
+	repoIDs, err := actionsReadableRepoIDs(ctx)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(repoIDs, repoID), nil
 }
 
 // ListRepoEnvironments answers GET /repos/{owner}/{repo}/environments.
@@ -132,7 +235,7 @@ func ListRepoEnvironments(ctx *context.APIContext) {
 			return
 		}
 	}
-	renderPage(ctx, q, total, envs)
+	renderEnvironments(ctx, q, total, envs)
 }
 
 // GetRepoEnvironment answers GET /repos/{owner}/{repo}/environments/{name}.
@@ -146,7 +249,7 @@ func GetRepoEnvironment(ctx *context.APIContext) {
 		renderHubError(ctx, http.StatusNotFound, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, env)
+	renderEnvironment(ctx, env)
 }
 
 // repoWithActions resolves {owner}/{repo} and authorizes through Gitea's own permission

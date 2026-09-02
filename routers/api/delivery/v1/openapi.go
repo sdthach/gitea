@@ -158,7 +158,8 @@ var componentSchemas = map[string]any{
 		"required_approvals": prop("integer", "Approvals a held deploy needs. Defaults to 1."),
 		"created_unix":       prop("integer", "Creation time, unix seconds."),
 		"updated_unix":       prop("integer", "Last update, unix seconds."),
-	}, "id", "repo_id", "name", "sort_order", "approval_policy", "required_approvals"),
+		"can_write":          prop("boolean", "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true."),
+	}, "id", "repo_id", "name", "sort_order", "approval_policy", "required_approvals", "can_write"),
 	"SecretName": objectSchema(map[string]any{
 		"name":        prop("string", "Secret name. A secret VALUE is never readable over any endpoint at any scope (I12)."),
 		"repo_id":     prop("integer", "Repository the secret belongs to."),

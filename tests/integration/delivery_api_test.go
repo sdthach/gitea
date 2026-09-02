@@ -4,12 +4,15 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	"gitea.dev/models/delivery"
+	repo_model "gitea.dev/models/repo"
+	unit_model "gitea.dev/models/unit"
 	"gitea.dev/modules/setting"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
 	"gitea.dev/tests"
@@ -169,6 +172,109 @@ func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
 	DecodeJSON(t, resp, &failure)
 	assert.Contains(t, failure.Message, "nowhere")
 	assert.NotEmpty(t, failure.SuggestedAction)
+}
+
+type deliveryEnvironmentRow struct {
+	ID       int64  `json:"id"`
+	RepoID   int64  `json:"repo_id"`
+	Name     string `json:"name"`
+	CanWrite bool   `json:"can_write"`
+}
+
+func deliveryEnvironmentToken(t *testing.T, login string) string {
+	t.Helper()
+	return getTokenForLoggedInUser(t, loginUser(t, login), auth_model.AccessTokenScopeReadRepository)
+}
+
+func TestAPIDeliveryEnvironmentCanWrite(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user5 owns repo4, so it is repository administrator there; user4 is a collaborator
+	// with write on it, which the gate refuses.
+	repoEnv := &delivery.Environment{
+		RepoID: 4, Name: "prod", SortOrder: 50,
+		ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+	}
+	require.NoError(t, db.Insert(t.Context(), repoEnv))
+
+	canWrite := func(login string, envID int64) bool {
+		t.Helper()
+		req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments?limit=50").
+			AddTokenAuth(deliveryEnvironmentToken(t, login))
+		var rows []deliveryEnvironmentRow
+		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
+		for _, row := range rows {
+			if row.ID == envID {
+				return row.CanWrite
+			}
+		}
+		t.Fatalf("%s cannot see environment %d at all, so the row says nothing about can_write", login, envID)
+		return false
+	}
+
+	const defaultsEnvID = 1 // models/fixtures/delivery_environment.yml, repo_id 0
+	assert.False(t, canWrite("user2", defaultsEnvID), "an ordinary user may not write the instance-wide default set")
+	assert.True(t, canWrite("user1", defaultsEnvID), "a site administrator may")
+	assert.True(t, canWrite("user5", repoEnv.ID), "the repository's administrator may write its own environment")
+	assert.False(t, canWrite("user4", repoEnv.ID), "write on a repository is not admin on it")
+}
+
+// TestAPIDeliveryEnvironmentByID covers GET /environments/{id}: identity is the id, and a row
+// the caller cannot see is refused as one that does not exist.
+func TestAPIDeliveryEnvironmentByID(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user2/repo2 is private and carries no Actions unit; adding one leaves visibility as
+	// the only thing separating it from the rows user4 can read.
+	require.NoError(t, db.Insert(t.Context(), &repo_model.RepoUnit{
+		RepoID: 2, Type: unit_model.TypeActions, Config: &repo_model.ActionsConfig{},
+	}))
+	envs := map[int64]*delivery.Environment{}
+	for _, repoID := range []int64{1, 2, 4} {
+		env := &delivery.Environment{
+			RepoID: repoID, Name: "prod", SortOrder: 50,
+			ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+		}
+		require.NoError(t, db.Insert(t.Context(), env))
+		envs[repoID] = env
+	}
+
+	read := func(login string, id int64, status int) deliveryEnvironmentRow {
+		t.Helper()
+		req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, id)).
+			AddTokenAuth(deliveryEnvironmentToken(t, login))
+		var row deliveryEnvironmentRow
+		resp := MakeRequest(t, req, status)
+		if status == http.StatusOK {
+			DecodeJSON(t, resp, &row)
+		}
+		return row
+	}
+
+	// Three repositories name an environment "prod"; only the id tells them apart.
+	assert.Equal(t, int64(1), read("user4", envs[1].ID, http.StatusOK).RepoID)
+	repo4Row := read("user4", envs[4].ID, http.StatusOK)
+	assert.Equal(t, int64(4), repo4Row.RepoID)
+	assert.Equal(t, "prod", repo4Row.Name)
+	assert.False(t, repo4Row.CanWrite, "user4 has write on repo4, not admin")
+	assert.True(t, read("user5", envs[4].ID, http.StatusOK).CanWrite, "its owner may write it")
+
+	// A row in a repository the caller cannot see is answered exactly as one that does not
+	// exist, so the 404 never confirms the row is there. Its owner still reads it.
+	assert.Equal(t, int64(2), read("user2", envs[2].ID, http.StatusOK).RepoID)
+	hidden := deliveryEnvironmentRefusal(t, "user4", envs[2].ID)
+	missing := deliveryEnvironmentRefusal(t, "user4", 999999)
+	assert.Equal(t, missing.Code, hidden.Code)
+	assert.NotEmpty(t, missing.SuggestedAction, "every error carries a suggested next action (A21)")
+}
+
+func deliveryEnvironmentRefusal(t *testing.T, login string, id int64) deliveryRefusal {
+	t.Helper()
+	var refusal deliveryRefusal
+	req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, id)).
+		AddTokenAuth(deliveryEnvironmentToken(t, login))
+	DecodeJSON(t, MakeRequest(t, req, http.StatusNotFound), &refusal)
+	return refusal
 }
 
 func TestAPIDeliveryRepos(t *testing.T) {
