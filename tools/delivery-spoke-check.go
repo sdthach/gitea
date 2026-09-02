@@ -5,7 +5,7 @@
 
 // delivery-spoke-check enforces F2: every edit the fork makes to an upstream file is a
 // single-line delegation into the hub. It diffs the working tree against the upstream pin
-// and fails on any upstream file that is not a declared spoke, on any spoke over its line
+// and fails on any upstream file that is neither a declared spoke nor a declared override, on any spoke over its line
 // budget, and on any deleted line — a rewritten upstream line is not a delegation.
 //
 // Usage: go run ./tools/delivery-spoke-check.go [-ref <pin>]
@@ -44,8 +44,17 @@ var spokes = map[string]spoke{
 	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if
 	// body unconditionally). Import plus guard is therefore four, not two.
 	"models/actions/task.go": {4, "task-assignment gate (F5e), added by slice 6: one import plus a three-line `if ... { continue }` guard"},
-	".gitignore":             {1, "ignores the gitignored planning directory; carries no fork logic"},
+	".gitignore":             {4, "ignores the planning directory and the generated theme preview, with the preview's comment and separator; carries no fork logic"},
 	"Makefile":               {2, "one -include line per spoke makefile, Makefile.delivery and Makefile.themes, so neither adds a target to it"},
+}
+
+// overrides are upstream files the fork replaces wholesale rather than delegating from.
+// They are exempt from the budget and the no-deletion rule, but not from being declared.
+var overrides = map[string]string{
+	"web_src/css/base.css":                     "GitHub default styling (b40c841c1e)",
+	"web_src/css/modules/label.css":            "GitHub default styling (b40c841c1e)",
+	"web_src/css/themes/theme-gitea-dark.css":  "GitHub default styling (b40c841c1e)",
+	"web_src/css/themes/theme-gitea-light.css": "GitHub default styling (b40c841c1e)",
 }
 
 func main() {
@@ -63,7 +72,7 @@ func main() {
 	}
 
 	var problems []string
-	touched := 0
+	touched, overridden := 0, 0
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
@@ -76,6 +85,10 @@ func main() {
 		added, deleted, path := parseCount(fields[0]), parseCount(fields[1]), fields[2]
 		touched++
 
+		if _, ok := overrides[path]; ok {
+			overridden++
+			continue
+		}
 		s, ok := spokes[path]
 		if !ok {
 			problems = append(problems, fmt.Sprintf(
@@ -104,7 +117,7 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	fmt.Printf("delivery-spoke-check: %d upstream file(s) edited against %s, every one a declared spoke within budget\n", touched, ref)
+	fmt.Printf("delivery-spoke-check: %d upstream file(s) edited against %s, %d declared overrides, every other one a declared spoke within budget\n", touched, ref, overridden)
 }
 
 func parseCount(field string) int {

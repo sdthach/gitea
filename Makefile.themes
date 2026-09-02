@@ -4,3 +4,7 @@
 .PHONY: generate-themes
 generate-themes: ## generate dracula pro theme css
 	$(GO) run build/generate-themes.go
+
+.PHONY: theme-preview
+theme-preview: ## generate the theme preview page in theme-preview/
+	$(GO) run build/generate-theme-preview.go
