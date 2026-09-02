@@ -7,20 +7,20 @@ gitea-theme-meta-info {
   --is-dark-theme: false;
   --color-primary: #6235e9;
   --color-primary-contrast: #ffffff;
-  --color-primary-dark-1: #5020e1;
-  --color-primary-dark-2: #481fc2;
-  --color-primary-dark-3: #411fa5;
-  --color-primary-dark-4: #391e88;
-  --color-primary-dark-5: #271854;
-  --color-primary-dark-6: #130c28;
-  --color-primary-dark-7: #06040c;
-  --color-primary-light-1: #734ce7;
-  --color-primary-light-2: #8463e6;
-  --color-primary-light-3: #9478e6;
-  --color-primary-light-4: #a38de7;
-  --color-primary-light-5: #c2b4ea;
-  --color-primary-light-6: #e0d9f3;
-  --color-primary-light-7: #f6f4fb;
+  --color-primary-dark-1: #4f1de5;
+  --color-primary-dark-2: #471ad0;
+  --color-primary-dark-3: #3f18b6;
+  --color-primary-dark-4: #38179d;
+  --color-primary-dark-5: #27106d;
+  --color-primary-dark-6: #170a3d;
+  --color-primary-dark-7: #0c071e;
+  --color-primary-light-1: #6a40e7;
+  --color-primary-light-2: #724be5;
+  --color-primary-light-3: #7956e3;
+  --color-primary-light-4: #8160e2;
+  --color-primary-light-5: #a088e7;
+  --color-primary-light-6: #d0c4f3;
+  --color-primary-light-7: #f0edfb;
   --color-primary-alpha-10: #6235e919;
   --color-primary-alpha-20: #6235e933;
   --color-primary-alpha-30: #6235e94b;
@@ -63,64 +63,64 @@ gitea-theme-meta-info {
   --color-secondary-hover: var(--color-secondary-dark-5);
   --color-secondary-active: var(--color-secondary-dark-6);
   /* console colors - used for actions console and console files */
-  --color-console-fg: #121212;
-  --color-console-fg-subtle: #464646;
+  --color-console-fg: #0b1912;
+  --color-console-fg-subtle: #3d5046;
   --color-console-bg: #f9fdfc;
   --color-console-border: #c2e8de;
   --color-console-hover-bg: #e6f9f4;
   --color-console-active-bg: #c2e8de;
   --color-console-menu-bg: #effdf9;
   --color-console-menu-border: #c2e8de;
-  --color-console-link: #5c6d67;
+  --color-console-link: #5c6d64;
   /* named colors */
-  --color-red: #e02323;
+  --color-red: #d31e1e;
   --color-orange: #e1792d;
   --color-yellow: #e0c223;
   --color-olive: #46c81d;
-  --color-green: #1bc089;
+  --color-green: #138660;
   --color-teal: #178f9e;
-  --color-blue: #1e58d3;
+  --color-blue: #1c53c7;
   --color-violet: #5020de;
-  --color-purple: #c31fdc;
+  --color-purple: #d14ae5;
   --color-pink: #e23790;
   --color-brown: #ad6937;
   --color-black: #1d2825;
   /* light variants - produced via Sass scale-color(color, $lightness: +25%) */
-  --color-red-light: #e65c5c;
+  --color-red-light: #e55050;
   --color-orange-light: #ed9a5d;
   --color-yellow-light: #efd653;
   --color-olive-light: #6ce645;
-  --color-green-light: #42e2ad;
+  --color-green-light: #21c891;
   --color-teal-light: #19d6ee;
-  --color-blue-light: #4f7fe5;
+  --color-blue-light: #3e76ec;
   --color-violet-light: #7e5de1;
-  --color-purple-light: #d05ae2;
+  --color-purple-light: #dc79ea;
   --color-pink-light: #e96aac;
   --color-brown-light: #c98e62;
   --color-black-light: #4b6861;
   /* dark 1 variants - produced via Sass scale-color(color, $lightness: -10%) */
-  --color-red-dark-1: #cc1d1d;
+  --color-red-dark-1: #bd1c1c;
   --color-orange-dark-1: #d76b1c;
   --color-yellow-dark-1: #d0b319;
   --color-olive-dark-1: #3fb51a;
-  --color-green-dark-1: #19ac7b;
+  --color-green-dark-1: #117856;
   --color-teal-dark-1: #138290;
-  --color-blue-dark-1: #1c4fbd;
+  --color-blue-dark-1: #174ab5;
   --color-violet-dark-1: #4a20c5;
-  --color-purple-dark-1: #ae1fc3;
+  --color-purple-dark-1: #c930e0;
   --color-pink-dark-1: #dd2082;
   --color-brown-dark-1: #9b5f33;
   --color-black-dark-1: #2c3936;
   /* dark 2 variants - produced via Sass scale-color(color, $lightness: -20%) */
-  --color-red-dark-2: #b41b1b;
+  --color-red-dark-2: #a81919;
   --color-orange-dark-2: #c15f17;
   --color-yellow-dark-2: #bca113;
   --color-olive-dark-2: #37a116;
-  --color-green-dark-2: #16996d;
+  --color-green-dark-2: #106b4d;
   --color-teal-dark-2: #0f7582;
-  --color-blue-dark-2: #1846a8;
+  --color-blue-dark-2: #1241a3;
   --color-violet-dark-2: #421ead;
-  --color-purple-dark-2: #991dac;
+  --color-purple-dark-2: #bb20d2;
   --color-pink-dark-2: #c31d73;
   --color-brown-dark-2: #89542d;
   --color-black-dark-2: #131918;
@@ -160,7 +160,7 @@ gitea-theme-meta-info {
   --color-series-16-15: #982e85;
   /* other colors */
   --color-grey: #697774;
-  --color-grey-light: #7c8a85;
+  --color-grey-light: #354d41;
   --color-gold: #ac9620;
   --color-white: #ffffff;
   --color-diff-added-fg: #117856;
@@ -209,15 +209,15 @@ gitea-theme-meta-info {
   --color-logo: #609926;
   /* target-based colors */
   --color-body: #f9fdfc;
-  --color-box-header: #e6f9f4;
+  --color-box-header: #ecfcf8;
   --color-box-body: #f9fdfc;
   --color-box-body-highlight: #e3fff8;
-  --color-text-dark: #040706;
-  --color-text: #1c1c1c;
-  --color-text-light: #363636;
-  --color-text-light-1: #464646;
-  --color-text-light-2: #5b6763;
-  --color-text-light-3: #74847f;
+  --color-text-dark: #060a08;
+  --color-text: #21322a;
+  --color-text-light: #354d41;
+  --color-text-light-1: #445e51;
+  --color-text-light-2: #5c786a;
+  --color-text-light-3: #739484;
   --color-footer: var(--color-nav-bg);
   --color-timeline: #c2e8de;
   --color-input-text: var(--color-text-dark);
@@ -226,15 +226,15 @@ gitea-theme-meta-info {
   --color-input-border: var(--color-secondary-dark-1);
   --color-light: #00171106;
   --color-light-border: #0017111d;
-  --color-hover: #00171108;
-  --color-hover-opaque: #e6f9f4; /* TODO: color-mix(in srgb, var(--color-body), var(--color-hover)); */
-  --color-active: #00171114;
+  --color-hover: #92999733;
+  --color-hover-opaque: #ddf1ec; /* TODO: color-mix(in srgb, var(--color-body), var(--color-hover)); */
+  --color-active: #a7c8bf33;
   --color-menu: #effdf9;
   --color-card: #effdf9;
   --color-markup-table-row: #0060480a;
-  --color-markup-code-block: #00604810;
+  --color-markup-code-block: #a7c8bf33;
   --color-markup-code-inline: #00604812;
-  --color-button: #effdf9;
+  --color-button: #ecfcf8;
   --color-code-bg: #f2fffc;
   --color-shadow: #00171126;
   --color-shadow-opaque: #b9dfd6;
@@ -248,16 +248,16 @@ gitea-theme-meta-info {
   --color-reaction-bg: #0017110a;
   --color-reaction-hover-bg: var(--color-primary-light-5);
   --color-reaction-active-bg: var(--color-primary-light-6);
-  --color-tooltip-text: #fbfffe;
+  --color-tooltip-text: #fbfffd;
   --color-tooltip-bg: #252e2c;
   --color-nav-bg: #ecfcf8;
   --color-nav-hover-bg: var(--color-secondary-light-1);
   --color-nav-text: var(--color-text);
   --color-secondary-nav-bg: #f9fbfa;
   --color-label-text: var(--color-text);
-  --color-label-bg: #94a6a24b;
-  --color-label-hover-bg: #94a6a2a0;
-  --color-label-active-bg: #94a6a2ff;
+  --color-label-bg: #a7c8bf33;
+  --color-label-hover-bg: #a7c8bfa0;
+  --color-label-active-bg: #a7c8bfff;
   --color-accent: var(--color-primary-light-1);
   --color-small-accent: var(--color-primary-light-6);
   --color-highlight-fg: #eec900;
@@ -310,4 +310,9 @@ gitea-theme-meta-info {
   --color-syntax-nonmatching-bracket-bg: #ec171738;
   accent-color: var(--color-accent);
   color-scheme: light;
+}
+
+a,
+.ui.breadcrumb a {
+  color: var(--color-blue);
 }
