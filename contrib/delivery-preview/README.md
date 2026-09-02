@@ -18,16 +18,25 @@ in Docker. `templates/`, `public/` and `options/` are bind-mounted from the repo
 ## The data
 
 `seed.py` needs `faker` (`pip install faker`) and drives the public APIs — Gitea's `/api/v1`
-and the fork's `/api/delivery/v1`. It creates users with their own tokens, an organisation,
-repositories with deploy workflows and project boards, labelled and assigned issues, releases,
-then promotes each release up `dev → qa → uat → staging → prod` and resolves the approvals
-that prod holds.
+and the fork's `/api/delivery/v1`, environment policy included. It creates one account per
+role with its own token, an organisation with one team per role, repositories with deploy
+workflows and project boards, labelled and assigned issues, releases, then promotes each
+release up `dev → qa → uat → staging → prod` and resolves the approvals that prod holds.
 
-Environment policy is the one thing it sets with `psql`: the delivery API exposes environments
-read-only, so there is no endpoint to write an approval policy through.
+The seven roles are site admin, org owner, repo maintainer, deployer, approver, reader and
+outsider — the last holding no membership of any kind. `prod` enables its bypass allowlist
+naming the approvers team, which is what makes a read-only approver able to approve and a
+deployer holding write unable to. Accounts, tokens and team ids land in
+`planning/seed-users.md` (`--accounts-file`), which is gitignored.
 
-Useful flags: `--repos`, `--issues`, `--releases`, `--users`, `--failure-rate`,
-`--wait-approvals`, `--seed` to repeat the content, `--tag` to repeat the identities.
+Generated names carry their entity kind as a prefix — `org-`, `user-`, `repo-`, `project-`,
+`issue-`, `milestone-`, `release-`. Environments and labels do not: the fork parses both as
+keys, `deploy-<env>.yaml` declares `environment: prod`, and the board keys its lanes off the
+`type:` and `epic:` label prefixes.
+
+Useful flags: `--repos`, `--issues`, `--releases`, `--users` (accounts per role),
+`--failure-rate`, `--wait-approvals`, `--seed` to repeat the content, `--tag` to repeat the
+identities, `--self-test` to run the naming doctests without a server.
 
 ## The runner
 
