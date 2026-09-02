@@ -185,13 +185,15 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 		}
 	}
 
-	// Tag the commit so `git log --oneline deployed/env` shows the latest deploy.
+	// Tag the commit so `git log --oneline deployed/env` shows the latest deploy. The tag
+	// MOVES, so it is written with update-ref: `git tag` refuses a name that already
+	// exists, which would pin the tag to the first deploy ever made to the environment.
 	if run.Status.IsSuccess() {
 		tagName := "deployed/" + deployment.Environment
 		gitRepo, err := git.OpenRepository(ctx, repo)
 		if err == nil {
 			defer gitRepo.Close()
-			if err := gitRepo.CreateTag(ctx, tagName, deployment.SHA); err != nil {
+			if err := git.UpdateRef(ctx, gitRepo, git.TagPrefix+tagName, deployment.SHA); err != nil {
 				log.Error("delivery: tag %s at %s: %v", tagName, deployment.SHA, err)
 			}
 		} else {

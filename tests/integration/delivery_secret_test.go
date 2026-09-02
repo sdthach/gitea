@@ -4,15 +4,20 @@
 package integration
 
 import (
+	"fmt"
+	"net/http"
 	"net/url"
 	"testing"
 
 	actions_model "gitea.dev/models/actions"
+	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	"gitea.dev/models/delivery"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,4 +137,51 @@ func TestDeliverySecretNarrowingEndToEnd(t *testing.T) {
 		assert.NotContains(t, none, "QA_DB_PASS")
 		assert.Contains(t, none, "SHARED_API_KEY", "an unscoped secret is unaffected")
 	})
+}
+
+// TestDeliverySecretScopeWritesAreRepoAdminOnly covers the pair of endpoints that make F4
+// configurable at all: binding a secret name to an environment, and unbinding it. Neither
+// ever accepts or returns a secret value (I12).
+func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	ownerToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+
+	// user4 can read user2/repo1, which is public, and does not administer it.
+	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/secret-scopes",
+		map[string]any{"repo_id": 1, "secret_name": "DEPLOY_KEY", "environment": "prod"}).AddTokenAuth(outsiderToken)
+	var refusal deliveryRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
+	assert.Equal(t, "forbidden", refusal.Code)
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action (A21)")
+	// A refused bind writes nothing.
+	unittest.AssertNotExistsBean(t, &delivery.SecretScope{RepoID: 1, SecretName: "DEPLOY_KEY"})
+
+	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/secret-scopes",
+		map[string]any{"repo_id": 1, "secret_name": "DEPLOY_KEY", "environment": "prod"}).AddTokenAuth(ownerToken)
+	var created struct {
+		ID          int64  `json:"id"`
+		SecretName  string `json:"name"`
+		Environment string `json:"environment"`
+	}
+	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &created)
+	assert.Equal(t, "DEPLOY_KEY", created.SecretName)
+	assert.Equal(t, "prod", created.Environment)
+	require.Positive(t, created.ID)
+
+	body := MakeRequest(t, NewRequest(t, "GET", deliveryv1.BasePath+
+		"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(ownerToken), http.StatusOK).Body.String()
+	assert.Contains(t, body, "DEPLOY_KEY", "the bound name is listed against its environment")
+
+	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deliveryv1.BasePath, created.ID)).
+		AddTokenAuth(outsiderToken)
+	MakeRequest(t, req, http.StatusForbidden)
+	// A refused unbind removes nothing.
+	unittest.AssertExistsAndLoadBean(t, &delivery.SecretScope{ID: created.ID})
+
+	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deliveryv1.BasePath, created.ID)).
+		AddTokenAuth(ownerToken)
+	MakeRequest(t, req, http.StatusNoContent)
+	unittest.AssertNotExistsBean(t, &delivery.SecretScope{ID: created.ID})
 }
