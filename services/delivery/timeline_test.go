@@ -309,3 +309,28 @@ func TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
 	assert.False(t, ok, "a level that does not ship yet is refused, not silently downgraded")
 	assert.Equal(t, ZoomIssue, zoom)
 }
+
+// TestDeliveryBuildSpansListsAnEpicThatHasNoChildrenYet: a freshly filed epic has a window
+// and no children, and drawing nothing for it would say nothing about it.
+func TestDeliveryBuildSpansListsAnEpicThatHasNoChildrenYet(t *testing.T) {
+	declared := Bar{IssueID: 42, Number: 42, Epic: "lonely", Type: TypeEpic, StartUnix: 100, EndUnix: 900, EndInferred: true}
+
+	rows := BuildSpans([]Bar{declared})
+	require.Len(t, rows, 1)
+	assert.Equal(t, "epic", rows[0].Kind)
+	assert.Equal(t, "lonely", rows[0].Key)
+	assert.Zero(t, rows[0].Children)
+	assert.Zero(t, rows[0].Closed)
+	assert.Zero(t, rows[0].Progress)
+	assert.Equal(t, int64(100), rows[0].StartUnix, "the row spans the epic's own declared window")
+	assert.Equal(t, int64(900), rows[0].EndUnix)
+	assert.EqualValues(t, 42, rows[0].IssueID)
+	assert.EqualValues(t, 100, rows[0].DeclaredStartUnix)
+	assert.EqualValues(t, 900, rows[0].DeclaredEndUnix)
+	assert.True(t, rows[0].ContainsChildren, "a set of nothing is contained by any window")
+	assert.Empty(t, rows[0].Warning, "an epic with nothing filed under it contradicts nothing")
+	assert.True(t, rows[0].EndInferred, "the declared bar's own end is an estimate")
+
+	// An epic label carried by no epic issue and no child is still not a row.
+	assert.Empty(t, BuildSpans([]Bar{{IssueID: 7, Epic: "", Type: "story", StartUnix: 1, EndUnix: 2}}))
+}

@@ -116,6 +116,9 @@ func getTimelineEndpoint() *endpoint {
 				"window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup " +
 				"whose fetch hit its cap is marked partial and publishes no progress percentage. " +
 				"zoom selects the depth the chart is read at and group_by the lane dimension, reusing the board's own lanes. " +
+				"A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone " +
+				"over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the " +
+				"page holds. An epic with no children yet is still listed, over its own declared window. " +
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
 				"Scoped by Gitea's own permission check on the Issues unit. " +
 				"The /delivery/timeline page is a client of this endpoint.",
@@ -204,30 +207,13 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		view.zoom = delivery_service.ZoomIssue
 	}
 
-	issues, err := issues_model.Issues(ctx, opts)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
-	if err := issues.LoadAttributes(ctx); err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
-
-	starts, err := ccpmStarts(ctx, issues)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
-
 	out := &Timeline{
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		Bars: []delivery_service.Bar{}, Arrows: []delivery_service.Arrow{},
 		Spans: []delivery_service.SpanRow{}, Unmanaged: []delivery_service.Unmanaged{},
 		Lanes: []delivery_service.Lane{}, Rows: []TimelineRow{},
 		GroupBy: string(view.grouping), Zoom: string(view.zoom),
-		CanWrite:  canWrite,
-		Truncated: len(issues) == limit,
+		CanWrite: canWrite,
 	}
 
 	milestones, err := db.Find[issues_model.Milestone](ctx, issues_model.FindMilestoneOptions{RepoID: repo.ID})
@@ -237,6 +223,33 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 	}
 	for _, m := range milestones {
 		out.Rows = append(out.Rows, TimelineRow{MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed})
+	}
+
+	if view.zoom == delivery_service.ZoomMilestone {
+		if out.Spans, out.Truncated, err = timelineMilestoneRollups(ctx, repo, opts, limit); err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		out.Ruler = rulerOver(out.Bars, out.Spans)
+		ctx.JSON(http.StatusOK, out)
+		return
+	}
+
+	issues, err := issues_model.Issues(ctx, opts)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	if err := issues.LoadAttributes(ctx); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	out.Truncated = len(issues) == limit
+
+	starts, err := ccpmStarts(ctx, issues)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
 	}
 
 	bars := make([]delivery_service.Bar, 0, len(issues))
@@ -270,18 +283,16 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		return
 	}
 
-	// A rolled-up row is a bracket over a set its children define, so a coarse zoom lists
-	// the brackets alone: drawing the children beside them is the issue zoom.
-	switch view.zoom {
-	case delivery_service.ZoomEpic:
+	// A rolled-up row is a bracket over a set its children define, so epic zoom lists the
+	// brackets alone: drawing the children beside them is the issue zoom.
+	if view.zoom == delivery_service.ZoomEpic {
 		out.Spans = spansOfKind(spans, "epic")
-	case delivery_service.ZoomMilestone:
-		out.Spans = spansOfKind(spans, "milestone")
-	default:
+	} else {
 		out.Bars, out.Spans = bars, spans
 	}
-	if view.grouping != delivery_service.GroupNone {
-		out.Lanes = delivery_service.TimelineLanes(bars, view.grouping)
+	// Lanes group the bars the response publishes, so a zoom that publishes none carries none.
+	if view.grouping != delivery_service.GroupNone && len(out.Bars) > 0 {
+		out.Lanes = delivery_service.TimelineLanes(out.Bars, view.grouping)
 	}
 	out.Ruler = rulerOver(out.Bars, out.Spans)
 	ctx.JSON(http.StatusOK, out)
@@ -367,6 +378,36 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 		}
 	}
 	return rows, nil
+}
+
+// timelineMilestoneRollups pages over the repository's milestones rather than its issues, so a
+// page of N holds N milestone rows and truncated means more milestones than the page holds.
+func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int) ([]delivery_service.SpanRow, bool, error) {
+	find := issues_model.FindMilestoneOptions{
+		RepoID: repo.ID, IsClosed: opts.IsClosed, SortType: "id",
+		ListOptions: db.ListOptions{Page: opts.Paginator.Page, PageSize: limit},
+	}
+	milestones, err := db.Find[issues_model.Milestone](ctx, find)
+	if err != nil {
+		return nil, false, err
+	}
+	rows := make([]delivery_service.SpanRow, 0, len(milestones))
+	for _, milestone := range milestones {
+		// The milestone_id filter narrows the chart here, because this zoom's page is over
+		// milestones rather than over the issues it would otherwise have narrowed.
+		if len(opts.MilestoneIDs) > 0 && !slices.Contains(opts.MilestoneIDs, milestone.ID) {
+			continue
+		}
+		row, ok, err := timelineRollup(ctx, repo, "milestone", strconv.FormatInt(milestone.ID, 10),
+			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestone.ID} })
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows, len(opts.MilestoneIDs) == 0 && len(milestones) == limit, nil
 }
 
 // timelineRollup folds one parent's children into its row, one query per parent because a

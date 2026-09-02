@@ -363,8 +363,9 @@ var componentSchemas = map[string]any{
 			"not manage has no start to draw and is listed rather than given a fabricated bar."),
 		"group_by": enumProp("The active lane grouping, reusing the board's own. A view setting, never stored.", delivery_service.Groupings),
 		"zoom":     enumProp("The depth the chart is read at. At epic or milestone only rollup rows are listed and no bar is drawn.", delivery_service.Zooms),
-		"lanes": arrayProp("object", "The bars grouped by the board's own lane definition, empty when grouping is off. Each lane "+
-			"carries key, label, is_empty_value, cards and one column holding its bars."),
+		"lanes": arrayProp("object", "The PUBLISHED bars grouped by the board's own lane definition. Empty when grouping is off, "+
+			"and empty at a rolled-up zoom, which publishes no bars to group. Each lane carries key, label, is_empty_value, "+
+			"cards and one column holding its bars."),
 		"ruler": prop("object", "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows "+
 			"the span drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while "+
 			"the write granularity stays a day at every unit."),

@@ -430,6 +430,9 @@ func BuildSpans(bars []Bar) []SpanRow {
 		case bar.Epic == "":
 		case bar.Type == TypeEpic:
 			declared[bar.Epic] = bar
+			if _, seen := byEpic[bar.Epic]; !seen {
+				byEpic[bar.Epic] = nil // an epic with no child is still an epic
+			}
 		default:
 			byEpic[bar.Epic] = append(byEpic[bar.Epic], bar)
 		}
@@ -442,10 +445,21 @@ func BuildSpans(bars []Bar) []SpanRow {
 
 	rows := make([]SpanRow, 0, len(byEpic)+len(byMilestone))
 	for _, key := range sortedKeys(byEpic) {
-		if row, ok := BuildSpan("epic", key, key, byEpic[key]); ok {
-			applyContainment(&row, declared[key], byEpic[key])
-			rows = append(rows, row)
+		row, ok := BuildSpan("epic", key, key, byEpic[key])
+		if !ok {
+			// A freshly filed epic has a window and no children yet; drawing nothing for
+			// it would say nothing about it.
+			if declared[key].IssueID == 0 {
+				continue
+			}
+			row = SpanRow{
+				Kind: "epic", Key: key, Label: key,
+				StartUnix: declared[key].StartUnix, EndUnix: declared[key].EndUnix,
+				EndInferred: declared[key].EndInferred,
+			}
 		}
+		applyContainment(&row, declared[key], byEpic[key])
+		rows = append(rows, row)
 	}
 	for _, key := range sortedKeys(byMilestone) {
 		if row, ok := BuildSpan("milestone", key, milestoneLabel[key], byMilestone[key]); ok {
@@ -466,11 +480,14 @@ func (r *SpanRow) MarkPartial() {
 // Containment, not a sum of effort: children run in parallel, so a sum warns on every plan.
 func applyContainment(row *SpanRow, declared Bar, children []Bar) {
 	row.ContainsChildren = true
-	if declared.IssueID == 0 || len(children) == 0 {
+	if declared.IssueID == 0 {
 		return
 	}
 	row.IssueID = declared.IssueID
 	row.DeclaredStartUnix, row.DeclaredEndUnix = declared.StartUnix, declared.EndUnix
+	if len(children) == 0 {
+		return
+	}
 
 	var warnings, actions []string
 	if declared.EndUnix < row.EndUnix {

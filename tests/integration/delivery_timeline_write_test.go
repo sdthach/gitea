@@ -5,6 +5,7 @@ package integration
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
@@ -516,4 +517,76 @@ func TestAPIDeliveryTimelineAtEpicZoomPagesOverEpicsNotOverIssues(t *testing.T) 
 	one := getTimeline(t, token, "repo_id=1&zoom=epic&limit=3&epic=latecomer")
 	require.Len(t, one.Spans, 1)
 	assert.Equal(t, "latecomer", one.Spans[0].Key)
+}
+
+// TestAPIDeliveryTimelineListsAnEpicWithNoChildrenYet: an epic filed a minute ago has a
+// window and nothing under it, and a chart that drew nothing for it would say nothing.
+func TestAPIDeliveryTimelineListsAnEpicWithNoChildrenYet(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	labelIssue(t, 1, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"lonely"))
+	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic))
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	payload := getTimeline(t, token, "repo_id=1&zoom=epic&limit=200")
+
+	require.Len(t, payload.Spans, 1, "the epic is listed even with nothing filed under it")
+	assert.Equal(t, "lonely", payload.Spans[0].Key)
+	assert.Zero(t, payload.Spans[0].Children)
+	assert.Zero(t, payload.Spans[0].Progress)
+	assert.EqualValues(t, 1, payload.Spans[0].IssueID, "the bracket can still be opened")
+	assert.True(t, payload.Spans[0].ContainsChildren)
+	assert.Empty(t, payload.Spans[0].Warning)
+	assert.Empty(t, payload.Bars)
+	assert.Empty(t, payload.Lanes, "a zoom that publishes no bar has no lanes to group them into")
+}
+
+// TestAPIDeliveryTimelineAtMilestoneZoomPagesOverMilestonesNotOverIssues: milestones are not
+// issues, so a page of N holds N milestone rows. Paging over issues instead drops a milestone
+// whose issues all sit past the limit.
+func TestAPIDeliveryTimelineAtMilestoneZoomPagesOverMilestonesNotOverIssues(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"paged")
+	// Four managed issues on no milestone, created before everything else, so oldest-first
+	// fills a short page of ISSUES with them alone.
+	rows := make([]*issues_model.Issue, 0, 5)
+	links := make([]*issues_model.IssueLabel, 0, 5)
+	for i := range 4 {
+		id := int64(9300 + i)
+		rows = append(rows, &issues_model.Issue{
+			ID: id, RepoID: 1, Index: id, PosterID: 2, Title: "filler",
+			CreatedUnix: timeutil.TimeStamp(1000 + int64(i)), UpdatedUnix: timeutil.TimeStamp(1000 + int64(i)),
+		})
+		links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: epic.ID})
+	}
+	require.NoError(t, db.Insert(t.Context(), rows))
+	require.NoError(t, db.Insert(t.Context(), links))
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	// The milestone is created last and holds one managed issue created last.
+	timelineWrite(t, token, "/timeline/milestones", map[string]any{"repo": "user2/repo1", "title": "Sprint 9"})
+	sprint, err := issues_model.GetMilestoneByRepoIDANDName(t.Context(), 1, "Sprint 9")
+	require.NoError(t, err)
+	require.NoError(t, db.Insert(t.Context(), &issues_model.Issue{
+		ID: 9400, RepoID: 1, Index: 9400, PosterID: 2, Title: "late", MilestoneID: sprint.ID,
+		CreatedUnix: timeutil.TimeStamp(2_000_000_000), UpdatedUnix: timeutil.TimeStamp(2_000_000_000),
+	}))
+	require.NoError(t, db.Insert(t.Context(), &issues_model.IssueLabel{IssueID: 9400, LabelID: epic.ID}))
+
+	milestones, err := unittest.GetXORMEngine().Where("repo_id = ?", 1).Count(new(issues_model.Milestone))
+	require.NoError(t, err)
+	payload := getTimeline(t, token, "repo_id=1&zoom=milestone&limit="+strconv.FormatInt(milestones+1, 10))
+
+	assert.Empty(t, payload.Bars, "a rolled-up zoom lists brackets, not the bars under them")
+	assert.False(t, payload.Truncated, "every milestone fits the page, whatever the issue count is")
+	row := payload.Spans[spanOf(t, payload, "milestone", strconv.FormatInt(sprint.ID, 10))]
+	assert.Equal(t, 1, row.Children, "the milestone every issue-paged page would have missed")
+
+	// The milestone filter still narrows the chart at this zoom, where the page is over
+	// milestones rather than over the issues it would otherwise have narrowed.
+	one := getTimeline(t, token, "repo_id=1&zoom=milestone&limit=200&milestone_id="+strconv.FormatInt(sprint.ID, 10))
+	require.Len(t, one.Spans, 1)
+	assert.Equal(t, strconv.FormatInt(sprint.ID, 10), one.Spans[0].Key)
+	assert.False(t, one.Truncated)
 }
