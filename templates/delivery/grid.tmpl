@@ -1,0 +1,284 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard delivery">
+	<div class="ui container">
+		<h2 class="ui header">{{.Title}}</h2>
+		<p class="tw-text-14">
+			Releases are rows, environments are columns in configured order. Every cell state is
+			projected from the append-only audit log by
+			<code>{{.DeliveryAPIBase}}/grid</code>; this page is a client of that endpoint and reads
+			nothing the API does not serve.
+		</p>
+
+		<div id="delivery-error" class="ui negative message tw-hidden">
+			<div class="header">Could not load the grid</div>
+			<p id="delivery-error-message"></p>
+			<p><strong>Suggested action:</strong> <span id="delivery-error-action"></span></p>
+		</div>
+
+		<div id="delivery-token-box" class="ui warning message tw-hidden">
+			<div class="header">Approving from here needs an API token</div>
+			<p>
+				Reads use your browser session, but an approval never does, so that no other site
+				holding your cookie can release a deploy. Create a token under Settings &gt;
+				Applications and paste it here; it is kept in this tab only.
+			</p>
+			<div class="ui action input">
+				<input id="delivery-token" type="password" autocomplete="off" placeholder="API token">
+				<button id="delivery-token-save" class="ui primary button" type="button">Use token</button>
+			</div>
+		</div>
+
+		<table class="ui table" id="delivery-grid">
+			<thead>
+				<tr id="delivery-grid-head">
+					<th>Repository</th>
+					<th>Release</th>
+				</tr>
+			</thead>
+			<tbody id="delivery-grid-body">
+				<tr><td colspan="2">Loading…</td></tr>
+			</tbody>
+		</table>
+
+		<p class="tw-text-12">
+			<code>·</code> never deployed ·
+			<code>✔ now</code> currently live ·
+			<code>✔</code> superseded ·
+			<code>✔ ×N</code> deployed here N times ·
+			<code>✗</code> last attempt failed ·
+			<code>⟳</code> in progress ·
+			<code>⏸</code> awaiting approval
+		</p>
+	</div>
+</div>
+<script type="module" nonce="{{ctx.CspScriptNonce}}">
+const base = {{.DeliveryAPIBase}};
+const subURL = {{.AppSubURL}};
+const pageToken = {{.DeliveryPageToken}};
+const head = document.querySelector('#delivery-grid-head');
+const body = document.querySelector('#delivery-grid-body');
+const tokenBox = document.querySelector('#delivery-token-box');
+const tokenInput = document.querySelector('#delivery-token');
+
+const tokenKey = 'delivery-api-token';
+function storedToken() {
+	try {
+		return window.sessionStorage.getItem(tokenKey) ?? pageToken ?? '';
+	} catch {
+		return pageToken ?? '';
+	}
+}
+
+// Reads ride the browser session; a write must carry a token, which is the whole reason the
+// session method is mounted for GET only.
+function headers() {
+	const out = {accept: 'application/json'};
+	const token = storedToken();
+	if (token) out.authorization = `token ${token}`;
+	return out;
+}
+
+function fail(message, action) {
+	document.querySelector('#delivery-error-message').textContent = message;
+	document.querySelector('#delivery-error-action').textContent = action;
+	document.querySelector('#delivery-error').classList.remove('tw-hidden');
+	body.replaceChildren();
+}
+
+function link(text, href, title) {
+	const a = document.createElement('a');
+	a.textContent = text;
+	a.href = href;
+	if (title) a.title = title;
+	return a;
+}
+
+// promoteURL is the first of the two steps: a cell offers "deploy this release here", and
+// the confirm page is where the target, the tag and the release currently live there are
+// named. Nothing is dispatched by following it.
+function promoteURL(row, cell) {
+	const query = new URLSearchParams({
+		repo: row.repo_full_name, environment: cell.environment, release_tag: row.release_tag,
+	});
+	return `${subURL}/delivery/promote?${query}`;
+}
+
+// showHistory expands a row to that release's history across environments, drawn from the
+// audit log, with the release's own attachments as its artifacts. Both come from
+// documented endpoints; the page reaches past neither into the models.
+async function showHistory(row, tr) {
+	const open = tr.nextElementSibling?.dataset?.detailFor === row.release_tag;
+	if (tr.nextElementSibling?.dataset?.detailFor) tr.nextElementSibling.remove();
+	if (open) return;
+
+	const detail = document.createElement('tr');
+	detail.dataset.detailFor = row.release_tag;
+	const cell = document.createElement('td');
+	cell.colSpan = tr.children.length;
+	cell.textContent = 'Loading…';
+	detail.append(cell);
+	tr.after(detail);
+
+	const tag = encodeURIComponent(row.release_tag);
+	const [history, releases] = await Promise.all([
+		fetch(`${base}/deployments?repo_id=${row.repo_id}&release_tag=${tag}&expand=audit&limit=200`,
+			{headers: headers()}).then((r) => r.json()),
+		fetch(`${base}/repos/${row.repo_full_name}/releases?tag_name=${tag}`,
+			{headers: headers()}).then((r) => r.json()),
+	]);
+
+	const list = document.createElement('ul');
+	for (const deployment of history) {
+		const item = document.createElement('li');
+		const events = (deployment.audit ?? []).map((e) => `${e.event} by ${e.actor_login || 'unknown'}`).join(' → ');
+		item.textContent = `${deployment.environment}: ${events || deployment.status}`;
+		if (deployment.run_url) {
+			item.append(' ');
+			item.append(link('run', deployment.run_url));
+		}
+		list.append(item);
+	}
+	if (!list.children.length) {
+		list.append(Object.assign(document.createElement('li'), {textContent: 'never deployed anywhere'}));
+	}
+
+	const artifacts = releases[0]?.artifacts ?? [];
+	if (artifacts.length) {
+		const item = document.createElement('li');
+		item.append('artifacts: ');
+		for (const artifact of artifacts) {
+			item.append(link(artifact.name, artifact.url));
+			item.append(' ');
+		}
+		list.append(item);
+	}
+	cell.replaceChildren(list);
+}
+
+// decideHeld approves or rejects a held deploy from the cell holding it. The endpoint
+// is the only thing that releases the job, so its refusal is the real answer and is shown
+// with the next action it suggests.
+async function decideHeld(approval, verb) {
+	const resp = await fetch(`${base}/approvals/${approval.id}/${verb}`, {method: 'POST', headers: headers()});
+	if (!resp.ok) {
+		const payload = await resp.json().catch(() => ({}));
+		if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
+		fail(payload.message ?? `the API returned ${resp.status}`,
+			payload.suggested_action ?? `Open ${subURL}/delivery/approvals, which can be given an API token.`);
+		return;
+	}
+	window.location.reload();
+}
+
+// heldByRun indexes the deploys the approval gate is holding, so a `⏸` cell can offer the
+// actions that release it. can_approve is the server's own answer, resolved by the same
+// check the approve endpoint enforces, so no action is offered that would be refused.
+const heldByRun = new Map();
+try {
+	const resp = await fetch(`${base}/approvals?limit=200`, {headers: headers()});
+	if (resp.ok) {
+		for (const approval of await resp.json()) {
+			if (approval.state === 'pending') heldByRun.set(approval.run_id, approval);
+		}
+	}
+} catch {
+	// The grid still renders without them: the gate at job assignment, not this button,
+	// is what withholds the job.
+}
+
+try {
+	const resp = await fetch(`${base}/grid?limit=50`, {headers: headers()});
+	const payload = await resp.json();
+	if (!resp.ok) {
+		fail(payload.message ?? `the API returned ${resp.status}`,
+			payload.suggested_action ?? 'Retry, and check the server log if it keeps failing.');
+	} else if (!payload.length) {
+		fail('no release is visible to you yet',
+			'Cut a release, or check your account can read the Actions unit of a repository that has one.');
+	} else {
+		// Environment headers open that environment's view. Columns are the union over every
+		// row, ordered by configured sort_order: cells are per repository, so no one row orders a grid.
+		const columns = [];
+		for (const row of payload) {
+			for (const cell of row.cells) {
+				if (!columns.some((column) => column.environment === cell.environment)) columns.push(cell);
+			}
+		}
+		columns.sort((a, b) => a.sort_order - b.sort_order); // a stable sort leaves ties in first-seen order
+		for (const column of columns) {
+			const th = document.createElement('th');
+			th.append(link(column.environment, `${subURL}/delivery/environments/${encodeURIComponent(column.environment)}`,
+				'Open this environment'));
+			head.append(th);
+		}
+		body.replaceChildren(...payload.map((row) => {
+			const tr = document.createElement('tr');
+			const repo = document.createElement('td');
+			repo.append(link(row.repo_full_name, `${subURL}/${row.repo_full_name}`));
+			tr.append(repo);
+			const release = document.createElement('td');
+			// A release row opens the release.
+			release.append(link(row.release_tag, row.release_url || `${subURL}/${row.repo_full_name}/releases`));
+			release.append(' ');
+			const toggle = document.createElement('button');
+			toggle.type = 'button';
+			toggle.className = 'ui mini basic button';
+			toggle.textContent = 'history';
+			toggle.title = 'This release across every environment, from the audit log';
+			toggle.addEventListener('click', () => showHistory(row, tr));
+			release.append(toggle);
+			tr.append(release);
+			const cells = new Map(row.cells.map((cell) => [cell.environment, cell]));
+			for (const column of columns) {
+				const td = document.createElement('td');
+				const cell = cells.get(column.environment);
+				if (!cell) { // this repository has not declared this environment at all
+					tr.append(td);
+					continue;
+				}
+				// A cell opens its run; a cell with no run opens Gitea's run list filtered
+				// by that environment's workflow file, which is the same history.
+				const href = cell.run_url ||
+					`${subURL}/${row.repo_full_name}/actions?workflow=deploy-${encodeURIComponent(cell.environment)}.yaml`;
+				td.append(link(cell.symbol, href, `${row.release_tag} → ${cell.environment}: ${cell.state}`));
+				td.append(' ');
+				// Step one of two: this opens the confirm page, which names the target
+				// environment, the release tag and what is live there before anything is
+				// dispatched. Rolling back is this same action on an earlier row.
+				td.append(link('▸', promoteURL(row, cell), `Deploy ${row.release_tag} to ${cell.environment}`));
+				const held = heldByRun.get(cell.run_id);
+				if (held) {
+					td.append(' ');
+					td.append(link('review', `${subURL}/delivery/environments/${encodeURIComponent(cell.environment)}/approvals`,
+						`${row.release_tag} → ${cell.environment} is held awaiting approval`));
+					for (const verb of held.can_approve ? ['approve', 'reject'] : []) {
+						td.append(' ');
+						const button = document.createElement('button');
+						button.type = 'button';
+						button.className = 'ui mini basic button';
+						button.textContent = verb;
+						button.addEventListener('click', () => decideHeld(held, verb));
+						td.append(button);
+					}
+				}
+				tr.append(td);
+			}
+			return tr;
+		}));
+	}
+} catch (err) {
+	fail(String(err), 'Check that you are signed in and that the delivery API is reachable at ' + base + '.');
+}
+
+document.querySelector('#delivery-token-save').addEventListener('click', () => {
+	try {
+		window.sessionStorage.setItem(tokenKey, tokenInput.value.trim());
+	} catch {
+		fail('this browser refused to keep the token for this tab',
+			'Allow site data for this origin, or use the gitea-delivery CLI instead.');
+		return;
+	}
+	window.location.reload();
+});
+</script>
+{{template "base/footer" .}}

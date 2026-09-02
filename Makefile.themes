@@ -1,0 +1,10 @@
+# The Dracula Pro theme pack's own make target. The upstream Makefile carries one line
+# including this file, so the theme work adds no target to it.
+
+.PHONY: generate-themes
+generate-themes: ## generate dracula pro theme css
+	$(GO) run build/generate-themes.go
+
+.PHONY: theme-preview
+theme-preview: ## generate the theme preview page in theme-preview/
+	$(GO) run build/generate-theme-preview.go

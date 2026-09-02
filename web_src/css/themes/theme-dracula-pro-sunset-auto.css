@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-sunset-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-sunset-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Sunset Auto";
+  --theme-color-scheme: "auto";
+}

@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-royal-vampire-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-royal-vampire-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Royal Vampire Auto";
+  --theme-color-scheme: "auto";
+}

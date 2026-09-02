@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-sweet-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-sweet-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Sweet Auto";
+  --theme-color-scheme: "auto";
+}

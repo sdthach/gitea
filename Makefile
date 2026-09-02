@@ -416,6 +416,8 @@ unit-test-coverage:
 	@echo "Running unit-test-coverage $(GOTEST_FLAGS) -tags '$(TAGS)'..."
 	@$(GO) test $(GOTEST_FLAGS) -tags='$(TAGS)' -cover -coverprofile coverage.out $(GO_TEST_PACKAGES) && echo "\n==>\033[32m Ok\033[m\n" || exit 1
 
+-include Makefile.delivery # delivery fork spoke
+-include Makefile.themes # dracula pro theme pack
 .PHONY: tidy
 tidy: ## run go mod tidy
 	$(eval MIN_GO_VERSION := $(shell grep -Eo '^go\s+[0-9]+\.[0-9.]+' go.mod | cut -d' ' -f2))

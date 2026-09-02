@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-tokyo-night-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-tokyo-night-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Tokyo Night Auto";
+  --theme-color-scheme: "auto";
+}

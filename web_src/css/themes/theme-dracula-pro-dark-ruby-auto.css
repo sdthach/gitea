@@ -1,0 +1,7 @@
+@import "./theme-dracula-pro-dark-ruby-light.css" (prefers-color-scheme: light);
+@import "./theme-dracula-pro-dark-ruby-dark.css" (prefers-color-scheme: dark);
+
+gitea-theme-meta-info {
+  --theme-display-name: "Dracula Pro Dark Ruby Auto";
+  --theme-color-scheme: "auto";
+}
