@@ -72,7 +72,7 @@ var (
 		"error": "red", "success": "green", "warning": "yellow",
 		"info": "cyan", "priority": "magenta_purple",
 	}
-	diffHues = map[string]string{"added": "green", "removed": "red", "moved": "yellow"}
+	diffHues = map[string]string{"added": "green", "removed": "red", "moved": "editorGutter.modifiedBackground"}
 	syntax   = map[string]string{
 		"keyword": "pink", "bool": "purple", "control": "pink", "name": "green",
 		"type": "cyan", "number": "purple", "operator": "pink", "regexp": "red",
@@ -97,6 +97,31 @@ var (
 	}
 	// variables carrying brand or absolute colors, left untouched
 	keepVars = map[string]bool{"--color-git": true, "--color-logo": true, "--color-white": true}
+
+	// Gitea variables the VS Code themes state outright, taken from the palette rather than transplanted
+	upstream = map[string]string{
+		"--color-primary":          "button.background",
+		"--color-primary-contrast": "button.foreground",
+		"--color-primary-hover":    "button.hoverBackground",
+		"--color-label-bg":         "badge.background",
+		"--color-label-text":       "badge.foreground",
+		"--color-nav-bg":           "statusBar.background",
+		"--color-nav-text":         "statusBar.foreground",
+		"--color-secondary-nav-bg": "statusBar.border",
+		"--color-active":           "list.activeSelectionBackground",
+		"--color-text":             "list.activeSelectionForeground",
+		"--color-hover":            "list.hoverBackground",
+		"--color-error-text":       "errorForeground",
+		"--color-red":              "editorError.foreground",
+		"--color-yellow":           "editorWarning.foreground",
+		"--color-error-border":     "inputValidation.errorBorder",
+		"--color-warning-border":   "inputValidation.warningBorder",
+		"--color-info-border":      "inputValidation.infoBorder",
+		"--color-accent":           "progressBar.background",
+	}
+
+	// light-mode surface ramp below the body, deepest last
+	surfaceRamp = map[string]float64{"box-body": 0.02, "box-header": 0.04}
 )
 
 const hueAlt = `red|orange|yellow|olive|green|teal|blue|violet|purple|pink|brown`
@@ -107,6 +132,7 @@ var (
 	badgeRe   = regexp.MustCompile(`^(red|green|yellow|orange)-badge(-bg|-hover-bg)?$`)
 	semRe     = regexp.MustCompile(`^(error|success|warning|info|priority)-(border|bg|bg-active|bg-hover|text)$`)
 	diffRe    = regexp.MustCompile(`^diff-(added|removed|moved)-(fg|linenum-bg|row-bg|row-border|word-bg)$`)
+	varRe     = regexp.MustCompile(`^var\((--color-[a-z0-9-]+)\)$`)
 	displayRe = regexp.MustCompile(`(--theme-display-name:\s*)"[^"]*"`)
 	schemeRe  = regexp.MustCompile(`(--theme-color-scheme:\s*)"[^"]*"`)
 )
@@ -318,7 +344,7 @@ func readRef(path string) (lines []string, vals map[string]string) {
 func build(refPath string, pal map[string]string, dark bool) string {
 	lines, rv := readRef(refPath)
 
-	target := func(family, key, anchor string) string {
+	target := func(family, key, anchor, short string) string {
 		a, _ := parseColor(rv[anchor])
 		t, _ := parseColor(at(pal, key))
 		switch {
@@ -327,13 +353,94 @@ func build(refPath string, pal map[string]string, dark bool) string {
 		case dark:
 			return formatColor(t, "")
 		case family == "surface":
-			return formatColor(hsl{t.h, math.Min(a.l, 0.985), math.Max(t.s, 0.30)}, "")
+			b, _ := parseColor(at(pal, "bg")) // light surfaces invert the variant's own body
+			return formatColor(hsl{b.h, 1 - b.l/2 - surfaceRamp[short], math.Max(b.s, 0.30)}, "")
 		case family == "text":
 			return formatColor(hsl{t.h, a.l, 0.22}, "")
 		case family == "primary":
 			return formatColor(hsl{t.h, math.Min(t.l, 0.56), math.Min(t.s, 0.80)}, "")
 		}
 		return formatColor(hsl{t.h, a.l, math.Min(t.s, 0.75)}, "")
+	}
+
+	// value transplants one declaration, or returns "" to keep the reference's own.
+	value := func(name, val string) string {
+		hex := strings.HasPrefix(val, "#")
+		var cur hsl
+		var alpha string
+		if hex {
+			cur, alpha = parseColor(val)
+		}
+		if key, mapped := upstream[name]; mapped && dark {
+			return at(pal, key)[:7] + alpha
+		}
+		if !hex {
+			return ""
+		}
+		switch {
+		case name == "--color-primary-contrast":
+			if dark {
+				return at(pal, "accent_fg") + alpha
+			}
+			return "#ffffff" + alpha
+		case strings.HasPrefix(name, "--color-ansi-"):
+			if k, found := ansi[strings.TrimPrefix(name, "--color-ansi-")]; found {
+				return at(pal, k) + alpha
+			}
+		case strings.HasPrefix(name, "--color-syntax-"):
+			if k, found := syntax[strings.TrimPrefix(name, "--color-syntax-")]; found {
+				c, ok := pal["syn_"+k]
+				if !ok {
+					c = at(pal, k)
+				}
+				if dark {
+					return c + alpha
+				}
+				t, _ := parseColor(c)
+				return formatColor(hsl{t.h, cur.l, math.Min(t.s, 0.85)}, alpha)
+			}
+		default:
+			family, key, anchor, ok := classify(name)
+			if k, mapped := upstream[name]; mapped {
+				key = k
+			}
+			if ok && rv[anchor] != "" {
+				a, _ := parseColor(rv[anchor])
+				t, _ := parseColor(target(family, key, anchor, strings.TrimPrefix(name, "--color-")))
+				f := math.Max(0, 1-math.Abs(cur.l-a.l)/decay)
+				return formatColor(hsl{t.h, cur.l + (t.l-a.l)*f, cur.s + (t.s-a.s)*f}, alpha)
+			}
+		}
+		return ""
+	}
+
+	vals := make(map[string]string, len(lines))
+	for _, ln := range lines {
+		if m := declRe.FindStringSubmatch(ln); m != nil {
+			name, val := m[2], strings.TrimSpace(m[3])
+			if v := value(name, val); v != "" {
+				vals[name] = v
+			} else {
+				vals[name] = val
+			}
+		}
+	}
+
+	// Gitea's aliases must not survive: point each at what this theme emitted for its target.
+	resolve := func(name string) string {
+		v := vals[name]
+		for range len(vals) {
+			m := varRe.FindStringSubmatch(v)
+			if m == nil {
+				return v
+			}
+			next, ok := vals[m[1]]
+			if !ok {
+				return ""
+			}
+			v = next
+		}
+		return ""
 	}
 
 	out := make([]string, 0, len(lines))
@@ -343,51 +450,12 @@ func build(refPath string, pal map[string]string, dark bool) string {
 			out = append(out, ln)
 			continue
 		}
-		indent, name, val, tail := m[1], m[2], strings.TrimSpace(m[3]), m[4]
-		if !strings.HasPrefix(val, "#") {
+		v := resolve(m[2])
+		if v == "" {
 			out = append(out, ln)
 			continue
 		}
-		cur, alpha := parseColor(val)
-		newVal := ""
-		switch {
-		case name == "--color-primary-contrast":
-			if dark {
-				newVal = at(pal, "accent_fg") + alpha
-			} else {
-				newVal = "#ffffff" + alpha
-			}
-		case strings.HasPrefix(name, "--color-ansi-"):
-			if k, found := ansi[strings.TrimPrefix(name, "--color-ansi-")]; found {
-				newVal = at(pal, k) + alpha
-			}
-		case strings.HasPrefix(name, "--color-syntax-"):
-			if k, found := syntax[strings.TrimPrefix(name, "--color-syntax-")]; found {
-				c, ok := pal["syn_"+k]
-				if !ok {
-					c = at(pal, k)
-				}
-				t, _ := parseColor(c)
-				if dark {
-					newVal = c + alpha
-				} else {
-					newVal = formatColor(hsl{t.h, cur.l, math.Min(t.s, 0.85)}, alpha)
-				}
-			}
-		default:
-			family, key, anchor, ok := classify(name)
-			if ok && rv[anchor] != "" {
-				a, _ := parseColor(rv[anchor])
-				t, _ := parseColor(target(family, key, anchor))
-				f := math.Max(0, 1-math.Abs(cur.l-a.l)/decay)
-				newVal = formatColor(hsl{t.h, cur.l + (t.l-a.l)*f, cur.s + (t.s-a.s)*f}, alpha)
-			}
-		}
-		if newVal == "" {
-			out = append(out, ln)
-			continue
-		}
-		out = append(out, indent+name+": "+newVal+";"+tail)
+		out = append(out, m[1]+m[2]+": "+v+";"+m[4])
 	}
 	return strings.Join(out, "\n")
 }
