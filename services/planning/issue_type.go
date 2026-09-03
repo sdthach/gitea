@@ -195,20 +195,21 @@ func validateRank(rank int) error {
 }
 
 // validateScope refuses a scope naming both a repository and an organization, and an
-// instance scope from anyone but a site administrator.
-func validateScope(scope Scope, doer *user_model.User) error {
+// instance scope from anyone but a site administrator. resource names what is being scoped —
+// "type" or "field" — so the message reads as a fact about the thing the caller is writing.
+func validateScope(scope Scope, doer *user_model.User, resource string) error {
 	switch {
 	case scope.RepoID > 0 && scope.OrgID > 0:
 		return &hub_model.Error{
 			Code: "bad_scope", Status: http.StatusUnprocessableEntity,
-			Message:         "a type cannot be scoped to both a repository and an organization",
+			Message:         "a " + resource + " cannot be scoped to both a repository and an organization",
 			SuggestedAction: "Send repo_id or org_id, never both.",
 		}
 	case scope.RepoID == 0 && scope.OrgID == 0 && !doer.IsAdmin:
 		return &hub_model.Error{
 			Code: "bad_scope", Status: http.StatusUnprocessableEntity,
-			Message: "only a site administrator may create or change an instance-scoped type",
-			SuggestedAction: "Send repo_id or org_id to scope the type to a repository or organization you administer, " +
+			Message: "only a site administrator may create or change an instance-scoped " + resource,
+			SuggestedAction: "Send repo_id or org_id to scope the " + resource + " to a repository or organization you administer, " +
 				"or ask a site administrator for an instance-wide one.",
 		}
 	}
@@ -279,7 +280,7 @@ func validateTypeInput(in TypeInput) (string, error) {
 // CreateType creates a type in scope, refusing a bad scope, a caller who does not administer
 // it, a bad name, icon or rank, or a name already taken in that scope.
 func CreateType(ctx context.Context, doer *user_model.User, scope Scope, in TypeInput) (*planning_model.IssueType, error) {
-	if err := validateScope(scope, doer); err != nil {
+	if err := validateScope(scope, doer, "type"); err != nil {
 		return nil, err
 	}
 	ok, err := scopeAdmin(ctx, doer, scope)

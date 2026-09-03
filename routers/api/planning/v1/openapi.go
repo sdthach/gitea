@@ -35,7 +35,10 @@ var componentSchemas = map[string]any{
 		"labels":         hubapi.ArrayProp("object", "The repository's own labels plus its owning organization's: id, name and color."),
 		"can_write":      hubapi.Prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
 		"can_edit_issue": hubapi.Prop("boolean", "Whether the caller may move a card between groups, which edits the issue's own label, assignee, assigned type or recorded parent."),
-	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "tree", "types", "labels", "can_write", "can_edit_issue"),
+		"fields": hubapi.ArrayProp("object", "The custom fields visible from this repository, nearest scope shadowing by key — what a "+
+			"card's field editor offers. Cards carry the values themselves: fields (key to typed value) and points. Groups "+
+			"carry points_total and points_closed, summed over their own cards."),
+	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "tree", "types", "labels", "can_write", "can_edit_issue", "fields"),
 	"Roadmap": hubapi.ObjectSchema(map[string]any{
 		"repo_id":        hubapi.Prop("integer", "Repository the chart covers."),
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
@@ -75,7 +78,10 @@ var componentSchemas = map[string]any{
 		"truncated": hubapi.Prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
 		"types":     hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a bar's type picker offers."),
 		"labels":    hubapi.ArrayProp("object", "The repository's own labels plus its owning organization's: id, name and color."),
-	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "tree", "types", "labels", "truncated"),
+		"fields": hubapi.ArrayProp("object", "The custom fields visible from this repository, nearest scope shadowing by key. Bars "+
+			"carry the values themselves: fields (key to typed value) and points. A parent or milestone rollup, and a group, "+
+			"carries points_total and points_closed, summed over its own children — closed issues only for the second."),
+	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "tree", "types", "labels", "truncated", "fields"),
 	"IssueFacets": hubapi.ObjectSchema(map[string]any{
 		"issue_id":  hubapi.Prop("integer", "The issue's global id."),
 		"number":    hubapi.Prop("integer", "The issue's per-repository number."),
@@ -91,7 +97,9 @@ var componentSchemas = map[string]any{
 		"parent":          hubapi.Prop("object", "The issue's own recorded parent — issue_id, number and title — or null."),
 		"children":        hubapi.ArrayProp("object", "Every issue recorded under this one: issue_id, number, title and is_closed."),
 		"progress":        hubapi.Prop("object", "The children rolled up to a count: total and closed."),
-	}, "issue_id", "number", "repo_id", "can_write", "schedule", "milestone", "time_estimate", "tracked_seconds", "type", "types", "parent", "children", "progress"),
+		"fields":          hubapi.ArrayProp("object", "The custom fields visible from this issue's repository, what a field editor offers."),
+		"values":          hubapi.Prop("object", "This issue's own recorded values, keyed by field key and typed by kind."),
+	}, "issue_id", "number", "repo_id", "can_write", "schedule", "milestone", "time_estimate", "tracked_seconds", "type", "types", "parent", "children", "progress", "fields", "values"),
 	"IssueType": hubapi.ObjectSchema(map[string]any{
 		"id":       hubapi.Prop("integer", "The type's id."),
 		"name":     hubapi.Prop("string", "Lower-cased, 1-50 characters."),
@@ -125,6 +133,24 @@ var componentSchemas = map[string]any{
 	"ProjectViewList": hubapi.ObjectSchema(map[string]any{
 		"views": hubapi.ArrayProp("object", "The project's saved views: id, project_id, name, query, created_by and created_unix."),
 	}, "views"),
+	"Field": hubapi.ObjectSchema(map[string]any{
+		"id":       hubapi.Prop("integer", "The field's id."),
+		"key":      hubapi.Prop("string", "A lower-case slug: a letter, then up to 39 letters, digits or underscores."),
+		"label":    hubapi.Prop("string", "1-100 characters."),
+		"kind":     hubapi.EnumProp("Fixed once the field is created.", planning_service.FieldKinds),
+		"options":  hubapi.ArrayProp("string", "select only: the field's declared options."),
+		"required": hubapi.Prop("boolean", "Whether an issue's value may be cleared once set."),
+		"sort":     hubapi.Prop("integer", "Tie-breaker for display order among a scope's own fields."),
+		"scope":    hubapi.EnumProp("Where the field lives.", []string{planning_service.ScopeInstance, planning_service.ScopeOrg, planning_service.ScopeRepo}),
+		"scope_id": hubapi.Prop("integer", "The repository or organization id; 0 for the instance scope."),
+	}, "id", "key", "label", "kind", "required", "sort", "scope", "scope_id"),
+	"FieldDeleteResult": hubapi.ObjectSchema(map[string]any{
+		"deleted_values": hubapi.Prop("integer", "How many recorded values were cascaded away with the field."),
+	}, "deleted_values"),
+	"IssueFields": hubapi.ObjectSchema(map[string]any{
+		"fields": hubapi.ArrayProp("object", "The fields visible from this issue's repository, nearest scope shadowing by key."),
+		"values": hubapi.Prop("object", "This issue's own recorded values, keyed by field key and typed by kind."),
+	}, "fields", "values"),
 	"Error": hubapi.ErrorSchema(),
 }
 

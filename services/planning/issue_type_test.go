@@ -77,16 +77,16 @@ func TestPlanningValidateScopeRefusesBothOrNeitherWithoutSiteAdmin(t *testing.T)
 	admin := &user_model.User{IsAdmin: true}
 	nonAdmin := &user_model.User{IsAdmin: false}
 
-	err := validateScope(Scope{RepoID: 1, OrgID: 1}, admin)
+	err := validateScope(Scope{RepoID: 1, OrgID: 1}, admin, "type")
 	require.Error(t, err)
 	assert.Equal(t, "bad_scope", hubCode(t, err))
 
-	err = validateScope(Scope{}, nonAdmin)
+	err = validateScope(Scope{}, nonAdmin, "type")
 	require.Error(t, err)
 	assert.Equal(t, "bad_scope", hubCode(t, err))
 
-	assert.NoError(t, validateScope(Scope{}, admin), "a site administrator may scope to the instance")
-	assert.NoError(t, validateScope(Scope{RepoID: 1}, nonAdmin), "scope validity does not itself require site admin")
+	assert.NoError(t, validateScope(Scope{}, admin, "type"), "a site administrator may scope to the instance")
+	assert.NoError(t, validateScope(Scope{RepoID: 1}, nonAdmin, "type"), "scope validity does not itself require site admin")
 }
 
 // TestPlanningShadowTypesPrefersTheNearestScope is what makes TypesFor a merge rather than a

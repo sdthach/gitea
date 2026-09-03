@@ -53,6 +53,10 @@ type IssueFacets struct {
 	Parent   *ParentFacet              `json:"parent"`
 	Children []ChildFacet              `json:"children"`
 	Progress planning_service.Progress `json:"progress"`
+	// Fields are the custom fields visible from this issue's repository; Values are this
+	// issue's own recorded values among them, keyed by field key and typed by kind.
+	Fields []planning_service.VisibleField `json:"fields"`
+	Values map[string]any                  `json:"values"`
 }
 
 // ParentFacet is an issue's parent, reduced to what a client renders as a breadcrumb.
@@ -438,6 +442,19 @@ func issueFacets(ctx *context.APIContext, issue *issues_model.Issue, canWrite bo
 		return nil, false
 	}
 	facets.Progress = progress[issue.ID]
+
+	fields, err := planning_service.FieldsFor(ctx, issue.Repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	facets.Fields = fields
+	values, err := planning_service.ValuesFor(ctx, issue.Repo, []int64{issue.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	facets.Values = valuesOrEmpty(values[issue.ID])
 
 	return facets, true
 }

@@ -36,22 +36,28 @@ import (
 	"gitea.dev/services/hub/cligen"
 )
 
-// area is one CLI binary's generated set.
+// area is one CLI binary's generated set. clientDir and clientPackage default to the binary's
+// own main package when empty; planning's generated table instead lives in an importable
+// client subpackage, so the integration suite can build the same command set the binary ships.
 type area struct {
-	binaryName string
-	docsDir    string
-	openAPI    func() ([]byte, error)
-	operations func() []*hubapi.Operation
-	schemas    func() map[string]map[string]any
+	binaryName    string
+	docsDir       string
+	clientDir     string
+	clientPackage string
+	openAPI       func() ([]byte, error)
+	operations    func() []*hubapi.Operation
+	schemas       func() map[string]map[string]any
 }
 
 var areas = map[string]area{
 	"planning": {
-		binaryName: "gitea-planning",
-		docsDir:    "docs/planning",
-		openAPI:    planningv1.OpenAPI,
-		operations: planningv1.Operations,
-		schemas:    planningv1.Schemas,
+		binaryName:    "gitea-planning",
+		docsDir:       "docs/planning",
+		clientDir:     "cmd/gitea-planning/client",
+		clientPackage: "client",
+		openAPI:       planningv1.OpenAPI,
+		operations:    planningv1.Operations,
+		schemas:       planningv1.Schemas,
 	},
 	"deployments": {
 		binaryName: "gitea-deployments",
@@ -99,15 +105,18 @@ func generateArea(name string, a area, check bool) bool {
 	must(err)
 
 	ops := a.operations()
-	client, err := cligen.RenderClient(ops, a.schemas())
+	clientDir := a.clientDir
+	if clientDir == "" {
+		clientDir = "cmd/" + a.binaryName
+	}
+	client, err := cligen.RenderClient(ops, a.schemas(), a.clientPackage)
 	must(err)
 
 	// The command reference is rendered by running the CLI, so the generated request layer
 	// has to be on disk before it can be produced.
-	binDir := "cmd/" + a.binaryName
 	staged := map[string][]byte{
-		a.docsDir + "/openapi.json":     doc,
-		binDir + "/generated_client.go": client,
+		a.docsDir + "/openapi.json":        doc,
+		clientDir + "/generated_client.go": client,
 	}
 	failed := false
 	for _, path := range sortedKeys(staged) {

@@ -163,6 +163,21 @@ func TestPlanningBuildRollupCoversItsChildrenAndUsesTheSharedProgressDefinition(
 	assert.False(t, ok, "a rollup over no bars is not a row")
 }
 
+// TestPlanningBuildRollupSumsPointsOverItsChildrenClosedOnlyForTheSecond: points_total covers
+// every child, points_closed only the closed ones — counting open children into points_closed
+// would pass points_total's own assertion but fail this one.
+func TestPlanningBuildRollupSumsPointsOverItsChildrenClosedOnlyForTheSecond(t *testing.T) {
+	bars := []Bar{
+		{IssueID: 1, StartUnix: 100, EndUnix: 200, Points: 3, IsClosed: true},
+		{IssueID: 2, StartUnix: 100, EndUnix: 200, Points: 1, IsClosed: false},
+		{IssueID: 3, StartUnix: 100, EndUnix: 200, Points: 2, IsClosed: true},
+	}
+	row, ok := BuildRollup("parent", "checkout", "checkout", bars)
+	require.True(t, ok)
+	assert.Equal(t, 6, row.PointsTotal, "3 + 1 + 2 over every child")
+	assert.Equal(t, 5, row.PointsClosed, "3 + 2, the closed children only — never the open one")
+}
+
 func TestPlanningBuildRollupsEmitsParentsThenMilestones(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 1, ParentIssueID: 100, StartUnix: 100, EndUnix: 200, MilestoneID: 4, Milestone: "beta"},

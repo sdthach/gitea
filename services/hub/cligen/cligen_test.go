@@ -76,13 +76,22 @@ func TestQueryParamNamesIncludesQueryParams(t *testing.T) {
 func TestRenderClientIsDeterministic(t *testing.T) {
 	ops := planningv1.Operations()
 	schemas := planningv1.Schemas()
-	first, err := RenderClient(ops, schemas)
+	first, err := RenderClient(ops, schemas, "main")
 	require.NoError(t, err)
-	second, err := RenderClient(ops, schemas)
+	second, err := RenderClient(ops, schemas, "main")
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second))
 	assert.Contains(t, string(first), "DO NOT EDIT")
 	assert.Contains(t, string(first), "var Commands = []hubcli.Command{")
+}
+
+// TestRenderClientDeclaresTheGivenPackage: an importable client package is declared under its
+// own name rather than main, so a caller outside the binary can import Commands.
+func TestRenderClientDeclaresTheGivenPackage(t *testing.T) {
+	ops := planningv1.Operations()
+	out, err := RenderClient(ops, planningv1.Schemas(), "client")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "package client")
 }
 
 // TestRenderClientRefusesCollidingCommands proves the generator fails rather than silently
@@ -92,7 +101,7 @@ func TestRenderClientRefusesCollidingCommands(t *testing.T) {
 	_, err := RenderClient([]*hubapi.Operation{
 		{ID: "listThings", Method: http.MethodGet, Path: "/things", Summary: "a", Response: "Environment", Query: &spec},
 		{ID: "getThings", Method: http.MethodGet, Path: "/things/x", Summary: "b", Response: "Environment", Query: &spec},
-	}, nil)
+	}, nil, "main")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "both map to command")
 }

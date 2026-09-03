@@ -35,11 +35,13 @@ type Command struct {
 	PathParams  []string
 	QueryParams []string
 	// BodyParams are the request body's members, one flag each. RequiredBody is the subset
-	// the endpoint refuses the request without, and BoolBody the subset that marshals as a
-	// JSON boolean rather than a string.
+	// the endpoint refuses the request without. BoolBody, IntBody and ArrayBody are the
+	// subsets that marshal as a JSON boolean, number or array rather than a string.
 	BodyParams   []string
 	RequiredBody []string
 	BoolBody     []string
+	IntBody      []string
+	ArrayBody    []string
 	// BodyHelp is each member's published description, used as its flag's help text so the
 	// generated command reference explains the body rather than listing it.
 	BodyHelp map[string]string
@@ -297,6 +299,7 @@ func composeBody(cfg Config, cmd Command, stringValues map[string]*string, bools
 	b.WriteByte('{')
 	first := true
 	for _, name := range cmd.BodyParams {
+		flagName := "--" + strings.ReplaceAll(name, "_", "-")
 		var encoded []byte
 		switch {
 		case bools[name] != nil:
@@ -304,6 +307,24 @@ func composeBody(cfg Config, cmd Command, stringValues map[string]*string, bools
 				continue // an unset switch is omitted, so the server's own default stands
 			}
 			encoded = []byte("true")
+		case slices.Contains(cmd.IntBody, name):
+			if stringValues[name] == nil || *stringValues[name] == "" {
+				continue
+			}
+			n, err := strconv.ParseInt(strings.TrimSpace(*stringValues[name]), 10, 64)
+			if err != nil {
+				return nil, failf(2, "Send a whole number.", "%s must be an integer, got %q", flagName, *stringValues[name])
+			}
+			encoded = []byte(strconv.FormatInt(n, 10))
+		case slices.Contains(cmd.ArrayBody, name):
+			if stringValues[name] == nil || *stringValues[name] == "" {
+				continue
+			}
+			raw, err := arrayBodyJSON(*stringValues[name])
+			if err != nil {
+				return nil, failf(2, "Send a JSON array, or a comma-separated list of values.", "%s is not a valid array: %v", flagName, err)
+			}
+			encoded = raw
 		case stringValues[name] != nil:
 			if *stringValues[name] == "" {
 				continue
@@ -330,6 +351,24 @@ func composeBody(cfg Config, cmd Command, stringValues map[string]*string, bools
 	}
 	b.WriteByte('}')
 	return b.Bytes(), nil
+}
+
+// arrayBodyJSON reads an array flag's raw value: a JSON array when it starts with '[',
+// otherwise a comma-separated list of strings.
+func arrayBodyJSON(raw string) ([]byte, error) {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "[") {
+		var probe []any
+		if err := json.Unmarshal([]byte(trimmed), &probe); err != nil {
+			return nil, err
+		}
+		return []byte(trimmed), nil
+	}
+	parts := strings.Split(trimmed, ",")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return json.Marshal(parts)
 }
 
 func apiFailure(cfg Config, status int, body []byte) *Error {

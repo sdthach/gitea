@@ -18,6 +18,13 @@
             },
             "type": "array"
           },
+          "fields": {
+            "description": "The custom fields visible from this repository, nearest scope shadowing by key — what a card's field editor offers. Cards carry the values themselves: fields (key to typed value) and points. Groups carry points_total and points_closed, summed over their own cards.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "group_by": {
             "description": "The active grouping. A view setting, never stored on the project.",
             "enum": [
@@ -77,6 +84,7 @@
           "can_edit_issue",
           "can_write",
           "columns",
+          "fields",
           "group_by",
           "groups",
           "labels",
@@ -121,6 +129,83 @@
         ],
         "type": "object"
       },
+      "Field": {
+        "properties": {
+          "id": {
+            "description": "The field's id.",
+            "type": "integer"
+          },
+          "key": {
+            "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Fixed once the field is created.",
+            "enum": [
+              "int",
+              "text",
+              "date",
+              "select"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "description": "1-100 characters.",
+            "type": "string"
+          },
+          "options": {
+            "description": "select only: the field's declared options.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "required": {
+            "description": "Whether an issue's value may be cleared once set.",
+            "type": "boolean"
+          },
+          "scope": {
+            "description": "Where the field lives.",
+            "enum": [
+              "instance",
+              "org",
+              "repo"
+            ],
+            "type": "string"
+          },
+          "scope_id": {
+            "description": "The repository or organization id; 0 for the instance scope.",
+            "type": "integer"
+          },
+          "sort": {
+            "description": "Tie-breaker for display order among a scope's own fields.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "kind",
+          "label",
+          "required",
+          "scope",
+          "scope_id",
+          "sort"
+        ],
+        "type": "object"
+      },
+      "FieldDeleteResult": {
+        "properties": {
+          "deleted_values": {
+            "description": "How many recorded values were cascaded away with the field.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_values"
+        ],
+        "type": "object"
+      },
       "IssueFacets": {
         "properties": {
           "can_write": {
@@ -129,6 +214,13 @@
           },
           "children": {
             "description": "Every issue recorded under this one: issue_id, number, title and is_closed.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "description": "The custom fields visible from this issue's repository, what a field editor offers.",
             "items": {
               "type": "object"
             },
@@ -180,11 +272,16 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "values": {
+            "description": "This issue's own recorded values, keyed by field key and typed by kind.",
+            "type": "object"
           }
         },
         "required": [
           "can_write",
           "children",
+          "fields",
           "issue_id",
           "milestone",
           "number",
@@ -195,7 +292,28 @@
           "time_estimate",
           "tracked_seconds",
           "type",
-          "types"
+          "types",
+          "values"
+        ],
+        "type": "object"
+      },
+      "IssueFields": {
+        "properties": {
+          "fields": {
+            "description": "The fields visible from this issue's repository, nearest scope shadowing by key.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "values": {
+            "description": "This issue's own recorded values, keyed by field key and typed by kind.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "fields",
+          "values"
         ],
         "type": "object"
       },
@@ -369,6 +487,13 @@
             },
             "type": "array"
           },
+          "fields": {
+            "description": "The custom fields visible from this repository, nearest scope shadowing by key. Bars carry the values themselves: fields (key to typed value) and points. A parent or milestone rollup, and a group, carries points_total and points_closed, summed over its own children — closed issues only for the second.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "group_by": {
             "description": "The active grouping, reusing the board's own. A view setting, never stored.",
             "enum": [
@@ -457,6 +582,7 @@
         "required": [
           "arrows",
           "bars",
+          "fields",
           "group_by",
           "groups",
           "labels",
@@ -775,6 +901,384 @@
         "summary": "Move a card between the board's groups",
         "tags": [
           "board"
+        ]
+      }
+    },
+    "/fields": {
+      "get": {
+        "description": "repo_id reads a repository's own fields, its organization's when it has one, and the instance's, nearest scope shadowing by key. org_id reads an organization's own fields and the instance's. Neither reads the instance scope alone. Readable by anyone who can read the named repository's Issues unit, or to whom the named organization is visible.",
+        "operationId": "getFields",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on org_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "org_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Field"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The custom fields visible from a repository or an organization",
+        "tags": [
+          "fields"
+        ]
+      },
+      "post": {
+        "description": "Scope admin: a repository administrator for repo_id, an organization owner for org_id, a site administrator for the instance scope (neither given). Refused bad_scope, bad_key, bad_label, bad_kind, options_required or field_exists.",
+        "operationId": "createField",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "key": {
+                    "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "One of int, text, date or select. Fixed once the field is created.",
+                    "enum": [
+                      "int",
+                      "text",
+                      "date",
+                      "select"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "1-100 characters.",
+                    "type": "string"
+                  },
+                  "options": {
+                    "description": "select only: 1-50 distinct options, each at most 100 characters.",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "description": "Scope the field to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  },
+                  "required": {
+                    "description": "Whether an issue's value may be cleared once set.",
+                    "type": "boolean"
+                  },
+                  "sort": {
+                    "description": "Tie-breaker for display order among a scope's own fields.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "kind",
+                  "label"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a custom field",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
+    "/fields/{id}": {
+      "delete": {
+        "description": "Cascades every recorded value naming the field; the reply says how many were removed.",
+        "operationId": "deleteField",
+        "parameters": [
+          {
+            "description": "The field's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldDeleteResult"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete a custom field",
+        "tags": [
+          "fields"
+        ]
+      },
+      "put": {
+        "description": "Same scope admin check as creating one. Scope and kind are both fixed at creation: changing kind is refused kind_immutable, since values may already exist under it.",
+        "operationId": "updateField",
+        "parameters": [
+          {
+            "description": "The field's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "key": {
+                    "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "One of int, text, date or select. Fixed once the field is created.",
+                    "enum": [
+                      "int",
+                      "text",
+                      "date",
+                      "select"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "1-100 characters.",
+                    "type": "string"
+                  },
+                  "options": {
+                    "description": "select only: 1-50 distinct options, each at most 100 characters.",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "description": "Scope the field to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  },
+                  "required": {
+                    "description": "Whether an issue's value may be cleared once set.",
+                    "type": "boolean"
+                  },
+                  "sort": {
+                    "description": "Tie-breaker for display order among a scope's own fields.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "kind",
+                  "label"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Update a custom field",
+        "tags": [
+          "fields"
         ]
       }
     },
@@ -1570,6 +2074,154 @@
         "summary": "Set an issue's time estimate",
         "tags": [
           "issues"
+        ]
+      }
+    },
+    "/issues/{issue_id}/fields": {
+      "get": {
+        "description": "Scoped by Gitea's own permission check on the Issues or Pull Requests unit, exactly as GET /issues/{issue_id}.",
+        "operationId": "getIssueFields",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFields"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "An issue's visible fields and its own recorded values",
+        "tags": [
+          "fields"
+        ]
+      },
+      "put": {
+        "description": "A partial update, applied in one transaction: every key must be a visible field (unknown_field, listing the unknown keys), and every value must parse for its field's kind (bad_value naming the key and kind, bad_option listing the declared options); a null or empty string clears the value, refused required_field when the field cannot be cleared. A refusal on any key leaves every value, cleared or set, exactly as it stood. values may be sent as a JSON object or as a JSON string holding one, since the CLI sends every body value as a string. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueFields",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "values": {
+                    "description": "A JSON object (or a JSON string holding one) mapping field key to value; null or \"\" clears it.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "values"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's custom field values",
+        "tags": [
+          "fields"
         ]
       }
     },

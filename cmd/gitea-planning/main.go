@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 
+	"gitea.dev/cmd/gitea-planning/client"
 	"gitea.dev/cmd/hubcli"
 )
 
@@ -20,7 +21,7 @@ var config = hubcli.Config{
 	Name:          "gitea-planning",
 	BasePath:      "/api/planning/v1",
 	DocPath:       "docs/planning/openapi.json",
-	Commands:      Commands,
+	Commands:      client.Commands,
 	TokenEnvVars:  []string{"GITEA_PLANNING_TOKEN", "FORGE_TOKEN", "GITEA_TOKEN"},
 	ServerEnvVars: []string{"GITEA_PLANNING_SERVER", "GITEA_SERVER", "FORGE_HOST"},
 }

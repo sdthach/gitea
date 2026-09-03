@@ -60,6 +60,9 @@ type Board struct {
 	Tree []planning_service.TreeEdge `json:"tree"`
 	// Types are the types visible from this repository, what a card's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
+	// Fields are the custom fields visible from this repository, what a card's field editor
+	// offers. Cards carry the values themselves.
+	Fields []planning_service.VisibleField `json:"fields"`
 	// Labels are the repository's own labels plus its owning organization's, what a card's
 	// label picker offers.
 	Labels []LabelRef `json:"labels"`
@@ -314,6 +317,12 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		return nil, false
 	}
 
+	values, err := planning_service.ValuesFor(ctx, repo, ids)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
 	parents, err := planning_service.ParentMap(ctx, repo.ID)
 	if err != nil {
 		ctx.APIErrorInternal(err)
@@ -344,6 +353,7 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 			IsClosed: issue.IsClosed, IsPull: issue.IsPull,
 			ParentIssueID: parents[issue.ID], RootIssueID: planning_service.RootOf(parents, issue.ID),
 			Depth: depths[issue.ID], HasChildren: hasChildren[issue.ID],
+			Fields: valuesOrEmpty(values[issue.ID]), Points: planning_service.PointsOf(values[issue.ID]),
 		}
 		if at, ok := assigned[issue.ID]; ok {
 			card.Type, card.TypeID, card.TypeColor, card.TypeIcon = at.Name, at.TypeID, at.Color, at.Icon
@@ -361,6 +371,12 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 	}
 
 	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
+	fields, err := planning_service.FieldsFor(ctx, repo)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return nil, false
@@ -396,6 +412,7 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		Groups:       groups,
 		Tree:         planning_service.BuildTree(parents),
 		Types:        types,
+		Fields:       fields,
 		Labels:       labels,
 		CanWrite:     perm.CanWrite(unit.TypeProjects),
 		CanEditIssue: perm.CanWrite(unit.TypeIssues),

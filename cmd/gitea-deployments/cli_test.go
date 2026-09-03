@@ -380,3 +380,18 @@ func TestDeploymentsRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
 		"the filter is sent verbatim; the server maps the state name onto its own status integer")
 	assert.Equal(t, "[]", strings.TrimSpace(stdout), "--json emits the API response verbatim and unshaped")
 }
+
+// TestSecretScopeCreateSendsRepoIDAsANumber: repo_id is an IntBody member, decoded by the
+// handler into an int64 field — sending it as a JSON string would fail that decode.
+func TestSecretScopeCreateSendsRepoIDAsANumber(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "secret-scope-create", "--repo-id", "1", "--secret-name", "DEPLOY_KEY", "--environment", "prod")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"environment":"prod","repo_id":1,"secret_name":"DEPLOY_KEY"}`, string(body))
+}

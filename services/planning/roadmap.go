@@ -146,6 +146,8 @@ type BarInput struct {
 	RootIssueID   int64
 	Depth         int
 	HasChildren   bool
+	// Fields is the issue's custom field values, keyed by field key and typed by kind.
+	Fields map[string]any
 }
 
 // Bar is one row of the chart.
@@ -180,6 +182,10 @@ type Bar struct {
 	RootIssueID   int64 `json:"root_issue_id,omitempty"`
 	Depth         int   `json:"depth,omitempty"`
 	HasChildren   bool  `json:"has_children,omitempty"`
+	// Fields carries the issue's custom field values, keyed by field key and typed by kind.
+	// Points reads the nearest-scope field keyed points, always int, out of Fields, 0 when unset.
+	Fields map[string]any `json:"fields"`
+	Points int            `json:"points"`
 }
 
 // Unmanaged is an issue with no bar, listed beside the chart with the reason.
@@ -200,6 +206,9 @@ type Unmanaged struct {
 	TypeID      int64    `json:"type_id,omitempty"`
 	MilestoneID int64    `json:"milestone_id,omitempty"`
 	IsClosed    bool     `json:"is_closed"`
+	// Fields and Points are the same custom field values a bar would have carried.
+	Fields map[string]any `json:"fields"`
+	Points int            `json:"points"`
 }
 
 // Managed reports whether an issue is managed enough to draw a bar for it: it carries an
@@ -225,6 +234,7 @@ func ResolveBar(in BarInput) (Bar, bool) {
 		IsClosed:      in.IsClosed,
 		ParentIssueID: in.ParentIssueID, RootIssueID: in.RootIssueID,
 		Depth: in.Depth, HasChildren: in.HasChildren,
+		Fields: in.Fields, Points: PointsOf(in.Fields),
 	}
 
 	switch {
@@ -266,6 +276,7 @@ func UnmanagedFor(in BarInput) Unmanaged {
 		SuggestedAction: "Set a type, a parent or a start date first. A bar drawn from creation alone would present a guess as a schedule.",
 		Labels:          in.Labels, Assignees: in.Assignees,
 		Type: in.TypeName, TypeID: in.TypeID, MilestoneID: in.MilestoneID, IsClosed: in.IsClosed,
+		Fields: in.Fields, Points: PointsOf(in.Fields),
 	}
 }
 
@@ -372,6 +383,10 @@ type RollupRow struct {
 	ContainsChildren bool   `json:"contains_children"`
 	Warning          string `json:"warning,omitempty"`
 	SuggestedAction  string `json:"suggested_action,omitempty"`
+	// PointsTotal sums every child's own points; PointsClosed sums it over closed children
+	// only.
+	PointsTotal  int `json:"points_total"`
+	PointsClosed int `json:"points_closed"`
 }
 
 // Zoom is the depth the chart is read at. It is a view setting, never stored.
@@ -422,6 +437,10 @@ func BuildRollup(kind, key, label string, bars []Bar) (RollupRow, bool) {
 		}
 		if bar.EndInferred {
 			row.EndInferred = true
+		}
+		row.PointsTotal += bar.Points
+		if bar.IsClosed {
+			row.PointsClosed += bar.Points
 		}
 	}
 	row.Children = len(bars)

@@ -97,6 +97,11 @@ type Card struct {
 	RootIssueID   int64 `json:"root_issue_id,omitempty"`
 	Depth         int   `json:"depth,omitempty"`
 	HasChildren   bool  `json:"has_children,omitempty"`
+	// Fields carries the issue's custom field values, keyed by field key and typed by kind.
+	// Points reads the nearest-scope field keyed points, always int, out of Fields, 0 when
+	// unset — the value every group and rollup total sums.
+	Fields map[string]any `json:"fields"`
+	Points int            `json:"points"`
 }
 
 // TreeEdge is one parent edge, published beside the cards or bars so a client can draw the
@@ -145,6 +150,9 @@ type Group struct {
 	Cards        int           `json:"cards"`
 	// RootIssueID is the row's own root work item, 0 outside parent grouping.
 	RootIssueID int64 `json:"root_issue_id,omitempty"`
+	// PointsTotal sums every card's own points; PointsClosed sums it over closed cards only.
+	PointsTotal  int `json:"points_total"`
+	PointsClosed int `json:"points_closed"`
 }
 
 // emptyGroupLabel names the empty-value group per grouping, so it reads as a fact about the
@@ -268,6 +276,12 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 			group.Label = labelForKey[key]
 			group.RootIssueID = rootForKey[key]
 		}
+		for _, card := range byGroup[key] {
+			group.PointsTotal += card.Points
+			if card.IsClosed {
+				group.PointsClosed += card.Points
+			}
+		}
 		group.Columns = make([]GroupColumn, 0, len(columns))
 		for _, col := range columns {
 			lc := GroupColumn{ColumnID: col.ID, Title: col.Title, Cards: []Card{}}
@@ -329,6 +343,7 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
 			ParentIssueID: bar.ParentIssueID, RootIssueID: bar.RootIssueID,
 			Depth: bar.Depth, HasChildren: bar.HasChildren,
+			Fields: bar.Fields, Points: bar.Points,
 		})
 	}
 	return BuildGroups([]BoardColumn{{Title: roadmapGroupColumn}}, cards, grouping)

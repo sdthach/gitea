@@ -80,6 +80,9 @@ type Roadmap struct {
 	// Types are the types visible from this repository, nearest scope shadowing by name —
 	// what a bar's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
+	// Fields are the custom fields visible from this repository. Bars carry the values
+	// themselves.
+	Fields []planning_service.VisibleField `json:"fields"`
 	// Labels are the repository's own labels plus its owning organization's.
 	Labels []LabelRef `json:"labels"`
 	// CanWrite says whether the caller may write on the Issues unit, so a client offers the
@@ -278,6 +281,13 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	}
 	out.Types = types
 
+	fields, err := planning_service.FieldsFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	out.Fields = fields
+
 	labels, err := repoLabels(ctx, repo)
 	if err != nil {
 		ctx.APIErrorInternal(err)
@@ -354,11 +364,16 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		ctx.APIErrorInternal(err)
 		return
 	}
+	values, err := planning_service.ValuesFor(ctx, repo, issueIDsOf(issues))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 
 	bars := make([]planning_service.Bar, 0, len(issues))
 	drawn := make(map[int64]bool, len(issues))
 	for _, issue := range issues {
-		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)
+		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])
 		if bar, ok := planning_service.ResolveBar(in); ok {
 			bars = append(bars, bar)
 			drawn[issue.ID] = true
@@ -489,7 +504,7 @@ func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars [
 
 	rows := make([]planning_service.RollupRow, 0, len(parentIDs)+len(milestones))
 	for _, parentID := range parentIDs {
-		row, held, ok, err := roadmapParentRollup(ctx, state, parentID, hier)
+		row, held, ok, err := roadmapParentRollup(ctx, repo, state, parentID, hier)
 		if err != nil {
 			return nil, err
 		}
@@ -530,7 +545,7 @@ func directChildIDs(parents map[int64]int64, parentID int64) []int64 {
 // parent map is already in memory, so every child is found there rather than queried — but a
 // parent with more children than query.MaxLimit is still capped and marked partial, the same
 // safety a milestone rollup's own paginated fetch gets.
-func roadmapParentRollup(ctx *context.APIContext, state optional.Option[bool], parentID int64, hier hierarchyMaps) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
+func roadmapParentRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], parentID int64, hier hierarchyMaps) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
 	childIDs := directChildIDs(hier.parents, parentID)
 	capped := len(childIDs) > query.MaxLimit
 	if capped {
@@ -561,6 +576,10 @@ func roadmapParentRollup(ctx *context.APIContext, state optional.Option[bool], p
 	if err != nil {
 		return planning_service.RollupRow{}, nil, false, err
 	}
+	values, err := planning_service.ValuesFor(ctx, repo, issueIDsOf(issues))
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
 	bars := make([]planning_service.Bar, 0, len(issues))
 	held := make(issues_model.IssueList, 0, len(issues))
 	for _, issue := range issues {
@@ -568,7 +587,7 @@ func roadmapParentRollup(ctx *context.APIContext, state optional.Option[bool], p
 			continue
 		}
 		held = append(held, issue)
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
 			bars = append(bars, bar)
 		}
 	}
@@ -650,9 +669,13 @@ func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state o
 	if err != nil {
 		return planning_service.RollupRow{}, nil, false, err
 	}
+	values, err := planning_service.ValuesFor(ctx, repo, issueIDsOf(issues))
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
 	children := make([]planning_service.Bar, 0, len(issues))
 	for _, issue := range issues {
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
 			children = append(children, bar)
 		}
 	}
@@ -730,8 +753,9 @@ type hierarchyMaps struct {
 }
 
 // barInputFor reduces one issue to what bar resolution depends on. assigned is the issue's own
-// type assignment, zero when it has none.
-func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType, hier hierarchyMaps) planning_service.BarInput {
+// type assignment, zero when it has none; values is its own custom field values, nil when it
+// has none.
+func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType, hier hierarchyMaps, values map[string]any) planning_service.BarInput {
 	in := planning_service.BarInput{
 		IssueID: issue.ID, Number: issue.Index, Title: issue.Title, URL: issue.Link(),
 		ScheduledStartUnix: startedUnix,
@@ -747,6 +771,7 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning
 		RootIssueID:   planning_service.RootOf(hier.parents, issue.ID),
 		Depth:         hier.depths[issue.ID],
 		HasChildren:   hier.hasChildren[issue.ID],
+		Fields:        valuesOrEmpty(values),
 	}
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)

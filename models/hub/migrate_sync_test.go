@@ -131,7 +131,7 @@ func TestMigrateCopiesRowsWhenSyncCreatedTheNewTablesFirst(t *testing.T) {
 	has, err := e.Where("1=1").Get(version)
 	require.NoError(t, err)
 	require.True(t, has)
-	assert.Equal(t, int64(6), version.Version, "the version row copied from delivery_version survived, migrated to 6")
+	assert.Equal(t, int64(7), version.Version, "the version row copied from delivery_version survived, migrated to 7")
 
 	// Re-running is a no-op: every old table is already gone.
 	require.NoError(t, hub_model.Migrate(ctx))

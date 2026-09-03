@@ -12,15 +12,21 @@ Commands:
   board                   A project board with horizontal groups
   board-move-column       Move a card between the board's columns
   board-move-group        Move a card between the board's groups
+  field-create            Create a custom field
+  field-delete            Delete a custom field
+  field-update            Update a custom field
+  fields                  The custom fields visible from a repository or an organization
   issue                   The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
   issue-clear-parent      Remove an issue's parent
   issue-clear-start       Clear an issue's start date
   issue-clear-type        Remove an issue's type
   issue-create            Create an issue on a row
+  issue-fields            An issue's visible fields and its own recorded values
   issue-move-group        Move a bar between the chart's groups
   issue-move-milestone    Move an issue between the chart's milestone rows
   issue-set-dates         Set a bar's start and end
   issue-set-estimate      Set an issue's time estimate
+  issue-set-fields        Set an issue's custom field values
   issue-set-parent        Set an issue's parent
   issue-set-start         Set an issue's start date
   issue-set-type          Assign an issue's type
@@ -158,6 +164,170 @@ Flags:
     	free-text search
   -repo string
     	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning field-create
+
+```
+gitea-planning field-create — Create a custom field
+
+  POST /fields
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -key string
+    	required. A lower-case slug: a letter, then up to 39 letters, digits or underscores.
+  -kind string
+    	required. One of int, text, date or select. Fixed once the field is created.
+  -label string
+    	required. 1-100 characters.
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -options string
+    	select only: 1-50 distinct options, each at most 100 characters.
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope the field to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -repo-id string
+    	Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -required
+    	Whether an issue's value may be cleared once set.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort string
+    	Tie-breaker for display order among a scope's own fields.
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning field-delete
+
+```
+gitea-planning field-delete — Delete a custom field
+
+  DELETE /fields/{id}
+
+Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning field-update
+
+```
+gitea-planning field-update — Update a custom field
+
+  PUT /fields/{id}
+
+Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -key string
+    	required. A lower-case slug: a letter, then up to 39 letters, digits or underscores.
+  -kind string
+    	required. One of int, text, date or select. Fixed once the field is created.
+  -label string
+    	required. 1-100 characters.
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -options string
+    	select only: 1-50 distinct options, each at most 100 characters.
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope the field to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -repo-id string
+    	Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -required
+    	Whether an issue's value may be cleared once set.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort string
+    	Tie-breaker for display order among a scope's own fields.
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning fields
+
+```
+gitea-planning fields — The custom fields visible from a repository or an organization
+
+  GET /fields
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
   -server string
     	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string
@@ -352,6 +522,40 @@ Flags:
     	A type visible from the repository, assigned to the new issue.
 ```
 
+## gitea-planning issue-fields
+
+```
+gitea-planning issue-fields — An issue's visible fields and its own recorded values
+
+  GET /issues/{issue_id}/fields
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
 ## gitea-planning issue-move-group
 
 ```
@@ -506,6 +710,44 @@ Flags:
     	required. Duration such as "3d" or "4h30m".
   -token string
     	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-set-fields
+
+```
+gitea-planning issue-set-fields — Set an issue's custom field values
+
+  PUT /issues/{issue_id}/fields
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+  -values string
+    	required. A JSON object (or a JSON string holding one) mapping field key to value; null or "" clears it.
 ```
 
 ## gitea-planning issue-set-parent

@@ -64,6 +64,11 @@ func testConfig() Config {
 				Summary: "Create a widget (alias)", BodyParams: []string{"active", "color", "name"}, RequiredBody: []string{"name"},
 				BoolBody: []string{"active"}, BodyHelp: map[string]string{"name": "widget name"}, Columns: []string{"id", "name"},
 			},
+			{
+				Name: "resize-widget", OperationID: "resizeWidget", Method: http.MethodPut, Path: "/widgets/{id}/size",
+				Summary: "Resize a widget", PathParams: []string{"id"}, BodyParams: []string{"size", "tags"},
+				IntBody: []string{"size"}, ArrayBody: []string{"tags"}, Columns: []string{"id", "name"},
+			},
 		},
 	}
 }
@@ -363,4 +368,48 @@ func TestMissingRequiredBodyIsRefusedBeforeTheRoundTrip(t *testing.T) {
 	assert.Contains(t, err.Message, "--name")
 	assert.NotEmpty(t, err.SuggestedAction)
 	assert.Empty(t, rec.requests, "nothing was sent")
+}
+
+// TestIntBodyMarshalsAsANumber: an IntBody member is sent as a JSON number, not the string
+// every other body member marshals as — the handler decodes it into an int64 field.
+func TestIntBodyMarshalsAsANumber(t *testing.T) {
+	cfg := testConfig()
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--size", "3", "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"size":3}`, requestBody(t, rec.requests[0]))
+}
+
+// TestIntBodyRefusesANonInteger: a non-integer value is refused before the round-trip, naming
+// the flag.
+func TestIntBodyRefusesANonInteger(t *testing.T) {
+	cfg := testConfig()
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--size", "not-a-number", "7")
+	require.NotNil(t, err)
+	assert.Equal(t, 2, err.ExitCode)
+	assert.Contains(t, err.Message, "--size")
+	assert.Empty(t, rec.requests, "nothing was sent")
+}
+
+// TestArrayBodyAcceptsAJSONArrayOrACommaSeparatedList: an ArrayBody flag's value is a JSON
+// array when it starts with '[', otherwise a comma-separated list of strings.
+func TestArrayBodyAcceptsAJSONArrayOrACommaSeparatedList(t *testing.T) {
+	cfg := testConfig()
+
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--tags", `["red","blue"]`, "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"tags":["red","blue"]}`, requestBody(t, rec.requests[0]))
+
+	rec2 := &recorder{body: "{}"}
+	withRecorder(t, rec2, cfg)
+	_, _, err = exec(t, cfg, rec2, "resize-widget", "--tags", "red, blue", "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"tags":["red","blue"]}`, requestBody(t, rec2.requests[0]))
 }

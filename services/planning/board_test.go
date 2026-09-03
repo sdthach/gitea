@@ -230,3 +230,25 @@ func TestBuildTreeIsSortedByChildIssueID(t *testing.T) {
 	tree := BuildTree(map[int64]int64{3: 1, 2: 1})
 	assert.Equal(t, []TreeEdge{{IssueID: 2, ParentIssueID: 1}, {IssueID: 3, ParentIssueID: 1}}, tree)
 }
+
+// TestPlanningBuildGroupsSumsPointsOverTheGroupsOwnCards: points_total covers every card in
+// the group, points_closed only the closed ones — mutating this to sum over open cards
+// instead would pass points_total's own assertion but fail points_closed's.
+func TestPlanningBuildGroupsSumsPointsOverTheGroupsOwnCards(t *testing.T) {
+	cards := []Card{
+		{IssueID: 1, Number: 1, ColumnID: 11, Type: "bug", Points: 3, IsClosed: true},
+		{IssueID: 2, Number: 2, ColumnID: 12, Type: "bug", Points: 5, IsClosed: false},
+		{IssueID: 3, Number: 3, ColumnID: 13, Type: "task", Points: 8, IsClosed: true},
+	}
+	groups := BuildGroups(boardColumns, cards, GroupType)
+	require.Len(t, groups, 2)
+	bugGroup := groups[0]
+	require.Equal(t, "bug", bugGroup.Key)
+	assert.Equal(t, 8, bugGroup.PointsTotal, "3 + 5 over both bug cards")
+	assert.Equal(t, 3, bugGroup.PointsClosed, "only the closed bug card")
+
+	taskGroup := groups[1]
+	require.Equal(t, "task", taskGroup.Key)
+	assert.Equal(t, 8, taskGroup.PointsTotal)
+	assert.Equal(t, 8, taskGroup.PointsClosed, "the task card is closed too")
+}

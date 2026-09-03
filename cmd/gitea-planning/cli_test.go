@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.dev/cmd/gitea-planning/client"
 	"gitea.dev/cmd/hubcli"
 
 	"github.com/stretchr/testify/assert"
@@ -165,13 +166,37 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"project-view-delete", "--repo", "acme/widgets", "5", "9"},
 			"/api/planning/v1/projects/5/views/9", http.MethodDelete,
 		},
+		"fields": {
+			[]string{"fields", "--filter", "repo_id=1"},
+			"/api/planning/v1/fields", "",
+		},
+		"field-create": {
+			[]string{"field-create", "--repo-id", "1", "--key", "points", "--label", "Points", "--kind", "int"},
+			"/api/planning/v1/fields", http.MethodPost,
+		},
+		"field-update": {
+			[]string{"field-update", "--key", "points", "--label", "Points", "--kind", "int", "7"},
+			"/api/planning/v1/fields/7", http.MethodPut,
+		},
+		"field-delete": {
+			[]string{"field-delete", "7"},
+			"/api/planning/v1/fields/7", http.MethodDelete,
+		},
+		"issue-fields": {
+			[]string{"issue-fields", "9042"},
+			"/api/planning/v1/issues/9042/fields", "",
+		},
+		"issue-set-fields": {
+			[]string{"issue-set-fields", "--repo", "acme/widgets", "--values", `{"points": 5}`, "9042"},
+			"/api/planning/v1/issues/9042/fields", http.MethodPut,
+		},
 	}
-	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
+	require.Len(t, cases, len(client.Commands), "every command needs a test; add one when an endpoint is added")
 
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			var isList bool
-			for _, cmd := range Commands {
+			for _, cmd := range client.Commands {
 				if cmd.Name == name {
 					isList = cmd.IsList
 				}
@@ -211,11 +236,26 @@ func TestProjectViewsCommandSendsRepoOnTheQueryString(t *testing.T) {
 	assert.Equal(t, "user2/repo1", rec.requests[0].URL.Query().Get("repo"))
 
 	found := false
-	for _, cmd := range Commands {
+	for _, cmd := range client.Commands {
 		if cmd.Name == "project-views" {
 			found = true
 			assert.Contains(t, cmd.QueryParams, "repo", "the generated command must document repo as a query parameter")
 		}
 	}
 	require.True(t, found)
+}
+
+// TestIssueSetTypeSendsTypeIDAsANumber: type_id is an IntBody member, decoded by the handler
+// into an int64 field — sending it as a JSON string would fail that decode.
+func TestIssueSetTypeSendsTypeIDAsANumber(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "issue-set-type", "--repo", "acme/widgets", "--type-id", "7", "9042")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"repo":"acme/widgets","type_id":7}`, string(body))
 }

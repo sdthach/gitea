@@ -267,43 +267,7 @@ func issueTypeVisibleOrg(ctx *context.APIContext, orgID int64) (*org_model.Organ
 
 // GetIssueTypes answers GET /issue-types.
 func GetIssueTypes(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, issueTypeSpec)
-	if !ok {
-		return
-	}
-	repoID := hubapi.EqualityFilterInt(q, "repo_id")
-	orgID := hubapi.EqualityFilterInt(q, "org_id")
-	if repoID > 0 && orgID > 0 {
-		hubapi.APIError(ctx, http.StatusBadRequest, "bad_scope",
-			"repo_id and org_id cannot both be given", "Send repo_id or org_id, never both.")
-		return
-	}
-
-	var (
-		types []planning_service.VisibleType
-		err   error
-	)
-	switch {
-	case repoID > 0:
-		repo, ok := issueTypeReadableRepo(ctx, repoID)
-		if !ok {
-			return
-		}
-		types, err = planning_service.TypesFor(ctx, repo)
-	case orgID > 0:
-		org, ok := issueTypeVisibleOrg(ctx, orgID)
-		if !ok {
-			return
-		}
-		types, err = planning_service.TypesForOrg(ctx, org.ID)
-	default:
-		types, err = planning_service.TypesForOrg(ctx, 0)
-	}
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
-	ctx.JSON(http.StatusOK, types)
+	scopeListRead(ctx, issueTypeSpec, issueTypeReadableRepo, planning_service.TypesFor, planning_service.TypesForOrg)
 }
 
 type issueTypeBody struct {
