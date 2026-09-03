@@ -10,8 +10,10 @@ Usage: gitea-planning <command> [positional...] [flags]
 
 Commands:
   board                   A project board with horizontal groups
+  board-add-card          Create an issue directly onto the board
   board-move-column       Move a card between the board's columns
   board-move-group        Move a card between the board's groups
+  board-order-column      Reorder every card in one column
   field-create            Create a custom field
   field-delete            Delete a custom field
   field-update            Update a custom field
@@ -88,6 +90,52 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
+## gitea-planning board-add-card
+
+```
+gitea-planning board-add-card — Create an issue directly onto the board
+
+  POST /board/cards
+
+Flags:
+  -column-id string
+    	required. The column the new card lands in.
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -group string
+    	The group's key, resolved exactly as a group move resolves one: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id, since a new card otherwise starts with no type for hierarchy to rank.
+  -group-by string
+    	The grouping group is read under, and the board is answered at. Omit for no group.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -project-id string
+    	required. The board to add the card to.
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -title string
+    	required. The new issue's title, 1-255 characters.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+  -type-id string
+    	The new card's type, assigned right after it is created. Must be visible from repo, or the request answers type_not_visible. Required when group_by is parent and group is non-empty.
+```
+
 ## gitea-planning board-move-column
 
 ```
@@ -160,6 +208,48 @@ Flags:
     	asc or desc
   -project-id string
     	required. The board the card is on.
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning board-order-column
+
+```
+gitea-planning board-order-column — Reorder every card in one column
+
+  POST /board/columns/{column_id}/order
+
+Positional arguments: column_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -group-by string
+    	The grouping to answer the board at. Omit for none.
+  -issue-ids string
+    	required. Every card in the column, in order, up to 500: a comma-separated list or a JSON array of issue ids, every id already a card of this repository and this project. A card in the column missing from this list answers incomplete_column and writes nothing — send the whole column, never a subset.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -project-id string
+    	required. The board the column belongs to.
   -q string
     	free-text search
   -repo string

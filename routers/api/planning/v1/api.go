@@ -22,6 +22,8 @@ func endpoints() []*hubapi.Endpoint {
 		getBoardEndpoint(),
 		moveBoardCardColumnEndpoint(),
 		moveBoardCardGroupEndpoint(),
+		orderBoardColumnEndpoint(),
+		addBoardCardEndpoint(),
 		getRoadmapEndpoint(),
 		moveIssueMilestoneEndpoint(),
 		moveIssueGroupEndpoint(),

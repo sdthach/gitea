@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"io"
 	"net/http"
 	"strings"
 
@@ -477,18 +476,11 @@ type boardMoveBody struct {
 	Group     string `json:"group"`
 }
 
-// readBoardMoveBody reads a board write's body under maxBoardMoveBody.
+// readBoardMoveBody reads a board write's body under maxBoardMoveBody, through the same
+// bounded read board_write.go's own writes use.
 func readBoardMoveBody(ctx *context.APIContext) (*boardMoveBody, bool) {
-	raw, err := io.ReadAll(io.LimitReader(ctx.Req.Body, maxBoardMoveBody+1))
-	if err != nil {
-		hubapi.APIError(ctx, http.StatusBadRequest, "unreadable_body",
-			"the request body could not be read", "Retry the request; the body was cut short.")
-		return nil, false
-	}
-	if len(raw) > maxBoardMoveBody {
-		hubapi.APIError(ctx, http.StatusBadRequest, "body_too_large",
-			"the request body is larger than 16KiB",
-			"A card move carries ids and a group name; send only those fields.")
+	raw, ok := readBoundedBody(ctx)
+	if !ok {
 		return nil, false
 	}
 	body := new(boardMoveBody)
@@ -510,42 +502,8 @@ func boardMoveTarget(ctx *context.APIContext, needed unit.Type) (*boardMoveBody,
 	if !ok {
 		return nil, nil, perm, nil, nil, false
 	}
-
-	owner, name, found := strings.Cut(strings.TrimSpace(body.Repo), "/")
-	if !found || owner == "" || name == "" {
-		hubapi.APIError(ctx, http.StatusBadRequest, "bad_repo",
-			"repo must be owner/name, got "+body.Repo,
-			"Send repo as owner/name, for example \"acme/widgets\".")
-		return nil, nil, perm, nil, nil, false
-	}
-	repo, err := repo_model.GetRepositoryByOwnerAndName(ctx, owner, name)
-	if err != nil {
-		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
-			"no repository "+owner+"/"+name+" is visible to you",
-			"Check the owner and repository name against "+BasePath+"/repos.")
-		return nil, nil, perm, nil, nil, false
-	}
-	perm, err = access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return nil, nil, perm, nil, nil, false
-	}
-	// Visibility first, so a caller who cannot see the repository is not told how its
-	// Projects unit is configured; then availability, so an absent unit is never reported
-	// as a permission problem; then the write permission itself.
-	if !boardReadable(ctx, perm) {
-		return nil, nil, perm, nil, nil, false
-	}
-	if !boardAvailable(ctx, repo) {
-		return nil, nil, perm, nil, nil, false
-	}
-	if !boardProjectsReadable(ctx, repo, perm) {
-		return nil, nil, perm, nil, nil, false
-	}
-	if !perm.CanWrite(needed) {
-		hubapi.APIError(ctx, http.StatusForbidden, "forbidden",
-			"your account has no write access to the "+needed.LogString()+" unit of "+repo.FullName(),
-			"Ask a repository administrator for write permission on that unit.")
+	repo, perm, ok := boardWritePerm(ctx, body.Repo, needed)
+	if !ok {
 		return nil, nil, perm, nil, nil, false
 	}
 	project, ok := boardProject(ctx, repo, body.ProjectID)

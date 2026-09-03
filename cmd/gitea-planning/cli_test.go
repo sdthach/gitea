@@ -69,6 +69,14 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"board-move-column", "--repo", "acme/web", "--project-id", "5", "--column-id", "12", "9042"},
 			"/api/planning/v1/board/cards/9042/column", http.MethodPost,
 		},
+		"board-order-column": {
+			[]string{"board-order-column", "--repo", "acme/web", "--project-id", "5", "--issue-ids", "12,7,3", "42"},
+			"/api/planning/v1/board/columns/42/order", http.MethodPost,
+		},
+		"board-add-card": {
+			[]string{"board-add-card", "--repo", "acme/web", "--project-id", "5", "--column-id", "1", "--title", "Wire it", "--type-id", "9"},
+			"/api/planning/v1/board/cards", http.MethodPost,
+		},
 		"board-move-group": {
 			[]string{"board-move-group", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--group", "bug", "9042"},
 			"/api/planning/v1/board/cards/9042/group", http.MethodPost,
@@ -258,4 +266,35 @@ func TestIssueSetTypeSendsTypeIDAsANumber(t *testing.T) {
 	body, readErr := io.ReadAll(rec.requests[0].Body)
 	require.NoError(t, readErr)
 	assert.JSONEq(t, `{"repo":"acme/widgets","type_id":7}`, string(body))
+}
+
+// TestBoardAddCardSendsTypeIDAsANumber: type_id is an IntBody member on board-add-card too,
+// decoded server-side into addCardBody's int64 field — a JSON string would fail that decode.
+func TestBoardAddCardSendsTypeIDAsANumber(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "board-add-card", "--repo", "acme/web", "--project-id", "5", "--column-id", "1", "--title", "Wire it", "--type-id", "9")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"repo":"acme/web","project_id":5,"column_id":1,"title":"Wire it","type_id":9}`, string(body))
+}
+
+// TestBoardOrderColumnSendsIssueIDsAsAnArray: issue_ids is an ArrayBody member. The flag takes
+// the comma-separated string a person types, but the generated client marshals it as a JSON
+// array on the wire — the shape the server's issueIDsField expects from this CLI.
+func TestBoardOrderColumnSendsIssueIDsAsAnArray(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "board-order-column", "--repo", "acme/web", "--project-id", "5", "--issue-ids", "12,7,3", "42")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"repo":"acme/web","project_id":5,"issue_ids":["12","7","3"]}`, string(body))
 }

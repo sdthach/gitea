@@ -419,20 +419,19 @@ func applyGroupType(ctx *context.APIContext, issue *issues_model.Issue, write pl
 		ctx.APIErrorInternal(err)
 		return false
 	}
-	for _, t := range types {
-		if t.Name == write.TypeName {
-			if err := planning_service.SetIssueType(ctx, issue, t.ID); err != nil {
-				hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
-				return false
-			}
-			return true
-		}
+	t, ok := planning_service.FindVisibleType(types, write.TypeName)
+	if !ok {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "type_not_visible",
+			"no type named "+write.TypeName+" is visible from "+issue.Repo.FullName(),
+			"Create the type first, or move to one of the names GET "+BasePath+"/issue-types?repo_id="+
+				strconv.FormatInt(issue.RepoID, 10)+" returns.")
+		return false
 	}
-	hubapi.APIError(ctx, http.StatusUnprocessableEntity, "type_not_visible",
-		"no type named "+write.TypeName+" is visible from "+issue.Repo.FullName(),
-		"Create the type first, or move to one of the names GET "+BasePath+"/issue-types?repo_id="+
-			strconv.FormatInt(issue.RepoID, 10)+" returns.")
-	return false
+	if err := planning_service.SetIssueType(ctx, issue, t.ID); err != nil {
+		hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
+		return false
+	}
+	return true
 }
 
 // GetIssueTypeAssignments answers GET /issue-type-assignments.

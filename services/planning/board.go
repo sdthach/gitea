@@ -407,3 +407,14 @@ func PlanGroupMove(grouping Grouping, groupKey string) (GroupWrite, error) {
 			"Moving a card between COLUMNS works with grouping off.",
 	}
 }
+
+// FindVisibleType finds name among types by exact match: PlanGroupMove already lower-cases
+// and trims a type group's key, matching how a type's own name is stored.
+func FindVisibleType(types []VisibleType, name string) (VisibleType, bool) {
+	for _, t := range types {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return VisibleType{}, false
+}

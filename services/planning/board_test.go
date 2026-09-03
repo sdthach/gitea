@@ -226,6 +226,18 @@ func TestPlanningPlanGroupMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
 	assert.Contains(t, hubErr.SuggestedAction, "COLUMNS", "the refusal names the write that does still work")
 }
 
+// FindVisibleType is name-based lookup, the group resolution add-card and a group move share.
+func TestPlanningFindVisibleType(t *testing.T) {
+	types := []VisibleType{{ID: 1, Name: "bug"}, {ID: 2, Name: "task"}}
+
+	found, ok := FindVisibleType(types, "task")
+	require.True(t, ok)
+	assert.Equal(t, int64(2), found.ID)
+
+	_, ok = FindVisibleType(types, "epic")
+	assert.False(t, ok, "a name with no match is not found rather than zero-valued and found")
+}
+
 func TestBuildTreeIsSortedByChildIssueID(t *testing.T) {
 	tree := BuildTree(map[int64]int64{3: 1, 2: 1})
 	assert.Equal(t, []TreeEdge{{IssueID: 2, ParentIssueID: 1}, {IssueID: 3, ParentIssueID: 1}}, tree)

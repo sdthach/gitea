@@ -706,6 +706,111 @@
         ]
       }
     },
+    "/board/cards": {
+      "post": {
+        "description": "GitHub Projects' own board adds an item straight into a column and a group; this is the same write over Gitea's own project card. The group is resolved before the issue is created — the same codes a group move answers, for the dimensions a brand new issue can carry (type, assignee, parent) — so a refused group leaves nothing behind. A non-empty parent group needs type_id, checked visible before creation, because a new card otherwise has no type yet for hierarchy to rank; type_id itself is assigned right after the issue is created, before its group is written. Creating the issue, assigning its type, placing it in its column and writing its group are separate calls: if any but the first fails, the issue already exists incomplete, and the response is a 500 that says so, because pre-creation validation has already excluded every refusal that means something to the caller. Authorized by Gitea's own write check on both the Issues and Projects units.",
+        "operationId": "addBoardCard",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "column_id": {
+                    "description": "The column the new card lands in.",
+                    "type": "integer"
+                  },
+                  "group": {
+                    "description": "The group's key, resolved exactly as a group move resolves one: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id, since a new card otherwise starts with no type for hierarchy to rank.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The grouping group is read under, and the board is answered at. Omit for no group.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "description": "The board to add the card to.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "The new issue's title, 1-255 characters.",
+                    "type": "string"
+                  },
+                  "type_id": {
+                    "description": "The new card's type, assigned right after it is created. Must be visible from repo, or the request answers type_not_visible. Required when group_by is parent and group is non-empty.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "column_id",
+                  "project_id",
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an issue directly onto the board",
+        "tags": [
+          "board"
+        ]
+      }
+    },
     "/board/cards/{issue_id}/column": {
       "post": {
         "description": "The first of the board's exactly two writes. It is the same operation ccpm's board-issue-move verb performs over Gitea's own Projects API, reached here as the calling user. Authorized by Gitea's own write check on the Projects unit.",
@@ -899,6 +1004,108 @@
           }
         },
         "summary": "Move a card between the board's groups",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/columns/{column_id}/order": {
+      "post": {
+        "description": "GitHub Projects' own board reorders a whole column in one drag; this is the same write, sorting issue_ids 0..n-1 in the order given through Gitea's own MoveIssuesOnProjectColumn. issue_ids must send every card in the column, in order — one already in the column but missing from the list answers incomplete_column, naming the ids left out. Every id must already be a card of this repository and this project — one that is not answers issue_not_in_repo or issue_not_in_project. Nothing is written on any refusal. Authorized by Gitea's own write check on the Projects unit.",
+        "operationId": "orderBoardColumn",
+        "parameters": [
+          {
+            "description": "The column being reordered.",
+            "in": "path",
+            "name": "column_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group_by": {
+                    "description": "The grouping to answer the board at. Omit for none.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "issue_ids": {
+                    "description": "Every card in the column, in order, up to 500: a comma-separated list or a JSON array of issue ids, every id already a card of this repository and this project. A card in the column missing from this list answers incomplete_column and writes nothing — send the whole column, never a subset.",
+                    "type": "array"
+                  },
+                  "project_id": {
+                    "description": "The board the column belongs to.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_ids",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Reorder every card in one column",
         "tags": [
           "board"
         ]
