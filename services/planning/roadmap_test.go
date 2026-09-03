@@ -18,7 +18,6 @@ const (
 )
 
 func managed(in BarInput) BarInput {
-	in.Managed = true
 	in.IssueID, in.Number, in.Title, in.Epic = 9001, 1, "task", "checkout"
 	in.CreatedUnix = created
 	return in
@@ -182,9 +181,9 @@ func TestPlanningBuildRollupsEmitsEpicsThenMilestones(t *testing.T) {
 }
 
 // TestPlanningBuildRollupsExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
-// check meaningful: ccpm puts epic:<name> on the epic's own issue beside type:epic, so
-// without the exclusion the parent counts among its own children and its declared window has
-// nothing left to be compared against.
+// check meaningful: ccpm puts epic:<name> on the epic's own issue beside its assigned epic
+// type, so without the exclusion the parent counts among its own children and its declared
+// window has nothing left to be compared against.
 func TestPlanningBuildRollupsExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 100, EndUnix: 5000},
@@ -267,22 +266,35 @@ func TestPlanningRollupRowPartialWithdrawsItsProgress(t *testing.T) {
 	assert.Zero(t, row.Progress)
 }
 
-// TestPlanningResolveBarReadsItsTypeOffTheLabels: the chart cannot tell a story from a bug
-// from an epic without it, and the epic self-exclusion depends on the answer.
-func TestPlanningResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
+// TestPlanningResolveBarUsesTheAssignedType: the chart cannot tell a story from a bug from an
+// epic without it, and the epic self-exclusion depends on the answer. The type comes from the
+// issue's own assignment, not a label.
+func TestPlanningResolveBarUsesTheAssignedType(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{
-		Labels: []string{"epic:checkout", "type:story"}, Assignees: []string{"jo"},
+		TypeID: 5, TypeName: "story", TypeColor: "#2da44e", TypeIcon: "octicon-tasklist",
+		Labels: []string{"epic:checkout"}, Assignees: []string{"jo"},
 	}))
 	require.True(t, ok)
 	assert.Equal(t, "story", bar.Type)
-	assert.Equal(t, []string{"epic:checkout", "type:story"}, bar.Labels)
+	assert.EqualValues(t, 5, bar.TypeID)
+	assert.Equal(t, "#2da44e", bar.TypeColor)
+	assert.Equal(t, "octicon-tasklist", bar.TypeIcon)
 	assert.Equal(t, []string{"jo"}, bar.Assignees)
-	assert.Equal(t, "story", GroupKeyFor(bar.Labels, bar.Assignees, GroupType),
+	assert.Equal(t, "story", GroupKeyFor(GroupInput{TypeName: bar.Type, Labels: bar.Labels, Assignees: bar.Assignees}, GroupType),
 		"the chart's groups and the board's are one definition")
 
 	bar, ok = ResolveBar(managed(BarInput{Labels: []string{"epic:checkout"}}))
 	require.True(t, ok)
-	assert.Empty(t, bar.Type, "an issue with no type: label has no type, rather than a guessed one")
+	assert.Empty(t, bar.Type, "an issue with no assigned type has no type, rather than a guessed one")
+}
+
+// TestPlanningManagedRespectsEveryDeclaredCondition covers the OR: a type, a recorded
+// schedule, or — until hierarchy exists — an epic label, each alone is enough to draw a bar.
+func TestPlanningManagedRespectsEveryDeclaredCondition(t *testing.T) {
+	assert.True(t, Managed(BarInput{TypeID: 1}))
+	assert.True(t, Managed(BarInput{ScheduledStartUnix: 100}))
+	assert.True(t, Managed(BarInput{Epic: "checkout"}))
+	assert.False(t, Managed(BarInput{}))
 }
 
 // TestPlanningParseZoomAcceptsTheDeclaredSetAndRefusesTheRest mirrors the grouping parser: an

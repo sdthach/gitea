@@ -28,7 +28,8 @@ type Grouping string
 const (
 	// GroupNone renders the board with a single group, which is Gitea's own board.
 	GroupNone Grouping = "none"
-	// GroupType groups by ccpm's type:<t> label.
+	// GroupType groups by the issue's assigned type — its plan_issue_type_assignment row,
+	// not a label.
 	GroupType Grouping = "type"
 	// GroupAssignee groups by the issue's assignee.
 	GroupAssignee Grouping = "assignee"
@@ -40,11 +41,9 @@ const (
 // naming this list, so an unknown grouping is refused rather than silently treated as none.
 var Groupings = []string{string(GroupType), string(GroupAssignee), string(GroupEpic), string(GroupNone)}
 
-// The label prefixes ccpm writes. They are spelled once here.
-const (
-	TypeLabelPrefix = "type:"
-	EpicLabelPrefix = "epic:"
-)
+// EpicLabelPrefix is the label namespace ccpm writes for epic grouping, which hierarchy has
+// not yet replaced.
+const EpicLabelPrefix = "epic:"
 
 // Group keys and labels for the explicit empty-value group. An issue with no value for
 // the active grouping lands here; nothing disappears from a board because a field is unset.
@@ -77,7 +76,13 @@ type Card struct {
 	URL      string `json:"url"`
 	ColumnID int64  `json:"column_id"`
 	Sorting  int64  `json:"sorting"`
-	// Labels and Assignees are the grouping fields. A group move edits one of them.
+	// Type is the assigned type's name, empty when none; TypeID, TypeColor and TypeIcon
+	// come from the same assignment. Labels and Assignees are the other grouping fields. A
+	// group move edits whichever field the active grouping names.
+	Type      string   `json:"type,omitempty"`
+	TypeID    int64    `json:"type_id,omitempty"`
+	TypeColor string   `json:"type_color,omitempty"`
+	TypeIcon  string   `json:"type_icon,omitempty"`
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
 	IsClosed  bool     `json:"is_closed"`
@@ -117,7 +122,7 @@ type Group struct {
 func emptyGroupLabel(g Grouping) string {
 	switch g {
 	case GroupType:
-		return "no type label"
+		return "no type assigned"
 	case GroupAssignee:
 		return "unassigned"
 	case GroupEpic:
@@ -143,25 +148,32 @@ func labelValue(labels []string, prefix string) string {
 	return matched[0]
 }
 
+// GroupInput is one row reduced to what group assignment depends on: the issue's assigned
+// type name, its labels (which epic grouping still reads), and its assignees. It takes a
+// struct rather than positional slices so the chart's bars and the board's cards reach one
+// definition of a group without either side guessing which field is which.
+type GroupInput struct {
+	TypeName  string
+	Labels    []string
+	Assignees []string
+}
+
 // GroupKeyFor is the whole of group assignment. A row with no value for the active grouping
 // returns the empty key, which BuildGroups renders as the explicit empty-value group.
 //
-// It takes the two slices rather than a Card so the chart's bars and the board's cards reach
-// one definition of a group.
-//
-// A row with more than one candidate value lands in the lexicographically first, so neither
-// view reshuffles between two renders of the same data.
-func GroupKeyFor(labels, assignees []string, grouping Grouping) string {
+// A row with more than one candidate value under assignee grouping lands in the
+// lexicographically first, so two renders of the same data never disagree.
+func GroupKeyFor(in GroupInput, grouping Grouping) string {
 	switch grouping {
 	case GroupType:
-		return labelValue(labels, TypeLabelPrefix)
+		return strings.TrimSpace(in.TypeName)
 	case GroupEpic:
-		return labelValue(labels, EpicLabelPrefix)
+		return labelValue(in.Labels, EpicLabelPrefix)
 	case GroupAssignee:
-		if len(assignees) == 0 {
+		if len(in.Assignees) == 0 {
 			return emptyGroupKey
 		}
-		sorted := append([]string(nil), assignees...)
+		sorted := append([]string(nil), in.Assignees...)
 		sort.Strings(sorted)
 		return sorted[0]
 	}
@@ -177,7 +189,7 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 	byGroup := map[string][]Card{}
 	order := make([]string, 0, 8)
 	for _, card := range cards {
-		key := GroupKeyFor(card.Labels, card.Assignees, grouping)
+		key := GroupKeyFor(GroupInput{TypeName: card.Type, Labels: card.Labels, Assignees: card.Assignees}, grouping)
 		if _, seen := byGroup[key]; !seen {
 			order = append(order, key)
 		}
@@ -241,6 +253,7 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 	for _, bar := range bars {
 		cards = append(cards, Card{
 			IssueID: bar.IssueID, Number: bar.Number, Title: bar.Title, URL: bar.URL,
+			Type: bar.Type, TypeID: bar.TypeID, TypeColor: bar.TypeColor, TypeIcon: bar.TypeIcon,
 			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
 		})
 	}
@@ -251,10 +264,13 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 type GroupWriteKind string
 
 const (
-	// GroupWriteLabel replaces the card's type: or epic: label.
+	// GroupWriteLabel replaces the card's epic: label.
 	GroupWriteLabel GroupWriteKind = "label"
 	// GroupWriteAssignee replaces the card's assignee.
 	GroupWriteAssignee GroupWriteKind = "assignee"
+	// GroupWriteType assigns the card the type named TypeName, resolved to a visible type
+	// by the handler — PlanGroupMove itself knows nothing of what types exist.
+	GroupWriteType GroupWriteKind = "type"
 )
 
 // GroupWrite is the single edit a group move performs. It names the field itself — the
@@ -262,13 +278,16 @@ const (
 type GroupWrite struct {
 	Kind GroupWriteKind
 	// Prefix is the label namespace to clear before adding, so a card never carries two
-	// type: labels. Empty for an assignee move.
+	// epic: labels. Empty for an assignee or type move.
 	Prefix string
 	// Label is the label to apply; empty means the card is moving into the empty-value
 	// group, so the namespace is cleared and nothing is added.
 	Label string
 	// Assignee is the login to assign; empty means clear the assignees.
 	Assignee string
+	// TypeName is the target type's name for a GroupWriteType move, lower-cased; empty
+	// clears the issue's type.
+	TypeName string
 }
 
 // PlanGroupMove resolves a group move into the one field edit it performs, or refuses it.
@@ -278,7 +297,7 @@ type GroupWrite struct {
 func PlanGroupMove(grouping Grouping, groupKey string) (GroupWrite, error) {
 	switch grouping {
 	case GroupType:
-		return GroupWrite{Kind: GroupWriteLabel, Prefix: TypeLabelPrefix, Label: prefixedLabel(TypeLabelPrefix, groupKey)}, nil
+		return GroupWrite{Kind: GroupWriteType, TypeName: strings.ToLower(strings.TrimSpace(groupKey))}, nil
 	case GroupEpic:
 		return GroupWrite{Kind: GroupWriteLabel, Prefix: EpicLabelPrefix, Label: prefixedLabel(EpicLabelPrefix, groupKey)}, nil
 	case GroupAssignee:

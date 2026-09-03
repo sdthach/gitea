@@ -113,6 +113,34 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"issue-set-estimate", "--repo", "acme/widgets", "--time-estimate", "3h", "9042"},
 			"/api/planning/v1/issues/9042/estimate", http.MethodPut,
 		},
+		"issue-types": {
+			[]string{"issue-types", "--filter", "repo_id=1"},
+			"/api/planning/v1/issue-types", "",
+		},
+		"issue-type-create": {
+			[]string{"issue-type-create", "--repo-id", "1", "--name", "bug", "--color", "#d1242f", "--icon", "octicon-bug", "--rank", "3"},
+			"/api/planning/v1/issue-types", http.MethodPost,
+		},
+		"issue-type-update": {
+			[]string{"issue-type-update", "--name", "bug", "--color", "#d1242f", "--icon", "octicon-bug", "--rank", "3", "7"},
+			"/api/planning/v1/issue-types/7", http.MethodPut,
+		},
+		"issue-type-delete": {
+			[]string{"issue-type-delete", "--force", "7"},
+			"/api/planning/v1/issue-types/7", http.MethodDelete,
+		},
+		"issue-set-type": {
+			[]string{"issue-set-type", "--repo", "acme/widgets", "--type-id", "7", "9042"},
+			"/api/planning/v1/issues/9042/type", http.MethodPut,
+		},
+		"issue-clear-type": {
+			[]string{"issue-clear-type", "--repo", "acme/widgets", "9042"},
+			"/api/planning/v1/issues/9042/type", http.MethodDelete,
+		},
+		"issue-type-assignments": {
+			[]string{"issue-type-assignments", "--filter", "repo_id=1"},
+			"/api/planning/v1/issue-type-assignments", "",
+		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

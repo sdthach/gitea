@@ -56,6 +56,8 @@ type Board struct {
 	GroupBy      string                         `json:"group_by"`
 	Columns      []planning_service.BoardColumn `json:"columns"`
 	Groups       []planning_service.Group       `json:"groups"`
+	// Types are the types visible from this repository, what a card's type picker offers.
+	Types []planning_service.VisibleType `json:"types"`
 	// CanWrite is whether the calling user may perform either of the two writes, resolved
 	// by the same checks the write endpoints enforce, so the page offers no action it
 	// would be refused for.
@@ -132,7 +134,7 @@ func moveBoardCardGroupEndpoint() *hubapi.Endpoint {
 			ID: "moveBoardCardGroup", Method: http.MethodPost, Path: "/board/cards/{issue_id}/group",
 			Summary: "Move a card between the board's groups",
 			Description: "The second and last of the board's writes. A group IS the grouping value, so moving between " +
-				"groups edits the field itself: the type: label, the epic: label, or the assignee. " +
+				"groups edits the field itself: the issue's assigned type, the epic: label, or the assignee. " +
 				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "board", PathParams: boardCardParams, Body: boardGroupMoveParams,
@@ -301,6 +303,12 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		return nil, false
 	}
 
+	assigned, err := planning_service.Assignments(ctx, ids)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
 	cards := make([]planning_service.Card, 0, len(issues))
 	for _, issue := range issues {
 		row := placement[issue.ID]
@@ -319,6 +327,9 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 			ColumnID: columnID, Sorting: row.Sorting,
 			IsClosed: issue.IsClosed, IsPull: issue.IsPull,
 		}
+		if at, ok := assigned[issue.ID]; ok {
+			card.Type, card.TypeID, card.TypeColor, card.TypeIcon = at.Name, at.TypeID, at.Color, at.Icon
+		}
 		for _, label := range issue.Labels {
 			card.Labels = append(card.Labels, label.Name)
 		}
@@ -328,11 +339,18 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		cards = append(cards, card)
 	}
 
+	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
 	return &Board{
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		ProjectID: project.ID, Title: project.Title, GroupBy: string(grouping),
 		Columns:      out,
 		Groups:       planning_service.BuildGroups(out, cards, grouping),
+		Types:        types,
 		CanWrite:     perm.CanWrite(unit.TypeProjects),
 		CanEditIssue: perm.CanWrite(unit.TypeIssues),
 	}, true
@@ -505,7 +523,7 @@ func MoveBoardCardColumn(ctx *context.APIContext) {
 }
 
 // MoveBoardCardGroup answers POST /board/cards/{issue_id}/group — the second and last write.
-// A group is the grouping value itself, so this edits the type: label, the epic: label or the
+// A group is the grouping value itself, so this edits the issue's assigned type, the epic: label or the
 // assignee, and is refused outright when grouping is off.
 func MoveBoardCardGroup(ctx *context.APIContext) {
 	body, repo, perm, project, issue, ok := boardMoveTarget(ctx, unit.TypeIssues)
@@ -529,6 +547,10 @@ func MoveBoardCardGroup(ctx *context.APIContext) {
 		return
 	}
 	switch write.Kind {
+	case planning_service.GroupWriteType:
+		if !applyGroupType(ctx, issue, write) {
+			return
+		}
 	case planning_service.GroupWriteLabel:
 		if !applyGroupLabel(ctx, repo, issue, write) {
 			return
@@ -568,7 +590,7 @@ func applyGroupLabel(ctx *context.APIContext, repo *repo_model.Repository, issue
 	case errors.Is(err, errGroupLabelMissing):
 		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "label_not_found",
 			"no label named "+write.Label+" exists in "+repo.FullName()+" or its organization",
-			"Create the label first — ccpm's init.sh creates one type:<t> label per declared work-item type — then move the card again.")
+			"Create the label first — ccpm's init.sh creates one epic:<name> label per epic — then move the card again.")
 		return false
 	case err != nil:
 		ctx.APIErrorInternal(err)

@@ -18,10 +18,12 @@ var boardColumns = []BoardColumn{
 	{ID: 13, Title: "Done"},
 }
 
-func card(number, columnID int64, labels, assignees []string) Card {
+// card builds a test card. typeName is the assigned type's name (empty for none), labels
+// carries only what epic grouping still reads.
+func card(number, columnID int64, typeName string, labels, assignees []string) Card {
 	return Card{
 		IssueID: 9000 + number, Number: number, Title: "issue", ColumnID: columnID,
-		Labels: labels, Assignees: assignees,
+		Type: typeName, Labels: labels, Assignees: assignees,
 	}
 }
 
@@ -57,9 +59,9 @@ func TestPlanningParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.
 // By type, by assignee and by epic.
 func TestPlanningBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 	cards := []Card{
-		card(1, 11, []string{"type:bug", "epic:checkout"}, []string{"alice"}),
-		card(2, 12, []string{"type:task", "epic:checkout"}, []string{"bob"}),
-		card(3, 13, []string{"type:bug", "epic:billing"}, []string{"alice"}),
+		card(1, 11, "bug", []string{"epic:checkout"}, []string{"alice"}),
+		card(2, 12, "task", []string{"epic:checkout"}, []string{"bob"}),
+		card(3, 13, "bug", []string{"epic:billing"}, []string{"alice"}),
 	}
 
 	byType := BuildGroups(boardColumns, cards, GroupType)
@@ -78,7 +80,7 @@ func TestPlanningBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 }
 
 func TestPlanningBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) {
-	cards := []Card{card(1, 11, []string{"type:bug"}, nil), card(2, 13, []string{"type:task"}, nil)}
+	cards := []Card{card(1, 11, "bug", nil, nil), card(2, 13, "task", nil, nil)}
 	groups := BuildGroups(boardColumns, cards, GroupType)
 	require.Len(t, groups, 2)
 	for _, group := range groups {
@@ -95,15 +97,15 @@ func TestPlanningBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) 
 // Nothing disappears from a board because a field is unset.
 func TestPlanningBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T) {
 	cards := []Card{
-		card(1, 11, []string{"type:bug"}, []string{"alice"}),
-		card(2, 11, nil, nil),
+		card(1, 11, "bug", nil, []string{"alice"}),
+		card(2, 11, "", nil, nil),
 	}
 
 	for _, tc := range []struct {
 		grouping Grouping
 		label    string
 	}{
-		{GroupType, "no type label"},
+		{GroupType, "no type assigned"},
 		{GroupAssignee, "unassigned"},
 		{GroupEpic, "no epic label"},
 	} {
@@ -124,16 +126,12 @@ func TestPlanningBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T)
 	}
 }
 
-func TestPlanningBuildGroupsIsStableForACardCarryingTwoValues(t *testing.T) {
-	cards := []Card{card(1, 11, []string{"type:task", "type:bug"}, []string{"zoe", "alice"})}
-
-	byType := BuildGroups(boardColumns, cards, GroupType)
-	require.Len(t, byType, 1)
-	assert.Equal(t, "bug", byType[0].Key, "the lexicographically first value wins, so two renders agree")
+func TestPlanningBuildGroupsIsStableForACardCarryingTwoAssignees(t *testing.T) {
+	cards := []Card{card(1, 11, "bug", nil, []string{"zoe", "alice"})}
 
 	byAssignee := BuildGroups(boardColumns, cards, GroupAssignee)
 	require.Len(t, byAssignee, 1)
-	assert.Equal(t, "alice", byAssignee[0].Key)
+	assert.Equal(t, "alice", byAssignee[0].Key, "the lexicographically first value wins, so two renders agree")
 }
 
 func TestPlanningBuildGroupsOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
@@ -144,11 +142,11 @@ func TestPlanningBuildGroupsOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
 	assert.Equal(t, 0, groups[0].Cards)
 }
 
-// The two writes and no others. A group move edits the grouping field itself.
+// The three writes and no others. A group move edits the grouping field itself.
 func TestPlanningPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
-	write, err := PlanGroupMove(GroupType, "bug")
+	write, err := PlanGroupMove(GroupType, "Bug")
 	require.NoError(t, err)
-	assert.Equal(t, GroupWrite{Kind: GroupWriteLabel, Prefix: TypeLabelPrefix, Label: "type:bug"}, write)
+	assert.Equal(t, GroupWrite{Kind: GroupWriteType, TypeName: "bug"}, write, "the type name is lower-cased, matching storage")
 
 	write, err = PlanGroupMove(GroupEpic, "checkout")
 	require.NoError(t, err)
@@ -164,8 +162,8 @@ func TestPlanningPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
 func TestPlanningPlanGroupMoveIntoTheEmptyGroupClearsTheField(t *testing.T) {
 	write, err := PlanGroupMove(GroupType, "")
 	require.NoError(t, err)
-	assert.Equal(t, TypeLabelPrefix, write.Prefix)
-	assert.Empty(t, write.Label, "the namespace is cleared and nothing is added")
+	assert.Equal(t, GroupWriteType, write.Kind)
+	assert.Empty(t, write.TypeName, "an empty type name clears the issue's assigned type")
 
 	write, err = PlanGroupMove(GroupAssignee, "  ")
 	require.NoError(t, err)

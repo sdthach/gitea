@@ -77,6 +77,9 @@ type Roadmap struct {
 	// under. A milestone holding no issue has no rollup, so the chart could not otherwise
 	// name it as a destination.
 	Milestones []RoadmapMilestone `json:"milestones"`
+	// Types are the types visible from this repository, nearest scope shadowing by name —
+	// what a bar's type picker offers.
+	Types []planning_service.VisibleType `json:"types"`
 	// CanWrite says whether the caller may write on the Issues unit, so a client offers the
 	// chart's edits only to someone the endpoints will accept them from.
 	CanWrite bool `json:"can_write"`
@@ -116,7 +119,8 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 				"window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup " +
 				"whose fetch hit its cap is marked partial and publishes no progress percentage. " +
 				"zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. " +
-				"A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone " +
+				"A rolled-up zoom pages over its own rows rather than over issues — epic over the issues assigned the type " +
+				"named epic, milestone " +
 				"over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the " +
 				"page holds. An epic with no children yet is still listed, over its own declared window. " +
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
@@ -162,10 +166,14 @@ func GetRoadmap(ctx *context.APIContext) {
 	epic := hubapi.EqualityFilterString(q, "epic")
 	switch {
 	case zoom == planning_service.ZoomEpic:
-		// An epic issue carries epic:<its own name>, so it seeds its own rollup: a page of
-		// epics is a page of rollups rather than a prefix of the issues filed under them,
-		// and truncated then means more EPICS than the page holds.
-		opts.IncludedLabelNames = []string{planning_service.TypeLabelPrefix + planning_service.TypeEpic}
+		// An issue assigned the type named epic seeds its own rollup: a page of epics is a
+		// page of rollups rather than a prefix of the issues filed under them, and
+		// truncated then means more EPICS than the page holds.
+		ids, ok := epicTypeIssueIDs(ctx, repo)
+		if !ok {
+			return
+		}
+		opts.IssueIDs = ids
 	case epic != "":
 		opts.IncludedLabelNames = []string{planning_service.EpicLabelPrefix + epic}
 	}
@@ -175,6 +183,32 @@ func GetRoadmap(ctx *context.APIContext) {
 
 	renderRoadmap(ctx, repo, opts, q.Limit, perm.CanWrite(unit.TypeIssues),
 		roadmapView{grouping: grouping, zoom: zoom, epic: epic})
+}
+
+// epicTypeIssueIDs resolves the issues zoom=epic seeds its rollups from: those assigned the
+// type named epic, visible from repo. []int64{0} — an id no issue ever has — stands for "no
+// such type is visible, so nothing matches", which IssuesOptions reads as a real filter rather
+// than as no filter at all when the slice is empty.
+func epicTypeIssueIDs(ctx *context.APIContext, repo *repo_model.Repository) ([]int64, bool) {
+	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	for _, t := range types {
+		if t.Name == planning_service.TypeEpic {
+			ids, err := planning_service.IssueIDsForType(ctx, t.ID)
+			if err != nil {
+				ctx.APIErrorInternal(err)
+				return nil, false
+			}
+			if len(ids) == 0 {
+				return []int64{0}, true
+			}
+			return ids, true
+		}
+	}
+	return []int64{0}, true
 }
 
 // parseZoom refuses an unknown depth naming what is accepted, exactly as the board refuses an
@@ -213,8 +247,15 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		Rollups: []planning_service.RollupRow{}, Unmanaged: []planning_service.Unmanaged{},
 		Groups: []planning_service.Group{}, Milestones: []RoadmapMilestone{},
 		GroupBy: string(view.grouping), Zoom: string(view.zoom),
-		CanWrite: canWrite,
+		Types: []planning_service.VisibleType{}, CanWrite: canWrite,
 	}
+
+	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	out.Types = types
 
 	milestones, err := db.Find[issues_model.Milestone](ctx, issues_model.FindMilestoneOptions{RepoID: repo.ID})
 	if err != nil {
@@ -268,11 +309,16 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		ctx.APIErrorInternal(err)
 		return
 	}
+	assigned, err := planning_service.Assignments(ctx, issueIDsOf(issues))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 
 	bars := make([]planning_service.Bar, 0, len(issues))
 	drawn := make(map[int64]bool, len(issues))
 	for _, issue := range issues {
-		in := barInputFor(issue, starts[issue.ID])
+		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID])
 		if bar, ok := planning_service.ResolveBar(in); ok {
 			bars = append(bars, bar)
 			drawn[issue.ID] = true
@@ -456,9 +502,13 @@ func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state o
 	if err != nil {
 		return planning_service.RollupRow{}, nil, false, err
 	}
+	assigned, err := planning_service.Assignments(ctx, issueIDsOf(issues))
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
 	children := make([]planning_service.Bar, 0, len(issues))
 	for _, issue := range issues {
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID])); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID])); ok {
 			children = append(children, bar)
 		}
 	}
@@ -527,26 +577,25 @@ func parseRoadmapState(ctx *context.APIContext, raw string) (optional.Option[boo
 	return optional.None[bool](), false
 }
 
-// barInputFor reduces one issue to what bar resolution depends on.
-func barInputFor(issue *issues_model.Issue, startedUnix int64) planning_service.BarInput {
+// barInputFor reduces one issue to what bar resolution depends on. assigned is the issue's own
+// type assignment, zero when it has none.
+func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType) planning_service.BarInput {
 	in := planning_service.BarInput{
 		IssueID: issue.ID, Number: issue.Index, Title: issue.Title, URL: issue.Link(),
 		ScheduledStartUnix: startedUnix,
-		CreatedUnix:        int64(issue.CreatedUnix),
-		ClosedUnix:         int64(issue.ClosedUnix),
-		DeadlineUnix:       int64(issue.DeadlineUnix),
-		EffortSeconds:      planning_service.ParseEffortSeconds(issue.Content),
-		IsClosed:           issue.IsClosed,
-		Labels:             make([]string, 0, len(issue.Labels)),
-		Assignees:          make([]string, 0, len(issue.Assignees)),
+		TypeID:             assigned.TypeID, TypeName: assigned.Name, TypeColor: assigned.Color, TypeIcon: assigned.Icon,
+		CreatedUnix:   int64(issue.CreatedUnix),
+		ClosedUnix:    int64(issue.ClosedUnix),
+		DeadlineUnix:  int64(issue.DeadlineUnix),
+		EffortSeconds: planning_service.ParseEffortSeconds(issue.Content),
+		IsClosed:      issue.IsClosed,
+		Labels:        make([]string, 0, len(issue.Labels)),
+		Assignees:     make([]string, 0, len(issue.Assignees)),
 	}
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)
 		if in.Epic == "" && strings.HasPrefix(label.Name, planning_service.EpicLabelPrefix) &&
 			len(label.Name) > len(planning_service.EpicLabelPrefix) {
-			// Managed means ccpm files it under an epic, which is the only thing that
-			// gives the issue a start to draw.
-			in.Managed = true
 			in.Epic = label.Name[len(planning_service.EpicLabelPrefix):]
 		}
 	}

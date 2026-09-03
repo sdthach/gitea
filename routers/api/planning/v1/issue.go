@@ -44,6 +44,10 @@ type IssueFacets struct {
 	Milestone      *MilestoneFacet `json:"milestone"`
 	TimeEstimate   int64           `json:"time_estimate"`
 	TrackedSeconds int64           `json:"tracked_seconds"`
+	// Type is the issue's assigned type, or null; Types are the types visible from its
+	// repository, what a type picker offers.
+	Type  *planning_service.AssignedType `json:"type"`
+	Types []planning_service.VisibleType `json:"types"`
 }
 
 // MilestoneSchedule is a milestone reduced to its own schedule, the response a milestone
@@ -334,11 +338,26 @@ func issueFacets(ctx *context.APIContext, issue *issues_model.Issue, canWrite bo
 		ctx.APIErrorInternal(err)
 		return nil, false
 	}
+	types, err := planning_service.TypesFor(ctx, issue.Repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	assigned, err := planning_service.Assignments(ctx, []int64{issue.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
 	facets := &IssueFacets{
 		IssueID: issue.ID, Number: issue.Index, RepoID: issue.RepoID, CanWrite: canWrite,
 		Schedule:       ScheduleFacet{StartUnix: int64(issue.CreatedUnix), StartSource: planning_service.StartFromCreated},
 		TimeEstimate:   issue.TimeEstimate,
 		TrackedSeconds: issue.TotalTrackedTime,
+		Types:          types,
+	}
+	if at, ok := assigned[issue.ID]; ok {
+		facets.Type = &at
 	}
 	if start, ok := starts[issue.ID]; ok {
 		facets.Schedule = ScheduleFacet{StartUnix: start, StartSource: planning_service.StartFromSchedule}

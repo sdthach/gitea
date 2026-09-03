@@ -26,15 +26,17 @@ var componentSchemas = map[string]any{
 		"groups": hubapi.ArrayProp("object", "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, "+
 			"cards and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the "+
 			"issues with no value for the active grouping."),
+		"types": hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a card's "+
+			"type picker offers. Cards carry the assignment itself: type, type_id, type_color and type_icon."),
 		"can_write":      hubapi.Prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
-		"can_edit_issue": hubapi.Prop("boolean", "Whether the caller may move a card between groups, which edits the issue's own label or assignee."),
-	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "can_write", "can_edit_issue"),
+		"can_edit_issue": hubapi.Prop("boolean", "Whether the caller may move a card between groups, which edits the issue's own label, assignee or assigned type."),
+	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "types", "can_write", "can_edit_issue"),
 	"Roadmap": hubapi.ObjectSchema(map[string]any{
 		"repo_id":        hubapi.Prop("integer", "Repository the chart covers."),
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
 		"bars": hubapi.ArrayProp("object", "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, "+
-			"title, url, epic, type, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, "+
-			"end_inferred and is_closed. start_source is one of "+
+			"title, url, epic, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, "+
+			"start_source, end_source, end_inferred and is_closed. type comes from the issue's own assignment, not a label. start_source is one of "+
 			strings.Join(planning_service.StartSources, ", ")+" and end_source one of "+
 			strings.Join(planning_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record."),
 		"arrows": hubapi.ArrayProp("object", "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of "+
@@ -63,7 +65,8 @@ var componentSchemas = map[string]any{
 		"milestones": hubapi.ArrayProp("object", "The repository's milestones, which are the rows an issue can be filed under. Each "+
 			"carries milestone_id, title, is_closed, start_unix (the recorded schedule, 0 when unset) and end_unix (the milestone's own deadline, 0 when unset)."),
 		"truncated": hubapi.Prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
-	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "truncated"),
+		"types":     hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a bar's type picker offers."),
+	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "types", "truncated"),
 	"IssueFacets": hubapi.ObjectSchema(map[string]any{
 		"issue_id":  hubapi.Prop("integer", "The issue's global id."),
 		"number":    hubapi.Prop("integer", "The issue's per-repository number."),
@@ -74,7 +77,27 @@ var componentSchemas = map[string]any{
 		"milestone":       hubapi.Prop("object", "The milestone the issue is filed under, or null. Carries id, title, start_unix and due_unix (0 when unset)."),
 		"time_estimate":   hubapi.Prop("integer", "Seconds, from Gitea's own time-tracking."),
 		"tracked_seconds": hubapi.Prop("integer", "Seconds actually logged, from Gitea's own time-tracking."),
-	}, "issue_id", "number", "repo_id", "can_write", "schedule", "milestone", "time_estimate", "tracked_seconds"),
+		"type":            hubapi.Prop("object", "The issue's assigned type — type_id, name, color and icon — or null."),
+		"types":           hubapi.ArrayProp("object", "The types visible from this issue's repository, what a type picker offers."),
+	}, "issue_id", "number", "repo_id", "can_write", "schedule", "milestone", "time_estimate", "tracked_seconds", "type", "types"),
+	"IssueType": hubapi.ObjectSchema(map[string]any{
+		"id":       hubapi.Prop("integer", "The type's id."),
+		"name":     hubapi.Prop("string", "Lower-cased, 1-50 characters."),
+		"color":    hubapi.Prop("string", "The type's colour."),
+		"icon":     hubapi.Prop("string", "An octicon-* name shipped under public/assets/img/svg."),
+		"rank":     hubapi.Prop("integer", "1 (highest) to 9 (lowest)."),
+		"sort":     hubapi.Prop("integer", "Tie-breaker within the same rank."),
+		"scope":    hubapi.EnumProp("Where the type lives.", []string{planning_service.ScopeInstance, planning_service.ScopeOrg, planning_service.ScopeRepo}),
+		"scope_id": hubapi.Prop("integer", "The repository or organization id; 0 for the instance scope."),
+	}, "id", "name", "color", "icon", "rank", "sort", "scope", "scope_id"),
+	"IssueTypeAssignment": hubapi.ObjectSchema(map[string]any{
+		"issue_id": hubapi.Prop("integer", "The issue's global id."),
+		"type_id":  hubapi.Prop("integer", "The assigned type's id."),
+		"name":     hubapi.Prop("string", "The assigned type's name."),
+		"color":    hubapi.Prop("string", "The assigned type's colour."),
+		"icon":     hubapi.Prop("string", "The assigned type's icon name."),
+		"icon_svg": hubapi.Prop("string", "The icon rendered as svg markup, so a client needs no icon registry of its own."),
+	}, "issue_id", "type_id", "name", "color", "icon", "icon_svg"),
 	"MilestoneSchedule": hubapi.ObjectSchema(map[string]any{
 		"milestone_id": hubapi.Prop("integer", "The milestone's id."),
 		"title":        hubapi.Prop("string", "The milestone's title."),

@@ -117,13 +117,13 @@ type BarInput struct {
 	Number  int64
 	Title   string
 	URL     string
-	// Managed is whether ccpm manages the issue: it carries an epic:<name> label. An
-	// unmanaged issue gets no bar and one stated reason.
-	Managed bool
 	Epic    string
-	// Type is ccpm's type:<t> value. Empty means the caller has not resolved one and
-	// ResolveBar reads it off Labels.
-	Type string
+	// TypeID, TypeName, TypeColor and TypeIcon are the issue's assigned type, empty/zero
+	// when none. Managed reads TypeID rather than a label.
+	TypeID    int64
+	TypeName  string
+	TypeColor string
+	TypeIcon  string
 	// Labels and Assignees are what group assignment reads, so the chart groups by the same
 	// definition the board does.
 	Labels    []string
@@ -148,6 +148,9 @@ type Bar struct {
 	URL         string `json:"url"`
 	Epic        string `json:"epic,omitempty"`
 	Type        string `json:"type,omitempty"`
+	TypeID      int64  `json:"type_id,omitempty"`
+	TypeColor   string `json:"type_color,omitempty"`
+	TypeIcon    string `json:"type_icon,omitempty"`
 	Milestone   string `json:"milestone,omitempty"`
 	MilestoneID int64  `json:"milestone_id,omitempty"`
 	StartUnix   int64  `json:"start_unix"`
@@ -177,23 +180,28 @@ type Unmanaged struct {
 	SuggestedAction string `json:"suggested_action"`
 }
 
+// Managed reports whether ccpm manages an issue enough to draw a bar for it: it carries an
+// assigned type, a recorded schedule, or — until hierarchy exists to replace this — an
+// epic:<name> label.
+func Managed(in BarInput) bool {
+	return in.TypeID > 0 || in.ScheduledStartUnix > 0 || in.Epic != ""
+}
+
 // ResolveBar decides one bar's endpoints and names the source of each.
 //
 // It returns ok=false for an issue ccpm does not manage: that issue has no start to draw and
 // is listed with its reason instead of being given a fabricated bar.
 func ResolveBar(in BarInput) (Bar, bool) {
-	if !in.Managed {
+	if !Managed(in) {
 		return Bar{}, false
 	}
 
 	bar := Bar{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Epic: in.Epic, Milestone: in.Milestone, MilestoneID: in.MilestoneID,
-		Type: in.Type, Labels: in.Labels, Assignees: in.Assignees,
+		Type: in.TypeName, TypeID: in.TypeID, TypeColor: in.TypeColor, TypeIcon: in.TypeIcon,
+		Labels: in.Labels, Assignees: in.Assignees,
 		IsClosed: in.IsClosed,
-	}
-	if bar.Type == "" {
-		bar.Type = labelValue(in.Labels, TypeLabelPrefix)
 	}
 
 	switch {
@@ -231,8 +239,9 @@ func ResolveBar(in BarInput) (Bar, bool) {
 func UnmanagedFor(in BarInput) Unmanaged {
 	return Unmanaged{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
-		Reason: "ccpm does not manage this issue: it carries no " + EpicLabelPrefix + "<name> label, so there is no start to draw",
-		SuggestedAction: "Import it into an epic, or add an " + EpicLabelPrefix + "<name> label to it. " +
+		Reason: "ccpm does not manage this issue: it carries no type, no recorded start, and no " +
+			EpicLabelPrefix + "<name> label, so there is no start to draw",
+		SuggestedAction: "Set a type or a start date first, or add an " + EpicLabelPrefix + "<name> label to it. " +
 			"A bar drawn from creation alone would present a guess as a schedule.",
 	}
 }
@@ -325,8 +334,8 @@ type RollupRow struct {
 	// Partial is true when the fetch behind this row hit its cap, so the row covers a
 	// prefix of the parent's children rather than all of them.
 	Partial bool `json:"partial"`
-	// IssueID is the type:epic issue the key names, so a bracket can be opened. 0 for a
-	// milestone, which is not an issue.
+	// IssueID is the issue assigned the type named epic the key names, so a bracket can be
+	// opened. 0 for a milestone, which is not an issue.
 	IssueID int64 `json:"issue_id,omitempty"`
 	// DeclaredStartUnix and DeclaredEndUnix are the epic issue's OWN bar, which is a
 	// different window from the one its children derive.
@@ -354,8 +363,8 @@ const (
 // Zooms is the accepted set. The API refuses anything else naming this list.
 var Zooms = []string{string(ZoomIssue), string(ZoomEpic), string(ZoomMilestone)}
 
-// TypeEpic is the type: value ccpm puts on an epic's own issue, beside the epic:<name>
-// label it also puts there.
+// TypeEpic is the type name assigned to an epic's own issue, beside the epic:<name> label it
+// also carries.
 const TypeEpic = "epic"
 
 // ParseZoom resolves a caller's word. An empty string means issue, so a chart with no zoom

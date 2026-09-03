@@ -11,6 +11,7 @@ import (
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	planning_model "gitea.dev/models/planning"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
@@ -52,6 +53,24 @@ func manageIssue(t *testing.T, issueID int64, epicName string) *issues_model.Iss
 	label := labelForGroup(t, issue.RepoID, planning_service.EpicLabelPrefix+epicName)
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue, doer, label))
 	return issue
+}
+
+// issueType creates a repo-scoped type directly, which is what an admin's own POST
+// /issue-types would have left behind before this test's issue ever needed one.
+func issueType(t *testing.T, repoID int64, name, color, icon string, rank int) *planning_model.IssueType {
+	t.Helper()
+	row := &planning_model.IssueType{RepoID: repoID, Name: name, Color: color, Icon: icon, Rank: rank}
+	require.NoError(t, planning_model.InsertIssueType(t.Context(), row))
+	return row
+}
+
+// setIssueType assigns typeID to issueID through the endpoint under test, the one a real
+// client calls.
+func setIssueType(t *testing.T, token, repo string, issueID, typeID int64) {
+	t.Helper()
+	req := NewRequestWithJSON(t, "PUT", planningv1.BasePath+"/issues/"+strconv.FormatInt(issueID, 10)+"/type",
+		map[string]any{"repo": repo, "type_id": typeID}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusOK)
 }
 
 // TestPlanningRoadmapMovesAnIssueBetweenMilestoneRows is the chart's first write. The move
@@ -311,11 +330,13 @@ func TestAPIPlanningRoadmapFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *te
 
 	epic := labelForGroup(t, 1, planning_service.EpicLabelPrefix+"checkout")
 	labelIssue(t, 1, epic)
-	labelIssue(t, 1, labelForGroup(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic))
 	labelIssue(t, 5, epic)
-	labelIssue(t, 5, labelForGroup(t, 1, planning_service.TypeLabelPrefix+"story"))
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	epicType := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	setIssueType(t, token, "user2/repo1", 1, epicType.ID)
+	storyType := issueType(t, 1, "story", "#2da44e", "octicon-tasklist", 3)
+	setIssueType(t, token, "user2/repo1", 5, storyType.ID)
 	// The epic declares 2026-03-01 to 2026-03-11; the story filed under it runs to 2026-03-25.
 	roadmapWrite(t, token, "/issues/1/dates",
 		map[string]any{"repo": "user2/repo1", "start": "2026-03-01", "end": "2026-03-11"})
@@ -361,10 +382,11 @@ func TestAPIPlanningRoadmapFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *te
 func TestAPIPlanningRoadmapGroupMoveWritesWhatTheBoardsGroupMoveWrites(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForGroup(t, 1, planning_service.TypeLabelPrefix+"bug")
-	labelIssue(t, 1, labelForGroup(t, 1, planning_service.TypeLabelPrefix+"task"))
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+	task := issueType(t, 1, "task", "#57606a", "octicon-checklist", 4)
 	manageIssue(t, 1, "checkout")
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	setIssueType(t, token, "user2/repo1", 1, task.ID)
 
 	after := roadmapWrite(t, token, "/issues/1/group",
 		map[string]any{"repo": "user2/repo1", "group_by": "type", "group": "bug"})
@@ -372,28 +394,18 @@ func TestAPIPlanningRoadmapGroupMoveWritesWhatTheBoardsGroupMoveWrites(t *testin
 	require.NotEmpty(t, after.Groups)
 	assert.Equal(t, "bug", after.Groups[0].Key, "the chart answers with the group the bar landed in")
 
-	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, reloaded.LoadLabels(t.Context()))
-	names := make([]string, 0, len(reloaded.Labels))
-	for _, label := range reloaded.Labels {
-		names = append(names, label.Name)
-	}
-	assert.Contains(t, names, "type:bug", "the group IS the label, so the move rewrote it")
-	assert.NotContains(t, names, "type:task", "a bar never carries two labels of the same grouping")
+	assigned, err := planning_model.AssignmentsFor(t.Context(), []int64{1})
+	require.NoError(t, err)
+	assert.Equal(t, bug.ID, assigned[1], "the group IS the assignment, so the move rewrote it")
 
 	// The same request against the board's own group endpoint reaches the same field, which
 	// is the point of there being one definition rather than two.
 	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/group",
 		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "task"}).AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
-	reloaded = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, reloaded.LoadLabels(t.Context()))
-	names = names[:0]
-	for _, label := range reloaded.Labels {
-		names = append(names, label.Name)
-	}
-	assert.Contains(t, names, "type:task")
-	assert.NotContains(t, names, "type:bug")
+	assigned, err = planning_model.AssignmentsFor(t.Context(), []int64{1})
+	require.NoError(t, err)
+	assert.Equal(t, task.ID, assigned[1], "a card never carries two assignments; the move replaces it")
 
 	// Grouping off leaves no field to write, so the move is refused rather than guessed at.
 	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/issues/1/group",
@@ -410,8 +422,10 @@ func TestAPIPlanningRoadmapGroupMoveWritesWhatTheBoardsGroupMoveWrites(t *testin
 func TestAPIPlanningRoadmapRefusesAGroupMoveWithoutIssueWrite(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForGroup(t, 1, planning_service.TypeLabelPrefix+"bug")
-	labelIssue(t, 1, labelForGroup(t, 1, planning_service.TypeLabelPrefix+"task"))
+	issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+	task := issueType(t, 1, "task", "#57606a", "octicon-checklist", 4)
+	ownerToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	setIssueType(t, ownerToken, "user2/repo1", 1, task.ID)
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
 
 	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/issues/1/group",
@@ -423,14 +437,9 @@ func TestAPIPlanningRoadmapRefusesAGroupMoveWithoutIssueWrite(t *testing.T) {
 	assert.Contains(t, refusal.Message, "user2/repo1")
 	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
-	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, issue.LoadLabels(t.Context()))
-	names := make([]string, 0, len(issue.Labels))
-	for _, label := range issue.Labels {
-		names = append(names, label.Name)
-	}
-	assert.Contains(t, names, "type:task", "the refused move left the group where it was")
-	assert.NotContains(t, names, "type:bug", "the refused move wrote no label")
+	assigned, err := planning_model.AssignmentsFor(t.Context(), []int64{1})
+	require.NoError(t, err)
+	assert.Equal(t, task.ID, assigned[1], "the refused move left the group where it was")
 }
 
 // TestAPIPlanningRoadmapMarksARollupPartialPastThePageLimit is the shipped defect the second
@@ -467,10 +476,12 @@ func TestAPIPlanningRoadmapMarksARollupPartialPastThePageLimit(t *testing.T) {
 
 // insertEpicIssues creates one epic issue and its children directly, so their creation order
 // is controllable: oldest-first paging is what decides which of them a short page holds.
-func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, firstID int64, childUnix []int64, epicUnix int64) {
+// epicTypeID is the type zoom=epic reads: only the epic issue itself is assigned it.
+func insertEpicIssues(t *testing.T, epicLabel *issues_model.Label, epicTypeID, firstID int64, childUnix []int64, epicUnix int64) {
 	t.Helper()
 	rows := make([]*issues_model.Issue, 0, len(childUnix)+1)
-	links := make([]*issues_model.IssueLabel, 0, 2*len(childUnix)+2)
+	links := make([]*issues_model.IssueLabel, 0, len(childUnix)+1)
+	assignments := make([]*planning_model.IssueTypeAssignment, 0, 1)
 	add := func(id, at int64, epic bool) {
 		rows = append(rows, &issues_model.Issue{
 			ID: id, RepoID: 1, Index: id, PosterID: 2, Title: "paged",
@@ -478,7 +489,7 @@ func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, fi
 		})
 		links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: epicLabel.ID})
 		if epic {
-			links = append(links, &issues_model.IssueLabel{IssueID: id, LabelID: typeLabel.ID})
+			assignments = append(assignments, &planning_model.IssueTypeAssignment{IssueID: id, TypeID: epicTypeID})
 		}
 	}
 	for i, at := range childUnix {
@@ -487,6 +498,7 @@ func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, fi
 	add(firstID+int64(len(childUnix)), epicUnix, true)
 	require.NoError(t, db.Insert(t.Context(), rows))
 	require.NoError(t, db.Insert(t.Context(), links))
+	require.NoError(t, db.Insert(t.Context(), assignments))
 }
 
 // TestAPIPlanningRoadmapAtEpicZoomPagesOverEpicsNotOverIssues: at zoom=epic the fetch selects
@@ -495,12 +507,12 @@ func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, fi
 func TestAPIPlanningRoadmapAtEpicZoomPagesOverEpicsNotOverIssues(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	typeEpic := labelForGroup(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic)
+	epicType := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
 	// Four children created before their epic issue, so oldest-first fills a short page with
 	// them alone; the second epic is created after all of them.
-	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"wideearly"), typeEpic,
+	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"wideearly"), epicType.ID,
 		9100, []int64{1000, 1001, 1002, 1003}, 1004)
-	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"latecomer"), typeEpic,
+	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"latecomer"), epicType.ID,
 		9200, []int64{2001}, 2000)
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
@@ -525,9 +537,10 @@ func TestAPIPlanningRoadmapListsAnEpicWithNoChildrenYet(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	labelIssue(t, 1, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"lonely"))
-	labelIssue(t, 1, labelForGroup(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic))
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	epicType := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	setIssueType(t, token, "user2/repo1", 1, epicType.ID)
 	payload := getRoadmap(t, token, "repo_id=1&zoom=epic&limit=200")
 
 	require.Len(t, payload.Rollups, 1, "the epic is listed even with nothing filed under it")
@@ -598,10 +611,10 @@ func TestAPIPlanningRoadmapAtMilestoneZoomPagesOverMilestonesNotOverIssues(t *te
 func TestAPIPlanningRoadmapAttachesAnArrowToTheBracketItsEndFallsIn(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	typeEpic := labelForGroup(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic)
-	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"checkout"), typeEpic,
+	epicType := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"checkout"), epicType.ID,
 		9500, []int64{1000, 1001}, 1002)
-	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"billing"), typeEpic,
+	insertEpicIssues(t, labelForGroup(t, 1, planning_service.EpicLabelPrefix+"billing"), epicType.ID,
 		9600, []int64{2000}, 2001)
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 

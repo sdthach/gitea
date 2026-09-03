@@ -89,6 +89,23 @@ func TestPlanningScheduleRefusesAStartAfterTheIssuesDeadline(t *testing.T) {
 	unittest.AssertNotExistsBean(t, &planning_model.IssueSchedule{IssueID: 1})
 }
 
+// TestPlanningScheduleAcceptsAStartEqualToTheDeadline: the boundary itself is a valid
+// schedule, not a start-after-end refusal.
+func TestPlanningScheduleAcceptsAStartEqualToTheDeadline(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	manageIssue(t, 1, "checkout")
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	roadmapWrite(t, token, "/issues/1/dates", map[string]any{"repo": "user2/repo1", "end": "2026-02-01"})
+
+	req := NewRequestWithJSON(t, "PUT", planningv1.BasePath+"/issues/1/schedule",
+		map[string]any{"repo": "user2/repo1", "start": "2026-02-01"}).AddTokenAuth(token)
+	var facets issueFacetsPayload
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &facets)
+	assert.EqualValues(t, 1769904000, facets.Schedule.StartUnix, "2026-02-01T00:00:00Z")
+}
+
 // TestPlanningScheduleRefusesAWriterWithNoAccess is the write's authorization check: a user
 // with no write access to the repository is refused, and nothing is written.
 func TestPlanningScheduleRefusesAWriterWithNoAccess(t *testing.T) {

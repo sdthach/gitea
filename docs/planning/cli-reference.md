@@ -9,21 +9,28 @@ gitea-planning — a thin client over /api/planning/v1.
 Usage: gitea-planning <command> [positional...] [flags]
 
 Commands:
-  board                  A project board with horizontal groups
-  board-move-column      Move a card between the board's columns
-  board-move-group       Move a card between the board's groups
-  issue                  The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
-  issue-clear-start      Clear an issue's start date
-  issue-create           Create an issue on a row
-  issue-move-group       Move a bar between the chart's groups
-  issue-move-milestone   Move an issue between the chart's milestone rows
-  issue-set-dates        Set a bar's start and end
-  issue-set-estimate     Set an issue's time estimate
-  issue-set-start        Set an issue's start date
-  milestone-clear-start  Clear a milestone's start date
-  milestone-create       Create a milestone row
-  milestone-set-start    Set a milestone's start date
-  roadmap                The roadmap: one bar per issue, with dependency arrows
+  board                   A project board with horizontal groups
+  board-move-column       Move a card between the board's columns
+  board-move-group        Move a card between the board's groups
+  issue                   The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
+  issue-clear-start       Clear an issue's start date
+  issue-clear-type        Remove an issue's type
+  issue-create            Create an issue on a row
+  issue-move-group        Move a bar between the chart's groups
+  issue-move-milestone    Move an issue between the chart's milestone rows
+  issue-set-dates         Set a bar's start and end
+  issue-set-estimate      Set an issue's time estimate
+  issue-set-start         Set an issue's start date
+  issue-set-type          Assign an issue's type
+  issue-type-assignments  Batch-read issues' assigned types
+  issue-type-create       Create a type
+  issue-type-delete       Delete a type
+  issue-type-update       Update a type
+  issue-types             The types visible from a repository or an organization
+  milestone-clear-start   Clear a milestone's start date
+  milestone-create        Create a milestone row
+  milestone-set-start     Set a milestone's start date
+  roadmap                 The roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -193,6 +200,42 @@ Flags:
 gitea-planning issue-clear-start — Clear an issue's start date
 
   DELETE /issues/{issue_id}/schedule
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-clear-type
+
+```
+gitea-planning issue-clear-type — Remove an issue's type
+
+  DELETE /issues/{issue_id}/type
 
 Positional arguments: issue_id
 
@@ -455,6 +498,234 @@ Flags:
     	sort field
   -start string
     	required. Start as an RFC 3339 timestamp or a YYYY-MM-DD date.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-set-type
+
+```
+gitea-planning issue-set-type — Assign an issue's type
+
+  PUT /issues/{issue_id}/type
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+  -type-id string
+    	required. The type to assign.
+```
+
+## gitea-planning issue-type-assignments
+
+```
+gitea-planning issue-type-assignments — Batch-read issues' assigned types
+
+  GET /issue-type-assignments
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-type-create
+
+```
+gitea-planning issue-type-create — Create a type
+
+  POST /issue-types
+
+Flags:
+  -color string
+    	required. The type's colour.
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -icon string
+    	required. An octicon-* name shipped under public/assets/img/svg, such as octicon-issue-opened.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -name string
+    	required. 1-50 characters, lower-cased on write; letters, digits, spaces, underscores and hyphens.
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope the type to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -rank string
+    	required. 1 (highest) to 9 (lowest).
+  -repo-id string
+    	Scope the type to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-type-delete
+
+```
+gitea-planning issue-type-delete — Delete a type
+
+  DELETE /issue-types/{id}
+
+Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -force
+    	Delete a type still in use, clearing its assignments.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-type-update
+
+```
+gitea-planning issue-type-update — Update a type
+
+  PUT /issue-types/{id}
+
+Positional arguments: id
+
+Flags:
+  -color string
+    	required. The type's colour.
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -icon string
+    	required. An octicon-* name shipped under public/assets/img/svg, such as octicon-issue-opened.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -name string
+    	required. 1-50 characters, lower-cased on write; letters, digits, spaces, underscores and hyphens.
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope the type to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -rank string
+    	required. 1 (highest) to 9 (lowest).
+  -repo-id string
+    	Scope the type to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-types
+
+```
+gitea-planning issue-types — The types visible from a repository or an organization
+
+  GET /issue-types
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```

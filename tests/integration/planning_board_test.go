@@ -138,15 +138,15 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 func TestAPIPlanningBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	bug := labelForGroup(t, 1, "type:bug")
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
 	epic := labelForGroup(t, 1, "epic:checkout")
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, bug))
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, epic))
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
+	setIssueType(t, token, "user2/repo1", 1, bug.ID)
 
 	byType := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, "bug", groupOf(t, byType, 1))
@@ -164,13 +164,11 @@ func TestAPIPlanningBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 func TestAPIPlanningBoardKeepsAnUnsetValueInAnExplicitGroup(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	bug := labelForGroup(t, 1, "type:bug")
-	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, bug))
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
+	setIssueType(t, token, "user2/repo1", 1, bug.ID)
 
 	ungrouped := getBoard(t, token, "repo_id=1&project_id=1&group_by=none")
 	grouped := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
@@ -183,7 +181,7 @@ func TestAPIPlanningBoardKeepsAnUnsetValueInAnExplicitGroup(t *testing.T) {
 
 	last := grouped.Groups[len(grouped.Groups)-1]
 	assert.True(t, last.IsEmptyValue, "the empty-value group is explicit and sorts last")
-	assert.Equal(t, "no type label", last.Label, "the group says why it is empty")
+	assert.Equal(t, "no type assigned", last.Label, "the group says why it is empty")
 	assert.Positive(t, last.Cards)
 }
 
@@ -210,14 +208,12 @@ func TestAPIPlanningBoardRefusesAnUnknownGrouping(t *testing.T) {
 func TestAPIPlanningBoardPerformsExactlyTwoWrites(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForGroup(t, 1, "type:bug")
-	task := labelForGroup(t, 1, "type:task")
-	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, task))
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+	task := issueType(t, 1, "task", "#57606a", "octicon-checklist", 4)
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
+	setIssueType(t, token, "user2/repo1", 1, task.ID)
 
 	before := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 	assert.True(t, before.CanWrite)
@@ -241,15 +237,10 @@ func TestAPIPlanningBoardPerformsExactlyTwoWrites(t *testing.T) {
 	assert.Equal(t, "bug", groupOf(t, moved, 1))
 	assert.Equal(t, int64(3), columnOf(t, moved, 1), "a group move does not move the card between columns")
 
-	// The label itself was rewritten: the group is not stored anywhere else.
-	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, reloaded.LoadLabels(t.Context()))
-	names := make([]string, 0, len(reloaded.Labels))
-	for _, l := range reloaded.Labels {
-		names = append(names, l.Name)
-	}
-	assert.Contains(t, names, "type:bug")
-	assert.NotContains(t, names, "type:task", "a card never carries two labels of the same grouping")
+	// The assignment itself was rewritten: the group is not stored anywhere else.
+	assigned, err := planning_model.AssignmentsFor(t.Context(), []int64{1})
+	require.NoError(t, err)
+	assert.Equal(t, bug.ID, assigned[1], "a card never carries two assignments of the same grouping")
 }
 
 // TestAPIPlanningBoardRefusesAGroupMoveWhenGroupingIsOff: with grouping off there
@@ -348,6 +339,8 @@ type roadmapPayload struct {
 		StartSource string `json:"start_source"`
 		EndSource   string `json:"end_source"`
 		EndInferred bool   `json:"end_inferred"`
+		TypeID      int64  `json:"type_id"`
+		Type        string `json:"type"`
 	} `json:"bars"`
 	Arrows []struct {
 		FromIssueID int64  `json:"from_issue_id"`
@@ -538,14 +531,12 @@ func TestAPIPlanningRoadmapDistinguishesAGateFromASequencingHint(t *testing.T) {
 func TestAPIPlanningBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForGroup(t, 1, "type:bug")
-	task := labelForGroup(t, 1, "type:task")
-	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, owner, task))
+	issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+	task := issueType(t, 1, "task", "#57606a", "octicon-checklist", 4)
 
 	ownerToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+	setIssueType(t, ownerToken, "user2/repo1", 1, task.ID)
 
 	before := getBoard(t, ownerToken, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, int64(1), columnOf(t, before, 1))
@@ -594,14 +585,9 @@ func TestAPIPlanningBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 	assert.Equal(t, int64(1), columnOf(t, after, 1), "the refused column move wrote nothing")
 	assert.Equal(t, "task", groupOf(t, after, 1), "the refused group move wrote nothing")
 
-	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, reloaded.LoadLabels(t.Context()))
-	names := make([]string, 0, len(reloaded.Labels))
-	for _, l := range reloaded.Labels {
-		names = append(names, l.Name)
-	}
-	assert.Contains(t, names, "type:task", "the issue's own field is untouched")
-	assert.NotContains(t, names, "type:bug")
+	assigned, err := planning_model.AssignmentsFor(t.Context(), []int64{1})
+	require.NoError(t, err)
+	assert.Equal(t, task.ID, assigned[1], "the issue's own field is untouched")
 }
 
 // TestAPIPlanningBoardRefusesAReadOfARepositoryTheCallerCannotSee is the read-side half of
@@ -722,7 +708,7 @@ func TestAPIPlanningBoardWriteRefusesAMalformedRequest(t *testing.T) {
 		{"/board/cards/1/column", map[string]any{"repo": "user2/repo1", "project_id": 999999, "column_id": 3}, http.StatusNotFound, "board_not_found"},
 		{"/board/cards/999999/column", map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3}, http.StatusNotFound, "card_not_found"},
 		{"/board/cards/1/column", map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 999999}, http.StatusUnprocessableEntity, "column_not_found"},
-		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "nosuchtype"}, http.StatusUnprocessableEntity, "label_not_found"},
+		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "nosuchtype"}, http.StatusUnprocessableEntity, "type_not_visible"},
 		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "assignee", "group": "nosuchuser"}, http.StatusUnprocessableEntity, "assignee_not_found"},
 		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "milestone", "group": "x"}, http.StatusBadRequest, "unknown_grouping"},
 	} {

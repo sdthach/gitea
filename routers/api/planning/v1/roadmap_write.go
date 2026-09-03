@@ -48,6 +48,7 @@ type writeBody struct {
 	GroupBy      string `json:"group_by"`
 	Group        string `json:"group"`
 	TimeEstimate string `json:"time_estimate"`
+	TypeID       int64  `json:"type_id"`
 }
 
 var repoParam = []hubapi.Param{
@@ -102,7 +103,7 @@ func moveIssueGroupEndpoint() *hubapi.Endpoint {
 			ID: "moveIssueGroup", Method: http.MethodPost, Path: "/issues/{issue_id}/group",
 			Summary: "Move a bar between the chart's groups",
 			Description: "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the " +
-				"field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanGroupMove " +
+				"field itself: the issue's assigned type, the epic: label, or the assignee. It goes through the same PlanGroupMove " +
 				"the board's group move goes through, so a vertical drag on the chart and a group move on the board are one " +
 				"operation with one definition rather than two that can drift. Dragging vertically writes the grouping " +
 				"field and dragging horizontally writes dates; the two are independent. " +
@@ -242,6 +243,10 @@ func MoveIssueGroup(ctx *context.APIContext) {
 	}
 
 	switch write.Kind {
+	case planning_service.GroupWriteType:
+		if !applyGroupType(ctx, issue, write) {
+			return
+		}
 	case planning_service.GroupWriteLabel:
 		if !applyGroupLabel(ctx, repo, issue, write) {
 			return

@@ -26,7 +26,7 @@ var oldNamedTables = []struct {
 }{
 	{
 		// version 2: migrations 1 and 2 are already applied, as they are on any real install
-		// that reaches this rename. Only migration 3, the rename itself, is pending.
+		// that reaches this rename. Migration 3, the rename itself, and every later one are pending.
 		"delivery_version", "hub_version",
 		"id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, updated_unix INTEGER NOT NULL DEFAULT 0",
 		"(1, 2, 1788220800)",
@@ -131,7 +131,7 @@ func TestMigrateCopiesRowsWhenSyncCreatedTheNewTablesFirst(t *testing.T) {
 	has, err := e.Where("1=1").Get(version)
 	require.NoError(t, err)
 	require.True(t, has)
-	assert.Equal(t, int64(4), version.Version, "the version row copied from delivery_version survived, migrated to 4")
+	assert.Equal(t, int64(5), version.Version, "the version row copied from delivery_version survived, migrated to 5")
 
 	// Re-running is a no-op: every old table is already gone.
 	require.NoError(t, hub_model.Migrate(ctx))
