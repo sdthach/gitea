@@ -229,6 +229,38 @@ func TestPlanningRoadmapCreatesAnIssueWithATypeAndAParent(t *testing.T) {
 	assert.Equal(t, before, after, "the refused create made no issue")
 }
 
+// TestPlanningRoadmapCreateWithGroupByFilesTheNewIssueIntoItsGroup covers group_by and group on
+// POST /issues: resolved and validated before the issue exists, applied after, exactly like a
+// board card add's own group.
+func TestPlanningRoadmapCreateWithGroupByFilesTheNewIssueIntoItsGroup(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+
+	roadmapWrite(t, token, "/issues", map[string]any{
+		"repo": "user2/repo1", "title": "Filed straight into bug", "group_by": "type", "group": "bug",
+	})
+	created := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{RepoID: 1, Title: "Filed straight into bug"})
+	assigned, err := planning_model.AssignmentsFor(t.Context(), []int64{created.ID})
+	require.NoError(t, err)
+	unittest.AssertExistsAndLoadBean(t, &planning_model.IssueType{ID: assigned[created.ID], Name: "bug"})
+
+	// A group that cannot be applied creates no issue, exactly as an add-card's own refused
+	// group creates no card.
+	before, err := unittest.GetXORMEngine().Where("repo_id = ?", 1).Count(new(issues_model.Issue))
+	require.NoError(t, err)
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/issues", map[string]any{
+		"repo": "user2/repo1", "title": "should not exist", "group_by": "type", "group": "nosuchtype",
+	}).AddTokenAuth(token)
+	var refusal hubRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusUnprocessableEntity), &refusal)
+	assert.Equal(t, "type_not_visible", refusal.Code)
+	after, err := unittest.GetXORMEngine().Where("repo_id = ?", 1).Count(new(issues_model.Issue))
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the refused group created no issue")
+	unittest.AssertNotExistsBean(t, &issues_model.Issue{RepoID: 1, Title: "should not exist"})
+}
+
 // TestPlanningRoadmapCreateRefusesAnUntypedParentAndAParentWithoutAType covers the two
 // untyped_issue shapes: a parent that carries no type, and a parent given with no type_id for
 // the new issue, which names the new issue as the untyped side.

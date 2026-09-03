@@ -221,6 +221,32 @@ func TestPlanningBoardAddCardWithTypeIDLandsUnderItsParent(t *testing.T) {
 	assert.Equal(t, "1", groupOf(t, board, created.ID), "the new card ranks under issue1, its parent group")
 }
 
+// TestPlanningBoardAddCardRefusesARankMismatch proves a parent group is checked against the
+// rank rules before the card is created: a mismatch answers rank_mismatch and creates no
+// issue, rather than creating one and only then failing to place it under its parent.
+func TestPlanningBoardAddCardRefusesARankMismatch(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	storyType := issueType(t, 1, "story", "#2da44e", "octicon-tasklist", 3)
+	setIssueType(t, token, "user2/repo1", 1, storyType.ID)
+	epicType := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	before := unittest.GetCount(t, &issues_model.Issue{RepoID: 1})
+
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards",
+		map[string]any{
+			"repo": "user2/repo1", "project_id": 1, "column_id": 1, "title": "should not exist",
+			"group_by": "parent", "group": "1", "type_id": epicType.ID,
+		}).AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusUnprocessableEntity)
+	var refusal hubRefusal
+	DecodeJSON(t, resp, &refusal)
+	assert.Equal(t, "rank_mismatch", refusal.Code)
+	assert.NotEmpty(t, refusal.SuggestedAction)
+
+	unittest.AssertCount(t, &issues_model.Issue{RepoID: 1}, before)
+	unittest.AssertNotExistsBean(t, &issues_model.Issue{RepoID: 1, Title: "should not exist"})
+}
+
 // TestPlanningBoardAddCardAcceptsATitleAtTheLimit is the title boundary's accepted side; the
 // refused side (256) lives among TestPlanningBoardAddCardRefusesBadRequests' own cases.
 func TestPlanningBoardAddCardAcceptsATitleAtTheLimit(t *testing.T) {

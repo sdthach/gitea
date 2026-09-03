@@ -1953,7 +1953,7 @@
     },
     "/issues": {
       "post": {
-        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. group_by and group place the new issue into a grouping cell exactly as a board card add does: resolved and validated before the issue is created, applied after — the same codes a group move answers. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "createIssue",
         "parameters": [],
         "requestBody": {
@@ -1963,6 +1963,20 @@
                 "properties": {
                   "description": {
                     "description": "Issue body.",
+                    "type": "string"
+                  },
+                  "group": {
+                    "description": "The group's key, resolved exactly as a board card add's own group: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The grouping group is read under. Omit for no group.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
                     "type": "string"
                   },
                   "milestone_id": {
@@ -2192,6 +2206,184 @@
           }
         },
         "summary": "Set a bar's start and end",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dependencies": {
+      "post": {
+        "description": "Records that issue_id is blocked by depends_on_issue_id through Gitea's own CreateIssueDependency, which leaves the same comment Gitea's own dependency panel leaves. Refused dependencies_disabled when the repository's Issues unit has dependencies turned off, same_issue for an issue naming itself, cross_repo when the two issues do not share a repository, dependency_exists for a pair already linked, and circular_dependency for a pair that would block each other. depends_on_issue_id missing or unreadable to the caller answers dependency_not_found rather than cross_repo, never revealing an issue outside the caller's reach. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "addIssueDependency",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "depends_on_issue_id": {
+                    "description": "The issue this one is blocked by.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "depends_on_issue_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Block an issue on another, drawn as the roadmap's arrow",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dependencies/{dependency_id}": {
+      "delete": {
+        "description": "Removes the dependency_id edge through Gitea's own RemoveIssueDependency, which leaves the same comment Gitea's own dependency panel leaves. A pair not linked answers dependency_not_found. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "removeIssueDependency",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The depends-on issue's global id.",
+            "in": "path",
+            "name": "dependency_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Remove a blocking dependency",
         "tags": [
           "roadmap"
         ]

@@ -538,7 +538,7 @@ func resolveAddCardGroup(ctx *context.APIContext, repo *repo_model.Repository, g
 			return zero, false
 		}
 	case planning_service.GroupWriteParent:
-		if !resolveParentPreCreate(ctx, repo, write.ParentIssueID, typeID) {
+		if !validateNewIssueHierarchy(ctx, repo, typeID, write.ParentIssueID) {
 			return zero, false
 		}
 	case planning_service.GroupWriteAssignee:
@@ -565,31 +565,6 @@ func resolveTypeGroup(ctx *context.APIContext, repo *repo_model.Repository, name
 		"no type named "+name+" is visible from "+repo.FullName(),
 		"Create the type first, or move to one of the names GET "+BasePath+"/issue-types?repo_id="+
 			strconv.FormatInt(repo.ID, 10)+" returns.")
-	return false
-}
-
-// resolveParentPreCreate mirrors validateNewIssueHierarchy's own parent check for a card not
-// yet created: the target must exist in this repository, and the new card must carry a type
-// of its own for hierarchy to rank it — sent as type_id, since the card does not exist yet to
-// carry one any other way. A non-empty parent group with no type_id always ends in
-// untyped_issue, caught here before the card exists rather than by SetIssueParent after.
-func resolveParentPreCreate(ctx *context.APIContext, repo *repo_model.Repository, parentIssueID, typeID int64) bool {
-	if parentIssueID == 0 {
-		return true
-	}
-	parent, err := issues_model.GetIssueByID(ctx, parentIssueID)
-	if err != nil || parent.RepoID != repo.ID {
-		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "parent_not_found",
-			"no issue with that id exists to be the group's root",
-			"Move to one of the group keys the board itself publishes.")
-		return false
-	}
-	if typeID != 0 {
-		return true
-	}
-	hubapi.APIError(ctx, http.StatusUnprocessableEntity, "untyped_issue",
-		"a newly created card carries no type, and hierarchy needs one on both sides to rank them",
-		"Send type_id with the request so the new card has a type before joining a parent group.")
 	return false
 }
 

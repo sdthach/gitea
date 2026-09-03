@@ -9,42 +9,44 @@ gitea-planning — a thin client over /api/planning/v1.
 Usage: gitea-planning <command> [positional...] [flags]
 
 Commands:
-  board                   A project board with horizontal groups
-  board-add-card          Create an issue directly onto the board
-  board-move-column       Move a card between the board's columns
-  board-move-group        Move a card between the board's groups
-  board-order-column      Reorder every card in one column
-  field-create            Create a custom field
-  field-delete            Delete a custom field
-  field-update            Update a custom field
-  fields                  The custom fields visible from a repository or an organization
-  issue                   The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
-  issue-clear-parent      Remove an issue's parent
-  issue-clear-start       Clear an issue's start date
-  issue-clear-type        Remove an issue's type
-  issue-create            Create an issue on a row
-  issue-fields            An issue's visible fields and its own recorded values
-  issue-move-group        Move a bar between the chart's groups
-  issue-move-milestone    Move an issue between the chart's milestone rows
-  issue-set-dates         Set a bar's start and end
-  issue-set-estimate      Set an issue's time estimate
-  issue-set-fields        Set an issue's custom field values
-  issue-set-parent        Set an issue's parent
-  issue-set-start         Set an issue's start date
-  issue-set-type          Assign an issue's type
-  issue-type-assignments  Batch-read issues' assigned types
-  issue-type-create       Create a type
-  issue-type-delete       Delete a type
-  issue-type-update       Update a type
-  issue-types             The types visible from a repository or an organization
-  milestone-clear-start   Clear a milestone's start date
-  milestone-create        Create a milestone row
-  milestone-set-start     Set a milestone's start date
-  project-view-delete     Delete a saved view
-  project-view-save       Save a view on a project
-  project-views           A project's saved views
-  projects                The repositories and boards a planning page can open
-  roadmap                 The roadmap: one bar per issue, with dependency arrows
+  board                    A project board with horizontal groups
+  board-add-card           Create an issue directly onto the board
+  board-move-column        Move a card between the board's columns
+  board-move-group         Move a card between the board's groups
+  board-order-column       Reorder every card in one column
+  field-create             Create a custom field
+  field-delete             Delete a custom field
+  field-update             Update a custom field
+  fields                   The custom fields visible from a repository or an organization
+  issue                    The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
+  issue-add-dependency     Block an issue on another, drawn as the roadmap's arrow
+  issue-clear-parent       Remove an issue's parent
+  issue-clear-start        Clear an issue's start date
+  issue-clear-type         Remove an issue's type
+  issue-create             Create an issue on a row
+  issue-fields             An issue's visible fields and its own recorded values
+  issue-move-group         Move a bar between the chart's groups
+  issue-move-milestone     Move an issue between the chart's milestone rows
+  issue-remove-dependency  Remove a blocking dependency
+  issue-set-dates          Set a bar's start and end
+  issue-set-estimate       Set an issue's time estimate
+  issue-set-fields         Set an issue's custom field values
+  issue-set-parent         Set an issue's parent
+  issue-set-start          Set an issue's start date
+  issue-set-type           Assign an issue's type
+  issue-type-assignments   Batch-read issues' assigned types
+  issue-type-create        Create a type
+  issue-type-delete        Delete a type
+  issue-type-update        Update a type
+  issue-types              The types visible from a repository or an organization
+  milestone-clear-start    Clear a milestone's start date
+  milestone-create         Create a milestone row
+  milestone-set-start      Set a milestone's start date
+  project-view-delete      Delete a saved view
+  project-view-save        Save a view on a project
+  project-views            A project's saved views
+  projects                 The repositories and boards a planning page can open
+  roadmap                  The roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -460,6 +462,44 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
+## gitea-planning issue-add-dependency
+
+```
+gitea-planning issue-add-dependency — Block an issue on another, drawn as the roadmap's arrow
+
+  POST /issues/{issue_id}/dependencies
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -depends-on-issue-id string
+    	required. The issue this one is blocked by.
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
 ## gitea-planning issue-clear-parent
 
 ```
@@ -584,6 +624,10 @@ Flags:
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
     	repeatable field[op]=value filter; sent to the server verbatim
+  -group string
+    	The group's key, resolved exactly as a board card add's own group: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id.
+  -group-by string
+    	The grouping group is read under. Omit for no group.
   -json
     	emit the API response verbatim and unshaped
   -limit int
@@ -708,6 +752,42 @@ Flags:
     	page size; the server defaults to 50 and caps at 200
   -milestone-id string
     	Target milestone; 0 removes the issue from its row.
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-remove-dependency
+
+```
+gitea-planning issue-remove-dependency — Remove a blocking dependency
+
+  DELETE /issues/{issue_id}/dependencies/{dependency_id}
+
+Positional arguments: issue_id dependency_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
   -offset int
     	row offset, converted to the 1-based page the API takes
   -order string

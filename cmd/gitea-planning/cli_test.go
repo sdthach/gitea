@@ -101,6 +101,14 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"issue-create", "--repo", "acme/widgets", "--title", "Wire it"},
 			"/api/planning/v1/issues", http.MethodPost,
 		},
+		"issue-add-dependency": {
+			[]string{"issue-add-dependency", "--repo", "acme/widgets", "--depends-on-issue-id", "7", "9042"},
+			"/api/planning/v1/issues/9042/dependencies", http.MethodPost,
+		},
+		"issue-remove-dependency": {
+			[]string{"issue-remove-dependency", "--repo", "acme/widgets", "9042", "7"},
+			"/api/planning/v1/issues/9042/dependencies/7", http.MethodDelete,
+		},
 		"issue": {[]string{"issue", "9042"}, "/api/planning/v1/issues/9042", ""},
 		"issue-set-parent": {
 			[]string{"issue-set-parent", "--repo", "acme/widgets", "--parent-issue-id", "7", "9042"},
@@ -281,6 +289,22 @@ func TestBoardAddCardSendsTypeIDAsANumber(t *testing.T) {
 	body, readErr := io.ReadAll(rec.requests[0].Body)
 	require.NoError(t, readErr)
 	assert.JSONEq(t, `{"repo":"acme/web","project_id":5,"column_id":1,"title":"Wire it","type_id":9}`, string(body))
+}
+
+// TestIssueAddDependencySendsDependsOnIssueIDAsANumber: depends_on_issue_id is an IntBody
+// member, decoded server-side into dependencyBody's int64 field — a JSON string would fail
+// that decode.
+func TestIssueAddDependencySendsDependsOnIssueIDAsANumber(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "issue-add-dependency", "--repo", "acme/widgets", "--depends-on-issue-id", "7", "9042")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"repo":"acme/widgets","depends_on_issue_id":7}`, string(body))
 }
 
 // TestBoardOrderColumnSendsIssueIDsAsAnArray: issue_ids is an ArrayBody member. The flag takes

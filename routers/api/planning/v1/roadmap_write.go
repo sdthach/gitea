@@ -152,7 +152,9 @@ func createIssueEndpoint() *hubapi.Endpoint {
 				"both optional and both validated before anything is created: the type must be visible from the " +
 				"repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a " +
 				"type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is " +
-				"refused untyped_issue, naming the new issue. " +
+				"refused untyped_issue, naming the new issue. group_by and group place the new issue into a " +
+				"grouping cell exactly as a board card add does: resolved and validated before the issue is " +
+				"created, applied after — the same codes a group move answers. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "roadmap",
 			Body: append(append([]hubapi.Param{}, repoParam...),
@@ -160,7 +162,15 @@ func createIssueEndpoint() *hubapi.Endpoint {
 				hubapi.Param{Name: "description", In: "body", Type: "string", Description: "Issue body."},
 				hubapi.Param{Name: "milestone_id", In: "body", Type: "integer", Description: "Milestone row to file it under."},
 				hubapi.Param{Name: "type_id", In: "body", Type: "integer", Description: "A type visible from the repository, assigned to the new issue."},
-				hubapi.Param{Name: "parent_issue_id", In: "body", Type: "integer", Description: "A parent in the same repository; needs type_id, and the parent's own type must outrank it."}),
+				hubapi.Param{Name: "parent_issue_id", In: "body", Type: "integer", Description: "A parent in the same repository; needs type_id, and the parent's own type must outrank it."},
+				hubapi.Param{
+					Name: "group_by", In: "body", Type: "string", Enum: planning_service.Groupings,
+					Description: "The grouping group is read under. Omit for no group.",
+				},
+				hubapi.Param{
+					Name: "group", In: "body", Type: "string",
+					Description: "The group's key, resolved exactly as a board card add's own group: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id.",
+				}),
 			CLINames: []string{"issue-create"},
 			Response: "Roadmap", ResponseIs: "object",
 		},
@@ -304,7 +314,15 @@ func CreateIssue(ctx *context.APIContext) {
 	if body.MilestoneID != 0 && !milestoneBelongs(ctx, repo, body.MilestoneID) {
 		return
 	}
-	if !validateNewIssueHierarchy(ctx, repo, body) {
+	if !validateNewIssueHierarchy(ctx, repo, body.TypeID, body.ParentIssueID) {
+		return
+	}
+	grouping, ok := parseGrouping(ctx, body.GroupBy)
+	if !ok {
+		return
+	}
+	write, ok := resolveAddCardGroup(ctx, repo, grouping, body.Group, body.TypeID)
+	if !ok {
 		return
 	}
 
@@ -333,6 +351,10 @@ func CreateIssue(ctx *context.APIContext) {
 			return
 		}
 	}
+	if err := addCardGroup(ctx, issue, write); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
@@ -355,23 +377,24 @@ func visibleType(ctx *context.APIContext, repo *repo_model.Repository, typeID in
 	return nil, false
 }
 
-// validateNewIssueHierarchy validates type_id and parent_issue_id before anything is created:
-// the type must be visible from repo, the parent must exist in repo, and the two ranks must
-// satisfy RankAllows — the same rule SetIssueType and SetIssueParent enforce once an issue
-// already exists, checked here first so a refused create leaves no row behind.
-func validateNewIssueHierarchy(ctx *context.APIContext, repo *repo_model.Repository, body *writeBody) bool {
+// validateNewIssueHierarchy validates typeID and parentIssueID before anything is created: the
+// type must be visible from repo, the parent must exist in repo, and the two ranks must satisfy
+// RankAllows — the same rule SetIssueType and SetIssueParent enforce once an issue already
+// exists, checked here first so a refused create leaves no row behind. Shared by CreateIssue's
+// own type_id/parent_issue_id and by a board card's parent group, resolved before the card exists.
+func validateNewIssueHierarchy(ctx *context.APIContext, repo *repo_model.Repository, typeID, parentIssueID int64) bool {
 	var newType *planning_service.VisibleType
-	if body.TypeID != 0 {
+	if typeID != 0 {
 		var ok bool
-		newType, ok = visibleType(ctx, repo, body.TypeID)
+		newType, ok = visibleType(ctx, repo, typeID)
 		if !ok {
 			return false
 		}
 	}
-	if body.ParentIssueID == 0 {
+	if parentIssueID == 0 {
 		return true
 	}
-	parent, err := issues_model.GetIssueByID(ctx, body.ParentIssueID)
+	parent, err := issues_model.GetIssueByID(ctx, parentIssueID)
 	if err != nil || parent.RepoID != repo.ID {
 		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "parent_not_found",
 			"no issue with that id belongs to "+repo.FullName(),
@@ -416,36 +439,14 @@ func validateNewIssueHierarchy(ctx *context.APIContext, repo *repo_model.Reposit
 }
 
 // writeTarget reads the body, resolves the repository and applies Gitea's own write
-// check on the Issues unit. Visibility is answered before permission, so a caller who cannot
-// see the repository is not told it exists.
+// check on the Issues unit.
 func writeTarget(ctx *context.APIContext) (*writeBody, *repo_model.Repository, bool) {
 	body, ok := readWriteBody(ctx)
 	if !ok {
 		return nil, nil, false
 	}
-	owner, name, found := strings.Cut(strings.TrimSpace(body.Repo), "/")
-	if !found || owner == "" || name == "" {
-		hubapi.APIError(ctx, http.StatusBadRequest, "bad_repo",
-			fmt.Sprintf("repo must be owner/name, got %q", body.Repo),
-			"Send repo as owner/name, for example \"acme/widgets\".")
-		return nil, nil, false
-	}
-	repo, err := repo_model.GetRepositoryByOwnerAndName(ctx, owner, name)
-	if err != nil {
-		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
-			"no repository "+owner+"/"+name+" is visible to you",
-			"Check the owner and repository name against "+BasePath+"/repos.")
-		return nil, nil, false
-	}
-	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return nil, nil, false
-	}
-	if !perm.CanRead(unit.TypeIssues) {
-		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
-			"no repository "+owner+"/"+name+" is visible to you",
-			"Check the owner and repository name against "+BasePath+"/repos.")
+	repo, perm, ok := readableRepo(ctx, body.Repo)
+	if !ok {
 		return nil, nil, false
 	}
 	if !perm.CanWrite(unit.TypeIssues) {
@@ -455,6 +456,40 @@ func writeTarget(ctx *context.APIContext) (*writeBody, *repo_model.Repository, b
 		return nil, nil, false
 	}
 	return body, repo, true
+}
+
+// readableRepo resolves repoRef as owner/name and confirms the caller can read its Issues
+// unit, answering repo_not_found for either a bad name or an unreadable repository so a caller
+// with no access is not told it exists. Shared by every roadmap write and by the dependency
+// endpoints, which apply a permission check of their own once the repository resolves.
+func readableRepo(ctx *context.APIContext, repoRef string) (*repo_model.Repository, access.Permission, bool) {
+	var zero access.Permission
+	owner, name, found := strings.Cut(strings.TrimSpace(repoRef), "/")
+	if !found || owner == "" || name == "" {
+		hubapi.APIError(ctx, http.StatusBadRequest, "bad_repo",
+			fmt.Sprintf("repo must be owner/name, got %q", repoRef),
+			"Send repo as owner/name, for example \"acme/widgets\".")
+		return nil, zero, false
+	}
+	repo, err := repo_model.GetRepositoryByOwnerAndName(ctx, owner, name)
+	if err != nil {
+		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
+			"no repository "+owner+"/"+name+" is visible to you",
+			"Check the owner and repository name against "+BasePath+"/repos.")
+		return nil, zero, false
+	}
+	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, zero, false
+	}
+	if !perm.CanRead(unit.TypeIssues) {
+		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
+			"no repository "+owner+"/"+name+" is visible to you",
+			"Check the owner and repository name against "+BasePath+"/repos.")
+		return nil, zero, false
+	}
+	return repo, perm, true
 }
 
 // issueTarget adds the issue the path names to what writeTarget resolves.
