@@ -76,7 +76,7 @@ func getBoardEndpoint() *hubapi.Endpoint {
 				"explicit empty-value group; nothing disappears from a board because a field is unset. " +
 				"Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that " +
 				"disables it globally, is answered with the reason and what to do about it rather than an empty board. " +
-				"The /delivery/board page is a client of this endpoint.",
+				"The /planning/board page is a client of this endpoint.",
 			Tag: "board", Query: &boardSpec, Response: "Board", ResponseIs: "object",
 		},
 		Handler: GetBoard,

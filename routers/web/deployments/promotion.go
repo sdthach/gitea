@@ -13,16 +13,16 @@ import (
 	"gitea.dev/services/context"
 )
 
-const tplPromote templates.TplName = "delivery/promote"
+const tplNew templates.TplName = "deployments/new"
 
-// Promote renders /delivery/promote. It is the confirm step: the page POSTs to /deployments
+// New renders /deployments/new. It is the confirm step: the page POSTs to /deployments
 // with confirm=false first, then confirm=true when the human presses the button. The
 // sequence rule is applied by the API, so the CLI is refused exactly where the page is.
-func Promote(ctx *context.Context) {
-	ctx.Data["Title"] = "Confirm deploy"
-	ctx.Data["PageIsDelivery"] = true
-	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + deploymentsv1.BasePath
+func New(ctx *context.Context) {
+	ctx.Data["Title"] = "New deployment"
+	ctx.Data["PageIsDeployments"] = true
+	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
 	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
-	ctx.HTML(http.StatusOK, tplPromote)
+	ctx.HTML(http.StatusOK, tplNew)
 }

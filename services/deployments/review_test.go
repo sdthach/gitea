@@ -16,10 +16,10 @@ import (
 	"xorm.io/builder"
 )
 
-// TestDeliveryCanApproveEnvironment covers the approver set in BOTH its accepting
+// TestDeploymentsCanApproveEnvironment covers the approver set in BOTH its accepting
 // and its refusing case for every branch. The default is whoever Gitea already permits to
 // dispatch; the allowlist narrows it, and it is the SAME allowlist branch protection uses.
-func TestDeliveryCanApproveEnvironment(t *testing.T) {
+func TestDeploymentsCanApproveEnvironment(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
 	// user2 is a member of team 1; user4 is not.
@@ -95,9 +95,9 @@ func TestDeliveryCanApproveEnvironment(t *testing.T) {
 	}
 }
 
-// TestDeliveryApplyHeldRunsIsTheSecondHeldSource covers `⏸`'s second source: the
+// TestDeploymentsApplyHeldRunsIsTheSecondHeldSource covers `⏸`'s second source: the
 // reviews table repaints a cell that only looks queued, and repaints nothing else.
-func TestDeliveryApplyHeldRunsIsTheSecondHeldSource(t *testing.T) {
+func TestDeploymentsApplyHeldRunsIsTheSecondHeldSource(t *testing.T) {
 	cells := func() map[string][]Cell {
 		return map[string][]Cell{
 			"v1.0": {
@@ -142,9 +142,9 @@ func decideFixture(t *testing.T, policy string, required int64) (*deployments_mo
 	return hold, env
 }
 
-// TestDeliveryDecideWritesAnAuditEventAndReleases: a review releases the
+// TestDeploymentsDecideWritesAnAuditEventAndReleases: a review releases the
 // job and lands in the append-only log naming the approver and the time.
-func TestDeliveryDecideWritesAnAuditEventAndReleases(t *testing.T) {
+func TestDeploymentsDecideWritesAnAuditEventAndReleases(t *testing.T) {
 	hold, env := decideFixture(t, deployments_model.PolicyAnyApprover, 1)
 	approver := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
 
@@ -163,7 +163,7 @@ func TestDeliveryDecideWritesAnAuditEventAndReleases(t *testing.T) {
 	assert.Equal(t, approver.ID, votes[0].ActorID)
 
 	// The event itself names the approver and when, and it is on the same append-only log
-	// every other delivery event is on.
+	// every other deployment event is on.
 	events, err := deployments_model.FindAuditEvents(t.Context(),
 		builder.Eq{"run_id": int64(4242)}, "id ASC", 0)
 	require.NoError(t, err)
@@ -173,9 +173,9 @@ func TestDeliveryDecideWritesAnAuditEventAndReleases(t *testing.T) {
 	assert.Equal(t, "v1.1", events[0].ReleaseTag)
 }
 
-// TestDeliveryDecideRefusals: every refusal is made by the service, not
+// TestDeploymentsDecideRefusals: every refusal is made by the service, not
 // hidden in a view, and each carries a suggested next action.
-func TestDeliveryDecideRefusals(t *testing.T) {
+func TestDeploymentsDecideRefusals(t *testing.T) {
 	t.Run("a user who may not approve is refused", func(t *testing.T) {
 		hold, env := decideFixture(t, deployments_model.PolicyAnyApprover, 1)
 		outsider := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
@@ -260,10 +260,10 @@ func TestDeliveryDecideRefusals(t *testing.T) {
 	})
 }
 
-// TestDeliveryPendingReviewRunsFeedsTheGrid proves the grid's second `⏸` source reads the
+// TestDeploymentsPendingReviewRunsFeedsTheGrid proves the grid's second `⏸` source reads the
 // same projection the gate does: a run stays listed while it is pending and drops out once
 // it is approved.
-func TestDeliveryPendingReviewRunsFeedsTheGrid(t *testing.T) {
+func TestDeploymentsPendingReviewRunsFeedsTheGrid(t *testing.T) {
 	hold, env := decideFixture(t, deployments_model.PolicyAnyApprover, 1)
 
 	pending, err := PendingReviewRuns(t.Context(), 1)

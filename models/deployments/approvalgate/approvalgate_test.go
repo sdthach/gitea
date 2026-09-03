@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDeliveryApprovalGateDefaultsOpen is the fork-absent case: nothing registered means
+// TestDeploymentsApprovalGateDefaultsOpen is the fork-absent case: nothing registered means
 // the dispatcher claims jobs exactly as stock Gitea does. Any other default would hold every
 // job in an instance that does not run the fork's hub.
-func TestDeliveryApprovalGateDefaultsOpen(t *testing.T) {
+func TestDeploymentsApprovalGateDefaultsOpen(t *testing.T) {
 	previous := registered.Load()
 	t.Cleanup(func() { registered.Store(previous) })
 
@@ -21,10 +21,10 @@ func TestDeliveryApprovalGateDefaultsOpen(t *testing.T) {
 	assert.False(t, Held(t.Context(), 7, 5))
 }
 
-// TestDeliveryApprovalGateDelegates proves the dispatcher passes the job through and returns
+// TestDeploymentsApprovalGateDelegates proves the dispatcher passes the job through and returns
 // what the gate says, in both directions. A dispatcher that dropped the answer would be a
 // gate that never held anything.
-func TestDeliveryApprovalGateDelegates(t *testing.T) {
+func TestDeploymentsApprovalGateDelegates(t *testing.T) {
 	previous := registered.Load()
 	t.Cleanup(func() { registered.Store(previous) })
 

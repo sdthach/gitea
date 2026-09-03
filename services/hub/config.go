@@ -67,7 +67,7 @@ func DeploymentsPagesEnabled() bool {
 // SwimlanesEnabled reports whether Gitea's own repository project page offers the fork's
 // swimlane grouping:
 //
-//	[deployments]
+//	[planning]
 //	ENABLE_SWIMLANES = true
 //
 // It defaults to FALSE, unlike the pages: this one changes a page the fork does not own, so
@@ -77,5 +77,5 @@ func SwimlanesEnabled() bool {
 	if setting.CfgProvider == nil {
 		return false
 	}
-	return configKey(SettingSection, "ENABLE_SWIMLANES").MustBool(false)
+	return configKey(PlanningSettingSection, "ENABLE_SWIMLANES").MustBool(false)
 }

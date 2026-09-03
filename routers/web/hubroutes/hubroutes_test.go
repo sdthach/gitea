@@ -15,6 +15,7 @@ import (
 	planningv1 "gitea.dev/routers/api/planning/v1"
 	hub_web "gitea.dev/routers/web/hub"
 	"gitea.dev/services/context"
+	"gitea.dev/services/contexttest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ func templateDir(t *testing.T) string { return filepath.Join(repoRoot(t), "templ
 func TestPagesInheritGiteasChrome(t *testing.T) {
 	for _, page := range forkPages {
 		t.Run(page.template, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", page.template))
+			raw, err := os.ReadFile(filepath.Join(templateDir(t), page.dir, page.template))
 			require.NoError(t, err)
 			body := string(raw)
 			assert.True(t, strings.HasPrefix(body, `{{template "base/head" .}}`))
@@ -64,6 +65,7 @@ func allOperations() []*hubapi.Operation {
 // A page added without an entry here fails TestEveryPageIsListed, so no page can serve
 // itself from anything but a published operation.
 var forkPages = []struct {
+	dir      string
 	template string
 	// endpoints are every operation path the page fetches. Each must be published, and
 	// each must actually appear in the template, so neither list can rot.
@@ -71,6 +73,7 @@ var forkPages = []struct {
 	fetch     string
 }{
 	{
+		dir:      "deployments",
 		template: "environment.tmpl",
 		endpoints: []string{
 			"/environments", "/environments/{id}", "/secret-scopes", "/secret-scopes/{id}",
@@ -79,32 +82,38 @@ var forkPages = []struct {
 		fetch: "/environments?",
 	},
 	{
-		template:  "grid.tmpl",
+		dir:       "deployments",
+		template:  "matrix.tmpl",
 		endpoints: []string{"/deployments/matrix", "/deployments", "/repos/{owner}/{repo}/releases"},
 		fetch:     "/deployments/matrix?",
 	},
 	{
-		template:  "overview.tmpl",
+		dir:       "deployments",
+		template:  "insights.tmpl",
 		endpoints: []string{"/insights", "/insights/trends", "/insights/repos", "/runs"},
 		fetch:     "/insights?",
 	},
 	{
-		template:  "promote.tmpl",
+		dir:       "deployments",
+		template:  "new.tmpl",
 		endpoints: []string{"/deployments"},
 		fetch:     "/deployments",
 	},
 	{
-		template:  "approvals.tmpl",
+		dir:       "deployments",
+		template:  "reviews.tmpl",
 		endpoints: []string{"/reviews"},
 		fetch:     "/reviews?",
 	},
 	{
+		dir:       "planning",
 		template:  "board.tmpl",
 		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/group"},
 		fetch:     "/board?",
 	},
 	{
-		template:  "timeline.tmpl",
+		dir:       "planning",
+		template:  "roadmap.tmpl",
 		endpoints: []string{"/roadmap"},
 		fetch:     "/roadmap?",
 	},
@@ -112,26 +121,26 @@ var forkPages = []struct {
 
 // forkFragments are the templates a spoke embeds in an upstream page rather than the fork
 // serving as a page of its own. They have no route and no API of their own to be a client of.
-var forkFragments = map[string]bool{
-	"navbar_entry.tmpl":         true,
-	"release_environments.tmpl": true,
-	"swimlanes.tmpl":            true,
+var forkFragments = map[string]map[string]bool{
+	"deployments": {"release_environments.tmpl": true},
+	"planning":    {"swimlanes.tmpl": true},
 }
 
 func TestEveryPageIsListed(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join(templateDir(t), "delivery"))
-	require.NoError(t, err)
-
-	pages := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if forkFragments[entry.Name()] {
-			continue
+	var pages []struct{ dir, name string }
+	for dir, fragments := range forkFragments {
+		entries, err := os.ReadDir(filepath.Join(templateDir(t), dir))
+		require.NoError(t, err)
+		for _, entry := range entries {
+			if fragments[entry.Name()] {
+				continue
+			}
+			pages = append(pages, struct{ dir, name string }{dir, entry.Name()})
 		}
-		pages = append(pages, entry.Name())
 	}
-	listed := make([]string, 0, len(forkPages))
+	listed := make([]struct{ dir, name string }, 0, len(forkPages))
 	for _, p := range forkPages {
-		listed = append(listed, p.template)
+		listed = append(listed, struct{ dir, name string }{p.dir, p.template})
 	}
 	assert.ElementsMatch(t, pages, listed, "every page the fork ships is checked against its API")
 }
@@ -141,7 +150,7 @@ func TestEveryPageIsListed(t *testing.T) {
 func TestPageIsAClientOfItsAPI(t *testing.T) {
 	for _, page := range forkPages {
 		t.Run(page.template, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", page.template))
+			raw, err := os.ReadFile(filepath.Join(templateDir(t), page.dir, page.template))
 			require.NoError(t, err)
 			body := string(raw)
 			assert.Contains(t, body, page.fetch, "the page reads its rows over the API")
@@ -157,7 +166,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				// The template has to name it, so an endpoint listed here but no longer
 				// fetched is caught rather than standing as a claim about a dead page. A page
 				// may name the documented path verbatim, as board.tmpl does, or interpolate the
-				// repository into it, as grid.tmpl does; either one names the operation.
+				// repository into it, as matrix.tmpl does; either one names the operation.
 				interpolated := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
 				assert.True(t, strings.Contains(body, endpoint) || strings.Contains(body, interpolated),
 					"the page fetches %s", endpoint)
@@ -171,30 +180,47 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 // routers/web/planning's carry PlanningPagesEnabled, so switching one area off never
 // touches the other's pages.
 var gateFor = map[string]func(*context.Context){
-	"/delivery/environments":                  hub_web.DeploymentsPagesEnabled,
-	"/delivery/environments/{name}":           hub_web.DeploymentsPagesEnabled,
-	"/delivery/environments/{id}/edit":        hub_web.DeploymentsPagesEnabled,
-	"/delivery/grid":                          hub_web.DeploymentsPagesEnabled,
-	"/delivery/ci":                            hub_web.DeploymentsPagesEnabled,
-	"/delivery/promote":                       hub_web.DeploymentsPagesEnabled,
-	"/delivery/approvals":                     hub_web.DeploymentsPagesEnabled,
-	"/delivery/environments/{name}/approvals": hub_web.DeploymentsPagesEnabled,
-	"/delivery/board":                         hub_web.PlanningPagesEnabled,
-	"/delivery/timeline":                      hub_web.PlanningPagesEnabled,
+	"/deployments/environments":                hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{name}":         hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{id}/edit":      hub_web.DeploymentsPagesEnabled,
+	"/deployments":                             hub_web.DeploymentsPagesEnabled,
+	"/deployments/insights":                    hub_web.DeploymentsPagesEnabled,
+	"/deployments/new":                         hub_web.DeploymentsPagesEnabled,
+	"/deployments/reviews":                     hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{name}/reviews": hub_web.DeploymentsPagesEnabled,
+	"/planning/board":                          hub_web.PlanningPagesEnabled,
+	"/planning/roadmap":                        hub_web.PlanningPagesEnabled,
+}
+
+// redirectPatterns is every pattern registerRedirects mounts. Each is a plain 303 to its
+// replacement: the new page underneath enforces its own sign-in and settings gate, so a
+// redirect needs neither.
+var redirectPatterns = []string{
+	"/delivery/environments", "/delivery/environments/{name}",
+	"/delivery/environments/{id}/edit", "/delivery/environments/{name}/approvals",
+	"/delivery/grid", "/delivery/promote", "/delivery/approvals", "/delivery/ci",
+	"/delivery/board", "/delivery/timeline",
 }
 
 func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	r := &recordingRouter{}
 	RegisterRoutes(r, "signin")
-	assert.Equal(t, []string{
-		"/delivery/environments", "/delivery/environments/{name}",
-		"/delivery/environments/{id}/edit", "/delivery/grid",
-		"/delivery/ci",
-		"/delivery/promote",
-		"/delivery/approvals", "/delivery/environments/{name}/approvals",
-		"/delivery/board", "/delivery/timeline",
-	}, r.patterns)
-	for i, pattern := range r.patterns {
+
+	pagePatterns := make([]string, 0, len(gateFor))
+	for _, pattern := range r.patterns[:len(r.patterns)-len(redirectPatterns)] {
+		pagePatterns = append(pagePatterns, pattern)
+	}
+	assert.ElementsMatch(t, []string{
+		"/deployments/environments", "/deployments/environments/{name}",
+		"/deployments/environments/{id}/edit", "/deployments",
+		"/deployments/insights", "/deployments/new",
+		"/deployments/reviews", "/deployments/environments/{name}/reviews",
+		"/planning/board", "/planning/roadmap",
+	}, pagePatterns)
+	assert.Equal(t, redirectPatterns, r.patterns[len(r.patterns)-len(redirectPatterns):],
+		"the old /delivery/* URLs are mounted last, so they never shadow a current page")
+
+	for i, pattern := range pagePatterns {
 		handlers := r.handlers[i]
 		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate")
 		wantGate, ok := gateFor[pattern]
@@ -202,6 +228,77 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 		assert.True(t, sameFunc(handlers[1], wantGate),
 			"%s must sit behind its own area's settings gate, not the other area's", pattern)
 	}
+	for i := range redirectPatterns {
+		handlers := r.handlers[len(pagePatterns)+i]
+		require.Len(t, handlers, 1, "a redirect needs no sign-in check or gate of its own")
+	}
+}
+
+// TestOldURLsRedirect exercises every handler registerRedirects mounts end to end: a 303 to
+// its replacement, with a path parameter or a query string carried over unchanged.
+func TestOldURLsRedirect(t *testing.T) {
+	r := &recordingRouter{}
+	RegisterRoutes(r, "signin")
+
+	cases := []struct {
+		pattern, path, query, wantLocation string
+		pathParams                         map[string]string
+	}{
+		{pattern: "/delivery/environments", wantLocation: "/deployments/environments"},
+		{
+			pattern: "/delivery/environments/{name}", wantLocation: "/deployments/environments/prod",
+			pathParams: map[string]string{"name": "prod"},
+		},
+		{
+			pattern: "/delivery/environments/{id}/edit", wantLocation: "/deployments/environments/1/edit",
+			pathParams: map[string]string{"id": "1"},
+		},
+		{
+			pattern: "/delivery/environments/{name}/approvals", wantLocation: "/deployments/environments/prod/reviews",
+			pathParams: map[string]string{"name": "prod"},
+		},
+		{pattern: "/delivery/grid", wantLocation: "/deployments"},
+		{
+			pattern: "/delivery/promote", wantLocation: "/deployments/new?repo=user2%2Frepo1&environment=prod&release_tag=v1",
+			query: "repo=user2%2Frepo1&environment=prod&release_tag=v1",
+		},
+		{pattern: "/delivery/approvals", wantLocation: "/deployments/reviews"},
+		{pattern: "/delivery/ci", wantLocation: "/deployments/insights"},
+		{pattern: "/delivery/board", wantLocation: "/planning/board"},
+		{pattern: "/delivery/timeline", wantLocation: "/planning/roadmap"},
+	}
+	for _, c := range cases {
+		t.Run(c.pattern, func(t *testing.T) {
+			handler := redirectHandlerFor(t, r, c.pattern)
+			reqPath := c.pattern
+			if c.query != "" {
+				reqPath += "?" + c.query
+			}
+			ctx, resp := contexttest.MockContext(t, reqPath)
+			for name, value := range c.pathParams {
+				ctx.SetPathParam(name, value)
+			}
+			handler(ctx)
+			assert.Equal(t, 303, resp.Code)
+			assert.Equal(t, c.wantLocation, resp.Header().Get("Location"))
+		})
+	}
+}
+
+// redirectHandlerFor returns the single handler registerRedirects mounted for pattern.
+func redirectHandlerFor(t *testing.T, r *recordingRouter, pattern string) func(*context.Context) {
+	t.Helper()
+	for i, p := range r.patterns {
+		if p != pattern {
+			continue
+		}
+		require.Len(t, r.handlers[i], 1, "a redirect needs no sign-in check or gate of its own")
+		handler, ok := r.handlers[i][0].(func(*context.Context))
+		require.True(t, ok, "%s must register a plain *context.Context handler", pattern)
+		return handler
+	}
+	t.Fatalf("%s was never registered", pattern)
+	return nil
 }
 
 // sameFunc compares two middleware values by the function they point at: func values are

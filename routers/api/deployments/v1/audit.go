@@ -45,7 +45,7 @@ func listAuditEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
 			ID: "listAudit", Method: http.MethodGet, Path: "/audit",
-			Summary: "List delivery audit events across every repository the caller can see",
+			Summary: "List deployment audit events across every repository the caller can see",
 			Description: "One row per event, retained indefinitely; no purge or archive path exists. " +
 				"actor_login is denormalized, so deleting the user from Gitea does not erase who deployed. " +
 				"The resource is read-only: no POST, PATCH or DELETE is published. " +

@@ -36,10 +36,10 @@ var errUnexpectedLookup = errors.New("the gate reached a lookup it should not ha
 func approved(actor int64) Vote { return Vote{ActorID: actor, Event: AuditApproved} }
 func rejected(actor int64) Vote { return Vote{ActorID: actor, Event: AuditRejected} }
 
-// TestDeliveryProjectReviewStateCoversEveryPolicy exercises each policy in BOTH its
+// TestDeploymentsProjectReviewStateCoversEveryPolicy exercises each policy in BOTH its
 // accepting and its refusing case. A suite covering only the accepting path is treated as
 // absent.
-func TestDeliveryProjectReviewStateCoversEveryPolicy(t *testing.T) {
+func TestDeploymentsProjectReviewStateCoversEveryPolicy(t *testing.T) {
 	cases := []struct {
 		name      string
 		policy    string
@@ -134,9 +134,9 @@ func withGateDeps(t *testing.T, deps reviewDeps) {
 	t.Cleanup(func() { reviewGateDeps = previous })
 }
 
-// TestDeliveryJobIsHeldForReviewHoldsAndReleases drives the exported gate itself for each
+// TestDeploymentsJobIsHeldForReviewHoldsAndReleases drives the exported gate itself for each
 // policy, accepting and refusing.
-func TestDeliveryJobIsHeldForReviewHoldsAndReleases(t *testing.T) {
+func TestDeploymentsJobIsHeldForReviewHoldsAndReleases(t *testing.T) {
 	cases := []struct {
 		name     string
 		policy   string
@@ -185,10 +185,10 @@ func TestDeliveryJobIsHeldForReviewHoldsAndReleases(t *testing.T) {
 	}
 }
 
-// TestDeliveryJobIsHeldForReviewFailsClosed is the security property: every lookup that
+// TestDeploymentsJobIsHeldForReviewFailsClosed is the security property: every lookup that
 // cannot answer holds the job. An unassigned job is retried on the next poll; a production
 // deploy that ran without its review cannot be taken back.
-func TestDeliveryJobIsHeldForReviewFailsClosed(t *testing.T) {
+func TestDeploymentsJobIsHeldForReviewFailsClosed(t *testing.T) {
 	boom := errors.New("database unreachable")
 
 	t.Run("the gated-repository query fails", func(t *testing.T) {
@@ -229,10 +229,10 @@ func TestDeliveryJobIsHeldForReviewFailsClosed(t *testing.T) {
 	})
 }
 
-// TestDeliveryJobIsHeldForReviewLeavesUngatedJobsAlone is the "adding the fork changes no
+// TestDeploymentsJobIsHeldForReviewLeavesUngatedJobsAlone is the "adding the fork changes no
 // behaviour" property: a repository with no gated environment, and a job that
 // declares no environment, are both assigned without a workflow read.
-func TestDeliveryJobIsHeldForReviewLeavesUngatedJobsAlone(t *testing.T) {
+func TestDeploymentsJobIsHeldForReviewLeavesUngatedJobsAlone(t *testing.T) {
 	t.Run("no environment of the repository is gated", func(t *testing.T) {
 		deps := gateStub(PolicyAnyApprover, 1, nil)
 		deps.repoIsGated = func(context.Context, int64) (bool, error) { return false, nil }
@@ -255,10 +255,10 @@ func TestDeliveryJobIsHeldForReviewLeavesUngatedJobsAlone(t *testing.T) {
 	})
 }
 
-// TestDeliveryReviewGateSeamIsWired is the fork-absent case, and the wiring that makes the
+// TestDeploymentsReviewGateSeamIsWired is the fork-absent case, and the wiring that makes the
 // spoke work: with nothing registered the dispatcher answers false, and models/deployments'
 // own init has registered the real gate.
-func TestDeliveryReviewGateSeamIsWired(t *testing.T) {
+func TestDeploymentsReviewGateSeamIsWired(t *testing.T) {
 	withGateDeps(t, gateStub(PolicyAnyApprover, 1, nil))
 	assert.True(t, approvalgate.Held(t.Context(), 7, 5),
 		"models/deployments' init must have registered the gate, or the spoke calls nothing")
@@ -269,9 +269,9 @@ func TestDeliveryReviewGateSeamIsWired(t *testing.T) {
 		"with the fork absent the dispatcher claims jobs exactly as stock Gitea does")
 }
 
-// TestDeliveryReviewTableIsAppendOnly holds the same guarantee deployments and audit hold:
+// TestDeploymentsReviewTableIsAppendOnly holds the same guarantee deployments and audit hold:
 // a row carrying a primary key is an update written through the model, and it is refused.
-func TestDeliveryReviewTableIsAppendOnly(t *testing.T) {
+func TestDeploymentsReviewTableIsAppendOnly(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
 	hold := &Review{RepoID: 7, Environment: "PROD", RunID: 9, JobID: 5, RequesterID: requesterID, RequesterLogin: "user2"}
@@ -299,10 +299,10 @@ func TestDeliveryReviewTableIsAppendOnly(t *testing.T) {
 	require.Error(t, AppendReview(t.Context(), &Review{RepoID: 7, Environment: "  ", RunID: 1, JobID: 1}))
 }
 
-// TestDeliveryRepoHasGatedEnvironmentIsTheFastPath covers the one query every ordinary job
+// TestDeploymentsRepoHasGatedEnvironmentIsTheFastPath covers the one query every ordinary job
 // pays for. It has to answer false for a repository whose environments are all `none`, or
 // the fork would hold every job in the instance.
-func TestDeliveryRepoHasGatedEnvironmentIsTheFastPath(t *testing.T) {
+func TestDeploymentsRepoHasGatedEnvironmentIsTheFastPath(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
 	const repoID = int64(4242)
@@ -325,9 +325,9 @@ func TestDeliveryRepoHasGatedEnvironmentIsTheFastPath(t *testing.T) {
 	assert.True(t, gated)
 }
 
-// TestDeliveryVotesForReviewReadsTheAuditLog proves reviews are not stored a second
+// TestDeploymentsVotesForReviewReadsTheAuditLog proves reviews are not stored a second
 // time: the gate's inputs are the audit rows the approve and reject endpoints append.
-func TestDeliveryVotesForReviewReadsTheAuditLog(t *testing.T) {
+func TestDeploymentsVotesForReviewReadsTheAuditLog(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 
 	hold := &Review{RepoID: 91, Environment: "prod", RunID: 77, JobID: 5, RequesterID: requesterID}
@@ -348,9 +348,9 @@ func TestDeliveryVotesForReviewReadsTheAuditLog(t *testing.T) {
 	assert.Equal(t, AuditApproved, votes[0].Event)
 }
 
-// TestDeliveryReleaseTagOfRef covers what the hold records about a deploy dispatched at a
+// TestDeploymentsReleaseTagOfRef covers what the hold records about a deploy dispatched at a
 // tag and one dispatched at a branch, which carries no release identity.
-func TestDeliveryReleaseTagOfRef(t *testing.T) {
+func TestDeploymentsReleaseTagOfRef(t *testing.T) {
 	assert.Equal(t, "v1.2.3", releaseTagOfRef("refs/tags/v1.2.3"))
 	assert.Empty(t, releaseTagOfRef("refs/heads/main"))
 	assert.Empty(t, releaseTagOfRef(""))

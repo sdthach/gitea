@@ -4,7 +4,7 @@
 # One workflow file per environment (D4). The file name is what makes workflow_id a proxy
 # for the environment, so Gitea's own filtered run list at
 # /{owner}/{repo}/actions?workflow=deploy-dev.yaml IS the dev deployment history, and
-# services/delivery's notifier reads the environment straight out of it.
+# services/deployments' notifier reads the environment straight out of it.
 #
 # Dispatch it with the release tag as Ref (D5), authenticated as the logged-in user and
 # never a shared service token, so Gitea's own trigger_actor names the human (D6):

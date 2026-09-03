@@ -149,17 +149,17 @@ var narrowSecretDeps = productionNarrowDeps
 func NarrowSecretsToJobEnvironment(ctx context.Context, job *actions_model.ActionRunJob, secrets map[string]string) map[string]string {
 	if job == nil {
 		// Nothing identifies the job, so nothing establishes its environment.
-		log.Error("delivery: narrowing called with no job — withholding every configured secret; this is a programming error, report it with the run that triggered it")
+		log.Error("deployments: narrowing called with no job — withholding every configured secret; this is a programming error, report it with the run that triggered it")
 		return failClosed(secrets)
 	}
 	if err := narrowSecretDeps.loadRun(ctx, job); err != nil {
-		log.Error("delivery: load run of job %d: %v — withholding every configured secret; check the database is reachable and rerun the job", job.ID, err)
+		log.Error("deployments: load run of job %d: %v — withholding every configured secret; check the database is reachable and rerun the job", job.ID, err)
 		return failClosed(secrets)
 	}
 
 	scopes, err := narrowSecretDeps.scopesOf(ctx, job.Run.RepoID)
 	if err != nil {
-		log.Error("delivery: read secret scopes of repo %d: %v — withholding every configured secret; check the database is reachable and rerun the job", job.Run.RepoID, err)
+		log.Error("deployments: read secret scopes of repo %d: %v — withholding every configured secret; check the database is reachable and rerun the job", job.Run.RepoID, err)
 		return failClosed(secrets)
 	}
 	if len(scopes) == 0 {
@@ -169,7 +169,7 @@ func NarrowSecretsToJobEnvironment(ctx context.Context, job *actions_model.Actio
 
 	jobEnv, err := narrowSecretDeps.environment(ctx, job)
 	if err != nil {
-		log.Error("delivery: resolve environment of job %d: %v — withholding every environment-scoped secret; check the workflow file is readable at the run's commit", job.ID, err)
+		log.Error("deployments: resolve environment of job %d: %v — withholding every environment-scoped secret; check the workflow file is readable at the run's commit", job.ID, err)
 		jobEnv = ""
 	}
 	return applyEnvironmentScope(secrets, scopes, jobEnv)

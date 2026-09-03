@@ -16,9 +16,9 @@ import (
 	"xorm.io/builder"
 )
 
-// DeploymentSummary is the denormalized projection the summary endpoint returns. Default
+// InsightsDeployments is the denormalized projection the summary endpoint returns. Default
 // columns are always present; optional ones appear when ?fields names them.
-type DeploymentSummary struct {
+type InsightsDeployments struct {
 	ID           int64  `json:"id"`
 	RepoID       int64  `json:"repo_id"`
 	RepoFullName string `json:"repo_full_name"`
@@ -36,11 +36,11 @@ type DeploymentSummary struct {
 	Duration     int64  `json:"duration_seconds,omitempty"`
 }
 
-var summaryOptionalFields = map[string]bool{
+var insightsDeploymentsOptionalFields = map[string]bool{
 	"sha": true, "run": true, "approved_by": true, "approved_at": true, "duration": true,
 }
 
-var deploymentSummarySpec = query.Spec{
+var insightsDeploymentsSpec = query.Spec{
 	Resource: "insights-deployments",
 	Fields: []query.Field{
 		{Name: "id", Column: "id", Kind: query.KindInt},
@@ -59,7 +59,7 @@ var deploymentSummarySpec = query.Spec{
 	Paging:       query.PagingCursor,
 }
 
-var summaryFieldsParam = []hubapi.Param{
+var insightsDeploymentsFieldsParam = []hubapi.Param{
 	{
 		Name: "fields", In: "query", Type: "string",
 		Description: "Comma-separated optional columns: sha, run, approved_by, approved_at, duration.",
@@ -74,8 +74,8 @@ func getInsightsDeploymentsEndpoint() *hubapi.Endpoint {
 			Description: "A denormalized projection of deployments with audit data joined. Default columns " +
 				"(environment, release, status, branch, deployed_by, deployed_at) are always present; add " +
 				"optional ones with ?fields=sha,run,approved_by,approved_at,duration.",
-			Tag: "insights", QueryParams: summaryFieldsParam,
-			Query: &deploymentSummarySpec, Response: "DeploymentSummary", ResponseIs: "array",
+			Tag: "insights", QueryParams: insightsDeploymentsFieldsParam,
+			Query: &insightsDeploymentsSpec, Response: "InsightsDeployments", ResponseIs: "array",
 		},
 		Handler: GetInsightsDeployments,
 	}
@@ -83,9 +83,9 @@ func getInsightsDeploymentsEndpoint() *hubapi.Endpoint {
 
 // GetInsightsDeployments answers GET /insights/deployments.
 func GetInsightsDeployments(ctx *context.APIContext) {
-	wantFields := parseSummaryFields(ctx.Req.URL.Query().Get("fields"))
+	wantFields := parseInsightsDeploymentsFields(ctx.Req.URL.Query().Get("fields"))
 
-	q, ok := hubapi.ParseCursorQuery(ctx, deploymentSummarySpec)
+	q, ok := hubapi.ParseCursorQuery(ctx, insightsDeploymentsSpec)
 	if !ok {
 		return
 	}
@@ -94,7 +94,7 @@ func GetInsightsDeployments(ctx *context.APIContext) {
 		return
 	}
 	if len(repoIDs) == 0 {
-		hubapi.RenderCursorPage(ctx, q, 0, nil, 0, []*DeploymentSummary{})
+		hubapi.RenderCursorPage(ctx, q, 0, nil, 0, []*InsightsDeployments{})
 		return
 	}
 
@@ -114,9 +114,9 @@ func GetInsightsDeployments(ctx *context.APIContext) {
 		}
 	}
 
-	out := make([]*DeploymentSummary, 0, len(rows))
+	out := make([]*InsightsDeployments, 0, len(rows))
 	for _, row := range rows {
-		s := &DeploymentSummary{
+		s := &InsightsDeployments{
 			ID:           row.ID,
 			RepoID:       row.RepoID,
 			RepoFullName: repoNames[row.RepoID],
@@ -136,7 +136,7 @@ func GetInsightsDeployments(ctx *context.APIContext) {
 		out = append(out, s)
 	}
 
-	enrichSummaryFromAudit(ctx, rows, out, wantFields)
+	enrichInsightsDeploymentsFromAudit(ctx, rows, out, wantFields)
 
 	sortValue, lastID := any(nil), int64(0)
 	if len(rows) > 0 {
@@ -147,7 +147,7 @@ func GetInsightsDeployments(ctx *context.APIContext) {
 	hubapi.RenderCursorPage(ctx, q, len(rows), sortValue, lastID, out)
 }
 
-func enrichSummaryFromAudit(ctx *context.APIContext, deps []*deployments_model.Deployment, summaries []*DeploymentSummary, wantFields map[string]bool) {
+func enrichInsightsDeploymentsFromAudit(ctx *context.APIContext, deps []*deployments_model.Deployment, summaries []*InsightsDeployments, wantFields map[string]bool) {
 	needApproved := wantFields["approved_by"] || wantFields["approved_at"]
 	needDuration := wantFields["duration"]
 
@@ -184,14 +184,14 @@ func enrichSummaryFromAudit(ctx *context.APIContext, deps []*deployments_model.D
 	}
 }
 
-func parseSummaryFields(raw string) map[string]bool {
+func parseInsightsDeploymentsFields(raw string) map[string]bool {
 	if raw == "" {
 		return nil
 	}
 	result := make(map[string]bool)
 	for f := range strings.SplitSeq(raw, ",") {
 		f = strings.TrimSpace(f)
-		if summaryOptionalFields[f] {
+		if insightsDeploymentsOptionalFields[f] {
 			result[f] = true
 		}
 	}

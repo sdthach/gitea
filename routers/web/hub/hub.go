@@ -40,14 +40,14 @@ func SetPageToken(ctx *context.Context) {
 	}
 	t := &auth_model.AccessToken{
 		UID:   ctx.Doer.ID,
-		Name:  "_delivery_page",
+		Name:  "_hub_page",
 		Scope: auth_model.AccessTokenScopeWriteRepository + "," + auth_model.AccessTokenScopeWriteIssue,
 	}
 	if err := auth_model.NewAccessToken(ctx, t); err != nil {
 		log.Error("hub: mint page token for %s: %v", ctx.Doer.Name, err)
 		return
 	}
-	ctx.Data["DeliveryPageToken"] = t.Token
+	ctx.Data["PageToken"] = t.Token
 }
 
 // RouteRegistrar is the slice of *web.Router this package needs. Taking an interface keeps

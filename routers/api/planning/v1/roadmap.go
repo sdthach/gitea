@@ -25,7 +25,7 @@ import (
 	"xorm.io/builder"
 )
 
-// roadmapSpec is the timeline projection's whitelist declaration. Like the grid and the
+// roadmapSpec is the roadmap projection's whitelist declaration. Like the matrix and the
 // board it is a projection rather than a table, so its parameters select what to project;
 // they still go through the one grammar, so an unknown one is refused.
 var roadmapSpec = query.Spec{
@@ -100,7 +100,7 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
 			ID: "getRoadmap", Method: http.MethodGet, Path: "/roadmap",
-			Summary: "The delivery roadmap: one bar per issue, with dependency arrows",
+			Summary: "The roadmap: one bar per issue, with dependency arrows",
 			Description: "Needs no Projects API, so it renders on a build the board cannot. " +
 				"Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: " +
 				"the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker " +
@@ -122,7 +122,7 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 				"page holds. An epic with no children yet is still listed, over its own declared window. " +
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
 				"Scoped by Gitea's own permission check on the Issues unit. " +
-				"The /delivery/timeline page is a client of this endpoint.",
+				"The /planning/roadmap page is a client of this endpoint.",
 			Tag: "roadmap", Query: &roadmapSpec, Response: "Roadmap", ResponseIs: "object",
 		},
 		Handler: GetRoadmap,

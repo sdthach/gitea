@@ -26,10 +26,10 @@ func parseRunQuery(t *testing.T, raw string) *query.Query {
 	return q
 }
 
-// TestDeliveryRunStatusFilterBecomesTheStoredInteger is what makes
+// TestDeploymentsRunStatusFilterBecomesTheStoredInteger is what makes
 // `status[eq]=failure` return the failed runs rather than nothing: the column stores Gitea's
 // integer, and the caller filters on the state name the insights publish.
-func TestDeliveryRunStatusFilterBecomesTheStoredInteger(t *testing.T) {
+func TestDeploymentsRunStatusFilterBecomesTheStoredInteger(t *testing.T) {
 	q := parseRunQuery(t, "status[eq]=failure")
 	require.Nil(t, mapRunStatusFilters(q))
 
@@ -44,9 +44,9 @@ func TestDeliveryRunStatusFilterBecomesTheStoredInteger(t *testing.T) {
 	assert.NotContains(t, args, "failure", "the name must never reach the statement as a value")
 }
 
-// TestDeliveryRunStatusFilterWidensAMultiStatusState: in_progress covers running and
+// TestDeploymentsRunStatusFilterWidensAMultiStatusState: in_progress covers running and
 // cancelling, so equality has to widen into a set rather than silently match one of them.
-func TestDeliveryRunStatusFilterWidensAMultiStatusState(t *testing.T) {
+func TestDeploymentsRunStatusFilterWidensAMultiStatusState(t *testing.T) {
 	q := parseRunQuery(t, "status=in_progress")
 	require.Nil(t, mapRunStatusFilters(q))
 
@@ -57,10 +57,10 @@ func TestDeliveryRunStatusFilterWidensAMultiStatusState(t *testing.T) {
 		q.Filters[0].Values)
 }
 
-// TestDeliveryRunStatusFilterRefusesAnUnknownState: the rejection names the
+// TestDeploymentsRunStatusFilterRefusesAnUnknownState: the rejection names the
 // offender and lists what is accepted, rather than returning an empty page a caller would
 // read as "no failed runs".
-func TestDeliveryRunStatusFilterRefusesAnUnknownState(t *testing.T) {
+func TestDeploymentsRunStatusFilterRefusesAnUnknownState(t *testing.T) {
 	q := parseRunQuery(t, "status[eq]=exploded")
 	qErr := mapRunStatusFilters(q)
 	require.NotNil(t, qErr)
@@ -71,9 +71,9 @@ func TestDeliveryRunStatusFilterRefusesAnUnknownState(t *testing.T) {
 	assert.Contains(t, qErr.Accepted, "failure", "the rejection lists what is accepted")
 }
 
-// TestDeliveryRunStatusFilterLeavesOtherFiltersAlone catches a rewrite that reached past its
+// TestDeploymentsRunStatusFilterLeavesOtherFiltersAlone catches a rewrite that reached past its
 // own field.
-func TestDeliveryRunStatusFilterLeavesOtherFiltersAlone(t *testing.T) {
+func TestDeploymentsRunStatusFilterLeavesOtherFiltersAlone(t *testing.T) {
 	q := parseRunQuery(t, "workflow_id=ci.yaml&repo_id=7")
 	require.Nil(t, mapRunStatusFilters(q))
 
@@ -89,10 +89,10 @@ func TestDeliveryRunStatusFilterLeavesOtherFiltersAlone(t *testing.T) {
 	}
 }
 
-// TestDeliveryInsightsResourcesArePublished: every figure the composite shows is
+// TestDeploymentsInsightsResourcesArePublished: every figure the composite shows is
 // also reachable from a resource of its own, so the composite is a saving rather than the
 // only door.
-func TestDeliveryInsightsResourcesArePublished(t *testing.T) {
+func TestDeploymentsInsightsResourcesArePublished(t *testing.T) {
 	published := map[string]bool{}
 	for _, op := range Operations() {
 		published[op.Path] = true
@@ -102,10 +102,10 @@ func TestDeliveryInsightsResourcesArePublished(t *testing.T) {
 	}
 }
 
-// TestDeliveryProjectionFiltersNarrowTheRows is what keeps a declared filter from being a
+// TestDeploymentsProjectionFiltersNarrowTheRows is what keeps a declared filter from being a
 // silent no-op. The projections are computed in process, so their conditions cannot be pushed
 // into SQL; every field the resource publishes as filterable has to actually narrow.
-func TestDeliveryProjectionFiltersNarrowTheRows(t *testing.T) {
+func TestDeploymentsProjectionFiltersNarrowTheRows(t *testing.T) {
 	rows := []deployments_service.RepoStat{
 		{RepoID: 1, RepoFullName: "acme/web", Runs: 10, AverageDurationSeconds: 30},
 		{RepoID: 2, RepoFullName: "acme/api", Runs: 3, AverageDurationSeconds: 200},
@@ -131,7 +131,7 @@ func TestDeliveryProjectionFiltersNarrowTheRows(t *testing.T) {
 	assert.Len(t, apply(""), 3)
 }
 
-func TestDeliveryProjectionFiltersOnABooleanField(t *testing.T) {
+func TestDeploymentsProjectionFiltersOnABooleanField(t *testing.T) {
 	rows := []deployments_service.WorkflowStat{
 		{RepoID: 1, WorkflowID: "ci.yaml", Runs: 4},
 		{RepoID: 1, WorkflowID: "legacy.yaml", Runs: 1, Disabled: true},
@@ -146,10 +146,10 @@ func TestDeliveryProjectionFiltersOnABooleanField(t *testing.T) {
 	assert.Equal(t, "legacy.yaml", kept[0].WorkflowID)
 }
 
-// TestDeliveryEveryDeclaredProjectionFieldIsReadable catches the defect the filter helper is
+// TestDeploymentsEveryDeclaredProjectionFieldIsReadable catches the defect the filter helper is
 // designed around: a field published as filterable that the row accessor cannot read would
 // match every row silently.
-func TestDeliveryEveryDeclaredProjectionFieldIsReadable(t *testing.T) {
+func TestDeploymentsEveryDeclaredProjectionFieldIsReadable(t *testing.T) {
 	// window_days selects the window rather than narrowing rows, which is why it is the one
 	// declared field with no accessor.
 	const windowField = "window_days"
@@ -175,9 +175,9 @@ func TestDeliveryEveryDeclaredProjectionFieldIsReadable(t *testing.T) {
 	}
 }
 
-// TestDeliveryInsightsPagesAProjection covers the in-process paging the projections use,
+// TestDeploymentsInsightsPagesAProjection covers the in-process paging the projections use,
 // including the past-the-end page a naive slice would panic on.
-func TestDeliveryInsightsPagesAProjection(t *testing.T) {
+func TestDeploymentsInsightsPagesAProjection(t *testing.T) {
 	rows := []int{1, 2, 3, 4, 5}
 	page := func(p, limit int) []int {
 		values, err := url.ParseQuery("")

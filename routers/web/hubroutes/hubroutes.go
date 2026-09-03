@@ -13,8 +13,10 @@ import (
 )
 
 // RegisterRoutes mounts the fork's pages. routers/web/web.go inserts one call to it beside
-// /milestones. Each page sits behind reqSignIn and the settings gate.
+// /milestones. Each page sits behind reqSignIn and the settings gate. The old /delivery/*
+// URLs are mounted last, as plain redirects, so they never shadow a current page.
 func RegisterRoutes(m hub_web.RouteRegistrar, reqSignIn any) {
 	deployments_web.RegisterRoutes(m, reqSignIn)
 	planning_web.RegisterRoutes(m, reqSignIn)
+	registerRedirects(m)
 }

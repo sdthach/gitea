@@ -32,6 +32,12 @@ func repoRoot(t *testing.T) string {
 
 func templateDir(t *testing.T) string { return filepath.Join(repoRoot(t), "templates") }
 
+// forkTemplateDirs is every directory the fork's own web pages ship templates under.
+func forkTemplateDirs(t *testing.T) []string {
+	base := templateDir(t)
+	return []string{filepath.Join(base, "planning"), filepath.Join(base, "deployments"), filepath.Join(base, "hub")}
+}
+
 // templateStubs stands in for the helpers Gitea injects at render time, so a fork template
 // can be parsed and executed outside a running server. ctx carries the CSP nonce every
 // inline script names.
@@ -44,18 +50,19 @@ func templateStubs() map[string]any {
 
 // TestForkTemplatesParse catches a template that would only fail when a page is served.
 func TestForkTemplatesParse(t *testing.T) {
-	dir := filepath.Join(templateDir(t), "delivery")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	require.NotEmpty(t, entries)
+	for _, dir := range forkTemplateDirs(t) {
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.NotEmpty(t, entries)
 
-	for _, entry := range entries {
-		t.Run(entry.Name(), func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			require.NoError(t, err)
-			_, err = template.New(entry.Name()).Funcs(template.FuncMap(templateStubs())).Parse(string(raw))
-			require.NoError(t, err)
-		})
+		for _, entry := range entries {
+			t.Run(filepath.Base(dir)+"/"+entry.Name(), func(t *testing.T) {
+				raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+				require.NoError(t, err)
+				_, err = template.New(entry.Name()).Funcs(template.FuncMap(templateStubs())).Parse(string(raw))
+				require.NoError(t, err)
+			})
+		}
 	}
 }
 
@@ -64,22 +71,23 @@ func TestForkTemplatesParse(t *testing.T) {
 // the request's nonce, so a script without one is dropped and the page renders a shell that
 // never loads. Nothing server-rendered says so, which is why this is checked in source.
 func TestEveryInlineScriptCarriesTheCspNonce(t *testing.T) {
-	dir := filepath.Join(templateDir(t), "delivery")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	require.NotEmpty(t, entries)
-
 	scripts := 0
-	for _, entry := range entries {
-		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+	for _, dir := range forkTemplateDirs(t) {
+		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
-		for line := range strings.SplitSeq(string(raw), "\n") {
-			if !strings.Contains(line, "<script") {
-				continue
+		require.NotEmpty(t, entries)
+
+		for _, entry := range entries {
+			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+			require.NoError(t, err)
+			for line := range strings.SplitSeq(string(raw), "\n") {
+				if !strings.Contains(line, "<script") {
+					continue
+				}
+				scripts++
+				assert.Contains(t, line, `nonce="{{ctx.CspScriptNonce}}"`,
+					"%s opens a script the policy would drop", entry.Name())
 			}
-			scripts++
-			assert.Contains(t, line, `nonce="{{ctx.CspScriptNonce}}"`,
-				"%s opens a script the policy would drop", entry.Name())
 		}
 	}
 	assert.Greater(t, scripts, 5, "the scan must actually have found the fork's scripts")
@@ -93,14 +101,14 @@ func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 
 	var spokeLines []string
 	for line := range strings.SplitSeq(string(raw), "\n") {
-		if strings.Contains(line, `"delivery/`) {
+		if strings.Contains(line, `"hub/`) {
 			spokeLines = append(spokeLines, strings.TrimSpace(line))
 		}
 	}
 	require.Len(t, spokeLines, 1, "the navbar carries exactly one fork line")
-	assert.Contains(t, spokeLines[0], `{{template "delivery/navbar_entry" .}}`)
+	assert.Contains(t, spokeLines[0], `{{template "hub/navbar_entry" .}}`)
 
-	_, err = os.Stat(filepath.Join(templateDir(t), "delivery", "navbar_entry.tmpl"))
+	_, err = os.Stat(filepath.Join(templateDir(t), "hub", "navbar_entry.tmpl"))
 	require.NoError(t, err, "the navbar spoke names a template the fork ships")
 }
 
@@ -109,7 +117,7 @@ func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 // quoted JavaScript string rather than as raw source. Parsing alone would not catch this:
 // contextual escaping happens at execution.
 func TestEnvironmentPageEscapesItsData(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "delivery", "environment.tmpl"))
+	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "environment.tmpl"))
 	require.NoError(t, err)
 
 	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap(templateStubs()))
@@ -124,7 +132,7 @@ func TestEnvironmentPageEscapesItsData(t *testing.T) {
 	require.NoError(t, tmpl.ExecuteTemplate(&out, "environment", map[string]any{
 		"Title":           "Environment: prod",
 		"EnvironmentName": `prod";alert(1);//`,
-		"DeliveryAPIBase": "/api/deployments/v1",
+		"APIBase":         "/api/deployments/v1",
 	}))
 	body := out.String()
 	assert.Contains(t, body, `const base = "/api/deployments/v1";`)

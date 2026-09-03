@@ -10,7 +10,7 @@ Usage: gitea-deployments <command> [positional...] [flags]
 
 Commands:
   approve                   Approve a held deploy
-  audit                     List delivery audit events across every repository the caller can see
+  audit                     List deployment audit events across every repository the caller can see
   deploy                    Plan or dispatch a deploy of a release to an environment
   deployment-matrix         The release × environment deployment matrix
   deployments               List deployments across every repository the caller can see
@@ -24,11 +24,11 @@ Commands:
   insights-repos            List repositories by run volume, with success rate and average duration
   insights-trends           The daily trend series: total, successful and failed runs, average duration and deployments
   reject                    Reject a held deploy
-  releases                  List a repository's releases, the rows of the grid
+  releases                  List a repository's releases, the rows of the deployment matrix
   repo-environment          Read one environment
   repo-environment-secrets  List the secret NAMES scoped to one environment
   repo-environments         List one repository's environments
-  repos                     List the repositories the caller can see delivery data for
+  repos                     List the repositories the caller can see deployment data for
   reviews                   List held deploys and their review state
   rollback                  Plan or dispatch a deploy of a release to an environment
   runs                      List Actions runs across every repository the caller can see
@@ -85,7 +85,7 @@ Flags:
 ## gitea-deployments audit
 
 ```
-gitea-deployments audit — List delivery audit events across every repository the caller can see
+gitea-deployments audit — List deployment audit events across every repository the caller can see
 
   GET /audit
 
@@ -599,7 +599,7 @@ Flags:
 ## gitea-deployments releases
 
 ```
-gitea-deployments releases — List a repository's releases, the rows of the grid
+gitea-deployments releases — List a repository's releases, the rows of the deployment matrix
 
   GET /repos/{owner}/{repo}/releases
 
@@ -735,7 +735,7 @@ Flags:
 ## gitea-deployments repos
 
 ```
-gitea-deployments repos — List the repositories the caller can see delivery data for
+gitea-deployments repos — List the repositories the caller can see deployment data for
 
   GET /repos
 

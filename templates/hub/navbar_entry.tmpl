@@ -1,0 +1,4 @@
+{{if .IsSigned}}
+	<a class="item{{if .PageIsPlanning}} active{{end}}" href="{{AppSubUrl}}/planning/board">Projects</a>
+	<a class="item{{if .PageIsDeployments}} active{{end}}" href="{{AppSubUrl}}/deployments">Deployments</a>
+{{end}}

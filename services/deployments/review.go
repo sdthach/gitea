@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package deployments holds the fork's deploy engine: review, the bypass allowlist, the
-// deployment grid, the run notifier, the overview and promotion itself.
+// deployment matrix, the run notifier, insights and promotion itself.
 package deployments
 
 import (
@@ -62,7 +62,7 @@ type ReviewRequest struct {
 	Review      *deployments_model.Review
 	Environment *deployments_model.Environment
 	Actor       *user_model.User
-	// Event is delivery.AuditApproved or delivery.AuditRejected. There is no third verb:
+	// Event is deployments_model.AuditApproved or deployments_model.AuditRejected. There is no third verb:
 	// the log records what happened, and nothing else releases a held job.
 	Event       string
 	Reason      string
@@ -119,7 +119,7 @@ func Decide(ctx context.Context, req ReviewRequest) (*ReviewDecision, error) {
 	if state == deployments_model.ReviewRejected {
 		return nil, refuse(
 			"this deploy was already rejected, and a rejection ends the deploy",
-			"Dispatch the deploy again from the grid; the rejected run does not proceed later.")
+			"Dispatch the deploy again from the Deployments page; the rejected run does not proceed later.")
 	}
 	for _, v := range votes {
 		if v.Event == deployments_model.AuditApproved && v.ActorID == req.Actor.ID {
@@ -158,7 +158,7 @@ func Decide(ctx context.Context, req ReviewRequest) (*ReviewDecision, error) {
 	}, nil
 }
 
-// maxHeldRunsPerRepo bounds how many hold rows the grid projects per repository. The grid is
+// maxHeldRunsPerRepo bounds how many hold rows the deployment matrix projects per repository. The matrix is
 // a page of releases, not an audit trail; a repository with more holds than this has a
 // backlog to work through on the reviews view.
 const maxHeldRunsPerRepo = 200
@@ -166,7 +166,7 @@ const maxHeldRunsPerRepo = 200
 // PendingReviewRuns reports which of a repository's runs are still waiting on a review.
 //
 // It reads every vote for the repository in ONE query and resolves each environment once, so
-// a page of the grid costs a fixed number of queries however many holds it covers.
+// a page of the matrix costs a fixed number of queries however many holds it covers.
 func PendingReviewRuns(ctx context.Context, repoID int64) (map[int64]bool, error) {
 	holds, _, err := deployments_model.FindReviews(ctx,
 		builder.Eq{"repo_id": repoID}, "id DESC", maxHeldRunsPerRepo, 0)
@@ -250,13 +250,13 @@ func applyHeldRuns(cells map[string][]Cell, heldRuns map[int64]bool) map[string]
 // where it speaks.
 //
 // A failure to read the reviews table degrades to the policy projection and logs, rather
-// than failing the whole grid: the grid is a view, and the gate at job assignment — not this
+// than failing the whole matrix: the matrix is a view, and the gate at job assignment — not this
 // symbol — is what actually withholds the job.
 func ProjectCellsHeld(ctx context.Context, repoID int64, environments, releases []string, events []Event, policies map[string]string) map[string][]Cell {
 	cells := ProjectCells(environments, releases, events, policies)
 	heldRuns, err := PendingReviewRuns(ctx, repoID)
 	if err != nil {
-		log.Error("delivery: read the pending reviews of repo %d: %v — the grid falls back to the environment policy for `⏸`; check the database is reachable", repoID, err)
+		log.Error("deployments: read the pending reviews of repo %d: %v — the deployment matrix falls back to the environment policy for `⏸`; check the database is reachable", repoID, err)
 		return cells
 	}
 	return applyHeldRuns(cells, heldRuns)

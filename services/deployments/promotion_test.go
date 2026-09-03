@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
+func TestDeploymentsWorkflowIDForEnvironment(t *testing.T) {
 	assert.Equal(t, "deploy-prod.yaml", WorkflowIDForEnvironment("PROD"))
 	assert.Equal(t, "deploy-qa.yaml", WorkflowIDForEnvironment("  qa "))
 	assert.Empty(t, WorkflowIDForEnvironment("  "), "an unnamed environment names no workflow")
@@ -23,10 +23,10 @@ func TestDeliveryWorkflowIDForEnvironment(t *testing.T) {
 	}
 }
 
-// TestDeliveryAcceptsRelease is the offer rule, which reads one column and no name: an
+// TestDeploymentsAcceptsRelease is the offer rule, which reads one column and no name: an
 // environment takes anything unless it has asked for finished releases only. Both
 // directions per environment.
-func TestDeliveryAcceptsRelease(t *testing.T) {
+func TestDeploymentsAcceptsRelease(t *testing.T) {
 	open := &deployments_model.Environment{Name: "anything-at-all"}
 	assert.True(t, AcceptsRelease(open, true), "an environment offers prereleases by default")
 	assert.True(t, AcceptsRelease(open, false), "and full releases too")
@@ -43,9 +43,9 @@ func succeeded(id int64, environment, tag string, at int64) Event {
 	return Event{ID: id, Environment: environment, ReleaseTag: tag, Event: deployments_model.AuditSucceeded, OccurredUnix: at}
 }
 
-// TestDeliveryEvaluateDependencies covers the three states the sequence rule distinguishes
+// TestDeploymentsEvaluateDependencies covers the three states the sequence rule distinguishes
 // for a single dependency: never held, held previously, and currently live.
-func TestDeliveryEvaluateDependencies(t *testing.T) {
+func TestDeploymentsEvaluateDependencies(t *testing.T) {
 	dep, state := EvaluateDependencies(nil, "v1.0", nil)
 	assert.Empty(t, dep)
 	assert.Equal(t, PredecessorNone, state, "an environment that declares no dependency has no sequence to check")
@@ -86,10 +86,10 @@ func TestDeliveryEvaluateDependencies(t *testing.T) {
 	assert.Equal(t, PredecessorHeld, state, "a later failure does not unmake the success that already happened")
 }
 
-// TestDeliveryEvaluateDependenciesRequiresEveryOne proves the generalisation: with several
+// TestDeploymentsEvaluateDependenciesRequiresEveryOne proves the generalisation: with several
 // dependencies every one of them must hold the release, and the first that has not is the
 // one named.
-func TestDeliveryEvaluateDependenciesRequiresEveryOne(t *testing.T) {
+func TestDeploymentsEvaluateDependenciesRequiresEveryOne(t *testing.T) {
 	events := []Event{
 		succeeded(1, "qa", "v1.0", 100),
 	}
@@ -103,9 +103,9 @@ func TestDeliveryEvaluateDependenciesRequiresEveryOne(t *testing.T) {
 	assert.Equal(t, PredecessorLive, state, "v1.0 is the only success staging has had, so it is still live there")
 }
 
-// TestDeliveryDecidePromotion covers the sequence-rule table, every row, in its accepting
+// TestDeploymentsDecidePromotion covers the sequence-rule table, every row, in its accepting
 // and its refusing case.
-func TestDeliveryDecidePromotion(t *testing.T) {
+func TestDeploymentsDecidePromotion(t *testing.T) {
 	warnOnly := &deployments_model.Environment{Name: "prod", DependsOn: []string{"staging"}}
 	gated := &deployments_model.Environment{Name: "prod", DependsOn: []string{"staging"}, RequirePriorDeployment: true}
 

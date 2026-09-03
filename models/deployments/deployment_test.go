@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeliveryValidateDeployment(t *testing.T) {
+func TestDeploymentsValidateDeployment(t *testing.T) {
 	valid := func() *Deployment {
 		return &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 7, Status: "success"}
 	}
@@ -42,8 +42,8 @@ func TestDeliveryValidateDeployment(t *testing.T) {
 	}
 }
 
-// TestDeliveryDeploymentsAreAppendOnly: one row per deploy, and the table is append-only.
-func TestDeliveryDeploymentsAreAppendOnly(t *testing.T) {
+// TestDeploymentsDeploymentsAreAppendOnly: one row per deploy, and the table is append-only.
+func TestDeploymentsDeploymentsAreAppendOnly(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -81,7 +81,7 @@ func TestDeliveryDeploymentsAreAppendOnly(t *testing.T) {
 	assert.NotEmpty(t, hubErr.SuggestedAction)
 }
 
-func TestDeliveryFindDeploymentsLimitsWithoutOffset(t *testing.T) {
+func TestDeploymentsFindDeploymentsLimitsWithoutOffset(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 

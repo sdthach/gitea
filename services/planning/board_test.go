@@ -35,7 +35,7 @@ func groupKeys(groups []Group) [][3]any {
 	return out
 }
 
-func TestDeliveryParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
+func TestPlanningParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
 	for _, name := range Groupings {
 		got, ok := ParseGrouping(name)
 		assert.True(t, ok, "%q is a declared grouping", name)
@@ -55,7 +55,7 @@ func TestDeliveryParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.
 }
 
 // By type, by assignee and by epic.
-func TestDeliveryBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
+func TestPlanningBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 	cards := []Card{
 		card(1, 11, []string{"type:bug", "epic:checkout"}, []string{"alice"}),
 		card(2, 12, []string{"type:task", "epic:checkout"}, []string{"bob"}),
@@ -77,7 +77,7 @@ func TestDeliveryBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 	assert.Equal(t, 3, none[0].Cards)
 }
 
-func TestDeliveryBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) {
+func TestPlanningBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) {
 	cards := []Card{card(1, 11, []string{"type:bug"}, nil), card(2, 13, []string{"type:task"}, nil)}
 	groups := BuildGroups(boardColumns, cards, GroupType)
 	require.Len(t, groups, 2)
@@ -93,7 +93,7 @@ func TestDeliveryBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) 
 }
 
 // Nothing disappears from a board because a field is unset.
-func TestDeliveryBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T) {
+func TestPlanningBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T) {
 	cards := []Card{
 		card(1, 11, []string{"type:bug"}, []string{"alice"}),
 		card(2, 11, nil, nil),
@@ -124,7 +124,7 @@ func TestDeliveryBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T)
 	}
 }
 
-func TestDeliveryBuildGroupsIsStableForACardCarryingTwoValues(t *testing.T) {
+func TestPlanningBuildGroupsIsStableForACardCarryingTwoValues(t *testing.T) {
 	cards := []Card{card(1, 11, []string{"type:task", "type:bug"}, []string{"zoe", "alice"})}
 
 	byType := BuildGroups(boardColumns, cards, GroupType)
@@ -136,7 +136,7 @@ func TestDeliveryBuildGroupsIsStableForACardCarryingTwoValues(t *testing.T) {
 	assert.Equal(t, "alice", byAssignee[0].Key)
 }
 
-func TestDeliveryBuildGroupsOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
+func TestPlanningBuildGroupsOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
 	groups := BuildGroups(boardColumns, nil, GroupType)
 	require.Len(t, groups, 1)
 	assert.True(t, groups[0].IsEmptyValue)
@@ -145,7 +145,7 @@ func TestDeliveryBuildGroupsOnAnEmptyBoardStillRendersItsColumns(t *testing.T) {
 }
 
 // The two writes and no others. A group move edits the grouping field itself.
-func TestDeliveryPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
+func TestPlanningPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
 	write, err := PlanGroupMove(GroupType, "bug")
 	require.NoError(t, err)
 	assert.Equal(t, GroupWrite{Kind: GroupWriteLabel, Prefix: TypeLabelPrefix, Label: "type:bug"}, write)
@@ -161,7 +161,7 @@ func TestDeliveryPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
 
 // Moving INTO the empty-value group clears the field rather than being refused: the group is
 // explicit, so it has to be reachable.
-func TestDeliveryPlanGroupMoveIntoTheEmptyGroupClearsTheField(t *testing.T) {
+func TestPlanningPlanGroupMoveIntoTheEmptyGroupClearsTheField(t *testing.T) {
 	write, err := PlanGroupMove(GroupType, "")
 	require.NoError(t, err)
 	assert.Equal(t, TypeLabelPrefix, write.Prefix)
@@ -174,7 +174,7 @@ func TestDeliveryPlanGroupMoveIntoTheEmptyGroupClearsTheField(t *testing.T) {
 }
 
 // A group move is refused when grouping is off, because there is nothing to write.
-func TestDeliveryPlanGroupMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
+func TestPlanningPlanGroupMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
 	_, err := PlanGroupMove(GroupNone, "bug")
 	require.Error(t, err)
 

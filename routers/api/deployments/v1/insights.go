@@ -80,8 +80,8 @@ func getInsightsEndpoint() *hubapi.Endpoint {
 				"one repository and one workflow at a time and cannot group. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit: a run in a repository the viewer " +
 				"cannot read appears in no figure. " +
-				"The /delivery/ci page is a client of this endpoint.",
-			Tag: "insights", Query: &insightsSpec, Response: "Overview", ResponseIs: "object",
+				"The /deployments/insights page is a client of this endpoint.",
+			Tag: "insights", Query: &insightsSpec, Response: "Insights", ResponseIs: "object",
 		},
 		Handler: GetInsights,
 	}
@@ -95,7 +95,7 @@ func getInsightsTrendsEndpoint() *hubapi.Endpoint {
 			Description: "One point per UTC day across the window, including days with no run — a gap would read as " +
 				"missing data rather than as a quiet day. " +
 				"The deployment count reads the fork's own deploy_deployment table rather than counting deploy " +
-				"runs, so this dashboard and the delivery grid share one source of truth. " +
+				"runs, so this dashboard and the deployments matrix share one source of truth. " +
 				"Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and " +
 				"one schema has to answer both.",
 			Tag: "insights", Query: &insightsSpec, Response: "TrendPoint", ResponseIs: "array",
@@ -126,12 +126,12 @@ func listInsightsReposEndpoint() *hubapi.Endpoint {
 // It is the one place the CI insights' permission filter is applied. It is fail-CLOSED: a
 // caller who can see no repository aggregates nothing, and a repo_id outside the accessible
 // set narrows to nothing rather than widening to every repository.
-func insightsOptions(ctx *context.APIContext, q *query.Query) (deployments_service.OverviewOptions, bool) {
+func insightsOptions(ctx *context.APIContext, q *query.Query) (deployments_service.InsightsOptions, bool) {
 	repoIDs, ok := accessibleRepoIDs(ctx)
 	if !ok {
-		return deployments_service.OverviewOptions{}, false
+		return deployments_service.InsightsOptions{}, false
 	}
-	return deployments_service.OverviewOptions{
+	return deployments_service.InsightsOptions{
 		RepoIDs: repoIDs,
 		RepoID:  hubapi.EqualityFilterInt(q, "repo_id"),
 		Window:  deployments_service.NewWindow(int(hubapi.EqualityFilterInt(q, "window_days")), time.Now()),
@@ -148,7 +148,7 @@ func GetInsights(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	overview, err := deployments_service.BuildOverview(ctx, opts)
+	overview, err := deployments_service.BuildInsights(ctx, opts)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return

@@ -130,8 +130,8 @@ func RecordsForRun(repo *repo_model.Repository, sender *user_model.User, run *ac
 		Branch:       branch,
 		RunID:        run.ID,
 		RunURL:       runURL,
-		// One code path records every deploy, whether started from the grid, from Gitea's
-		// own UI, or by a push, so the grid is complete by construction.
+		// One code path records every deploy, whether started from the Deployments page, from Gitea's
+		// own UI, or by a push, so the deployment matrix is complete by construction.
 		Source: deployments_model.SourceNotifier,
 	}
 	return deployment, audit, true
@@ -154,11 +154,11 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 		return
 	}
 	if err := deployments_model.AppendDeployment(ctx, deployment); err != nil {
-		log.Error("delivery: record deployment of %s to %s (run %d): %v — the grid will not show this deploy; check the database is reachable and re-run the workflow",
+		log.Error("deployments: record deployment of %s to %s (run %d): %v — the deployment matrix will not show this deploy; check the database is reachable and re-run the workflow",
 			deployment.ReleaseTag, deployment.Environment, deployment.RunID, err)
 	}
 	if err := deployments_model.AppendAuditEvent(ctx, audit); err != nil {
-		log.Error("delivery: record %s event for %s to %s (run %d): %v — the audit log is incomplete for this deploy; check the database is reachable",
+		log.Error("deployments: record %s event for %s to %s (run %d): %v — the audit log is incomplete for this deploy; check the database is reachable",
 			audit.Event, audit.ReleaseTag, audit.Environment, audit.RunID, err)
 	}
 
@@ -181,7 +181,7 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 			},
 		})
 		if csErr != nil {
-			log.Error("delivery: commit status for %s to %s: %v", deployment.SHA, deployment.Environment, csErr)
+			log.Error("deployments: commit status for %s to %s: %v", deployment.SHA, deployment.Environment, csErr)
 		}
 	}
 
@@ -194,10 +194,10 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 		if err == nil {
 			defer gitRepo.Close()
 			if err := git.UpdateRef(ctx, gitRepo, git.TagPrefix+tagName, deployment.SHA); err != nil {
-				log.Error("delivery: tag %s at %s: %v", tagName, deployment.SHA, err)
+				log.Error("deployments: tag %s at %s: %v", tagName, deployment.SHA, err)
 			}
 		} else {
-			log.Error("delivery: open repo %s for tag: %v", repo.FullName(), err)
+			log.Error("deployments: open repo %s for tag: %v", repo.FullName(), err)
 		}
 	}
 }

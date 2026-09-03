@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeliveryNormalizePromotionPolicyLowerCasesTheDependencies(t *testing.T) {
+func TestDeploymentsNormalizePromotionPolicyLowerCasesTheDependencies(t *testing.T) {
 	env := &Environment{Name: "prod", DependsOn: []string{"  STAGING ", "QA"}}
 	NormalizePromotionPolicy(env)
 	assert.Equal(t, []string{"staging", "qa"}, env.DependsOn,
@@ -25,9 +25,9 @@ func TestDeliveryNormalizePromotionPolicyLowerCasesTheDependencies(t *testing.T)
 	assert.Equal(t, []string{""}, blank.DependsOn)
 }
 
-// TestDeliveryValidatePromotionPolicy is the write path's negative case in both directions:
+// TestDeploymentsValidatePromotionPolicy is the write path's negative case in both directions:
 // every refusal AND the accepting case each policy shape reaches.
-func TestDeliveryValidatePromotionPolicy(t *testing.T) {
+func TestDeploymentsValidatePromotionPolicy(t *testing.T) {
 	cases := []struct {
 		name    string
 		env     *Environment
@@ -92,20 +92,20 @@ func TestDeliveryValidatePromotionPolicy(t *testing.T) {
 	}
 }
 
-// TestDeliveryValidateEnvironmentAppliesThePromotionPolicy pins the wiring rather than the
+// TestDeploymentsValidateEnvironmentAppliesThePromotionPolicy pins the wiring rather than the
 // helper: ValidateEnvironment is what every write path calls, so a policy rule that the
 // exported entry point does not reach is a rule nothing enforces.
-func TestDeliveryValidateEnvironmentAppliesThePromotionPolicy(t *testing.T) {
+func TestDeploymentsValidateEnvironmentAppliesThePromotionPolicy(t *testing.T) {
 	env := &Environment{Name: "prod", ReviewPolicy: PolicyNone, RequiredReviewers: 1, RequirePriorDeployment: true}
 	err := ValidateEnvironment(env)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "declares no dependency")
 }
 
-// TestDeliveryOverrideEventNeedsItsReason covers the write path: an
+// TestDeploymentsOverrideEventNeedsItsReason covers the write path: an
 // override that records no reason answers nothing the log is kept for, so AppendAuditEvent
 // refuses it. The accepting case is asserted beside it.
-func TestDeliveryOverrideEventNeedsItsReason(t *testing.T) {
+func TestDeploymentsOverrideEventNeedsItsReason(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 
 	without := &AuditEvent{
@@ -132,10 +132,10 @@ func TestDeliveryOverrideEventNeedsItsReason(t *testing.T) {
 	assert.Equal(t, "hotfix; staging is down", rows[0].Reason)
 }
 
-// TestDeliveryEnvironmentPolicyColumnsRoundTrip measures what an upgraded database looks
+// TestDeploymentsEnvironmentPolicyColumnsRoundTrip measures what an upgraded database looks
 // like: Sync adds the sequence-policy columns, and the JSON allowlists read back as empty when they
 // hold the NULL an existing row was given. Reading a struct tag is not measuring behaviour.
-func TestDeliveryEnvironmentPolicyColumnsRoundTrip(t *testing.T) {
+func TestDeploymentsEnvironmentPolicyColumnsRoundTrip(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 
 	env := &Environment{

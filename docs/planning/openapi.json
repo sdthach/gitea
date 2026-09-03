@@ -19,7 +19,7 @@
             "type": "array"
           },
           "group_by": {
-            "description": "The active group grouping. A view setting, never stored on the project.",
+            "description": "The active grouping. A view setting, never stored on the project.",
             "enum": [
               "type",
               "assignee",
@@ -114,7 +114,7 @@
             "type": "array"
           },
           "group_by": {
-            "description": "The active group grouping, reusing the board's own. A view setting, never stored.",
+            "description": "The active grouping, reusing the board's own. A view setting, never stored.",
             "enum": [
               "type",
               "assignee",
@@ -203,7 +203,7 @@
   "paths": {
     "/board": {
       "get": {
-        "description": "Gitea's project columns rendered vertically, with horizontal groups it does not model at all: project.Column carries title, sorting, colour and project and no group or row field, so groups are a rendering over rows the Projects API already returns — no schema change and no fork change. group_by selects the group dimension at view time and is never stored on the project, so two people may group the same board differently. An issue with no value for the active grouping falls into an explicit empty-value group; nothing disappears from a board because a field is unset. Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board. The /delivery/board page is a client of this endpoint.",
+        "description": "Gitea's project columns rendered vertically, with horizontal groups it does not model at all: project.Column carries title, sorting, colour and project and no group or row field, so groups are a rendering over rows the Projects API already returns — no schema change and no fork change. group_by selects the group dimension at view time and is never stored on the project, so two people may group the same board differently. An issue with no value for the active grouping falls into an explicit empty-value group; nothing disappears from a board because a field is unset. Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board. The /planning/board page is a client of this endpoint.",
         "operationId": "getBoard",
         "parameters": [
           {
@@ -947,7 +947,7 @@
     },
     "/roadmap": {
       "get": {
-        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /delivery/timeline page is a client of this endpoint.",
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /planning/roadmap page is a client of this endpoint.",
         "operationId": "getRoadmap",
         "parameters": [
           {
@@ -1065,7 +1065,7 @@
             "description": "No such resource."
           }
         },
-        "summary": "The delivery roadmap: one bar per issue, with dependency arrows",
+        "summary": "The roadmap: one bar per issue, with dependency arrows",
         "tags": [
           "roadmap"
         ]

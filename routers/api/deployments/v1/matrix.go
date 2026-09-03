@@ -38,8 +38,8 @@ func getDeploymentMatrixEndpoint() *hubapi.Endpoint {
 				"since nothing in Gitea expresses it. Every cell state is a projection over the append-only " +
 				"audit log; no row carries a mutable status column the matrix reads. " +
 				"The matrix spans the repositories the viewer can see, using Gitea's existing permission " +
-				"filtering. The /delivery/grid page is a client of this endpoint.",
-			Tag: "matrix", Query: &matrixSpec, Response: "GridRow", ResponseIs: "array",
+				"filtering. The /deployments page is a client of this endpoint.",
+			Tag: "matrix", Query: &matrixSpec, Response: "MatrixRow", ResponseIs: "array",
 		},
 		Handler: GetDeploymentMatrix,
 	}
@@ -56,7 +56,7 @@ func GetDeploymentMatrix(ctx *context.APIContext) {
 		return
 	}
 
-	rows, total, err := deployments_service.BuildGrid(ctx, deployments_service.GridOptions{
+	rows, total, err := deployments_service.BuildMatrix(ctx, deployments_service.MatrixOptions{
 		RepoIDs:     repoIDs,
 		RepoID:      hubapi.EqualityFilterInt(q, "repo_id"),
 		ReleaseTag:  hubapi.EqualityFilterString(q, "release_tag"),

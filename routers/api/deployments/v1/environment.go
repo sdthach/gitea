@@ -55,7 +55,7 @@ func listEnvironmentsEndpoint() *hubapi.Endpoint {
 			ID: "listEnvironments", Method: http.MethodGet, Path: "/environments",
 			Summary: "List environments across every repository the caller can see",
 			Description: "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). " +
-				"The /delivery/environments/{name} page is a client of this endpoint.",
+				"The /deployments/environments/{name} page is a client of this endpoint.",
 			Tag: "environments", Query: &environmentSpec, Response: "Environment", ResponseIs: "array",
 		},
 		Handler: ListEnvironments,

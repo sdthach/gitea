@@ -14,7 +14,7 @@ import (
 	"gitea.dev/services/hub/query"
 )
 
-// Repository is the delivery view of a repository: the identity the grid, the environment
+// Repository is the deployments view of a repository: the identity the deployment matrix, the environment
 // page and the CLI address a repository by, and nothing more.
 type Repository struct {
 	ID       int64  `json:"id"`
@@ -43,7 +43,7 @@ func listReposEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
 			ID: "listRepos", Method: http.MethodGet, Path: "/repos",
-			Summary: "List the repositories the caller can see delivery data for",
+			Summary: "List the repositories the caller can see deployment data for",
 			Description: "Scoped by Gitea's own permission filtering on the Actions unit, the same filter the " +
 				"cross-repository grid uses.",
 			Tag: "repos", Query: &repoSpec, Response: "Repository", ResponseIs: "array",

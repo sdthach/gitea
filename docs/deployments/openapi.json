@@ -158,80 +158,6 @@
         ],
         "type": "object"
       },
-      "DeploymentSummary": {
-        "properties": {
-          "approved_at": {
-            "description": "When approved, unix seconds, when ?fields=approved_at was asked for.",
-            "type": "integer"
-          },
-          "approved_by": {
-            "description": "Login of the approver, when ?fields=approved_by was asked for.",
-            "type": "string"
-          },
-          "branch": {
-            "description": "Branch, when the run was not dispatched against a tag.",
-            "type": "string"
-          },
-          "deployed_at": {
-            "description": "When deployed, unix seconds.",
-            "type": "integer"
-          },
-          "deployed_by": {
-            "description": "Login of whoever requested the deploy.",
-            "type": "string"
-          },
-          "duration_seconds": {
-            "description": "Deploy duration in seconds, when ?fields=duration was asked for.",
-            "type": "integer"
-          },
-          "environment": {
-            "description": "Environment deployed to, lower-cased.",
-            "type": "string"
-          },
-          "id": {
-            "description": "Primary key.",
-            "type": "integer"
-          },
-          "release_tag": {
-            "description": "Release tag deployed.",
-            "type": "string"
-          },
-          "repo_full_name": {
-            "description": "owner/name.",
-            "type": "string"
-          },
-          "repo_id": {
-            "description": "Repository the deployment belongs to.",
-            "type": "integer"
-          },
-          "run_id": {
-            "description": "Actions run id, when ?fields=run was asked for.",
-            "type": "integer"
-          },
-          "run_url": {
-            "description": "Link to the run, when ?fields=run was asked for.",
-            "type": "string"
-          },
-          "sha": {
-            "description": "Commit SHA, when ?fields=sha was asked for.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Run status at the moment the deployment was recorded.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "deployed_at",
-          "deployed_by",
-          "environment",
-          "id",
-          "release_tag",
-          "repo_id",
-          "status"
-        ],
-        "type": "object"
-      },
       "Environment": {
         "properties": {
           "can_write": {
@@ -320,10 +246,106 @@
         ],
         "type": "object"
       },
-      "GridRow": {
+      "Insights": {
+        "properties": {
+          "previous": {
+            "description": "The previous window of equal length, shown beside each tile for comparison.",
+            "type": "object"
+          },
+          "summary": {
+            "description": "The selected window's Summary.",
+            "type": "object"
+          },
+          "truncated": {
+            "description": "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "previous",
+          "summary",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "InsightsDeployments": {
+        "properties": {
+          "approved_at": {
+            "description": "When approved, unix seconds, when ?fields=approved_at was asked for.",
+            "type": "integer"
+          },
+          "approved_by": {
+            "description": "Login of the approver, when ?fields=approved_by was asked for.",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch, when the run was not dispatched against a tag.",
+            "type": "string"
+          },
+          "deployed_at": {
+            "description": "When deployed, unix seconds.",
+            "type": "integer"
+          },
+          "deployed_by": {
+            "description": "Login of whoever requested the deploy.",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "description": "Deploy duration in seconds, when ?fields=duration was asked for.",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "Environment deployed to, lower-cased.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Primary key.",
+            "type": "integer"
+          },
+          "release_tag": {
+            "description": "Release tag deployed.",
+            "type": "string"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the deployment belongs to.",
+            "type": "integer"
+          },
+          "run_id": {
+            "description": "Actions run id, when ?fields=run was asked for.",
+            "type": "integer"
+          },
+          "run_url": {
+            "description": "Link to the run, when ?fields=run was asked for.",
+            "type": "string"
+          },
+          "sha": {
+            "description": "Commit SHA, when ?fields=sha was asked for.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Run status at the moment the deployment was recorded.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployed_at",
+          "deployed_by",
+          "environment",
+          "id",
+          "release_tag",
+          "repo_id",
+          "status"
+        ],
+        "type": "object"
+      },
+      "MatrixRow": {
         "properties": {
           "cells": {
-            "description": "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run.",
+            "description": "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a matrix spanning repositories. A cell opens its run.",
             "items": {
               "type": "object"
             },
@@ -355,28 +377,6 @@
           "release_tag",
           "repo_full_name",
           "repo_id"
-        ],
-        "type": "object"
-      },
-      "Overview": {
-        "properties": {
-          "previous": {
-            "description": "The previous window of equal length, shown beside each tile for comparison.",
-            "type": "object"
-          },
-          "summary": {
-            "description": "The selected window's Summary.",
-            "type": "object"
-          },
-          "truncated": {
-            "description": "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "previous",
-          "summary",
-          "truncated"
         ],
         "type": "object"
       },
@@ -1617,7 +1617,7 @@
             "description": "No such resource."
           }
         },
-        "summary": "List delivery audit events across every repository the caller can see",
+        "summary": "List deployment audit events across every repository the caller can see",
         "tags": [
           "audit"
         ]
@@ -1625,7 +1625,7 @@
     },
     "/deployments": {
       "get": {
-        "description": "Append-only: deploying a release to an environment twice leaves two rows, never one upserted row, or the grid could not show that a version was deployed somewhere previously. Pages by cursor; the continuation token is in the X-Next-Cursor header and in Link rel=next. Scoped by Gitea's own permission filtering on the Actions unit.",
+        "description": "Append-only: deploying a release to an environment twice leaves two rows, never one upserted row, or the deployment matrix could not show that a version was deployed somewhere previously. Pages by cursor; the continuation token is in the X-Next-Cursor header and in Link rel=next. Scoped by Gitea's own permission filtering on the Actions unit.",
         "operationId": "listDeployments",
         "parameters": [
           {
@@ -2271,7 +2271,7 @@
     },
     "/deployments/matrix": {
       "get": {
-        "description": "Releases are rows, environments are columns in configured order — sequence is configuration, since nothing in Gitea expresses it. Every cell state is a projection over the append-only audit log; no row carries a mutable status column the matrix reads. The matrix spans the repositories the viewer can see, using Gitea's existing permission filtering. The /delivery/grid page is a client of this endpoint.",
+        "description": "Releases are rows, environments are columns in configured order — sequence is configuration, since nothing in Gitea expresses it. Every cell state is a projection over the append-only audit log; no row carries a mutable status column the matrix reads. The matrix spans the repositories the viewer can see, using Gitea's existing permission filtering. The /deployments page is a client of this endpoint.",
         "operationId": "getDeploymentMatrix",
         "parameters": [
           {
@@ -2326,7 +2326,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/GridRow"
+                    "$ref": "#/components/schemas/MatrixRow"
                   },
                   "type": "array"
                 }
@@ -2373,7 +2373,7 @@
     },
     "/environments": {
       "get": {
-        "description": "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). The /delivery/environments/{name} page is a client of this endpoint.",
+        "description": "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). The /deployments/environments/{name} page is a client of this endpoint.",
         "operationId": "listEnvironments",
         "parameters": [
           {
@@ -3326,7 +3326,7 @@
     },
     "/insights": {
       "get": {
-        "description": "Repositories active/inactive, workflows active/disabled, and runs by state with success rate and total duration, beside the previous window of equal length. The composite exists to save round trips, NEVER as the only way to reach the data: every number in it is independently queryable from /runs, /workflows and /insights/repos. Aggregates are computed in process over Gitea's own action_run, since its Actions API lists runs one repository and one workflow at a time and cannot group. Scoped by Gitea's own permission filtering on the Actions unit: a run in a repository the viewer cannot read appears in no figure. The /delivery/ci page is a client of this endpoint.",
+        "description": "Repositories active/inactive, workflows active/disabled, and runs by state with success rate and total duration, beside the previous window of equal length. The composite exists to save round trips, NEVER as the only way to reach the data: every number in it is independently queryable from /runs, /workflows and /insights/repos. Aggregates are computed in process over Gitea's own action_run, since its Actions API lists runs one repository and one workflow at a time and cannot group. Scoped by Gitea's own permission filtering on the Actions unit: a run in a repository the viewer cannot read appears in no figure. The /deployments/insights page is a client of this endpoint.",
         "operationId": "getInsights",
         "parameters": [
           {
@@ -3371,7 +3371,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Overview"
+                  "$ref": "#/components/schemas/Insights"
                 }
               }
             },
@@ -3823,7 +3823,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/DeploymentSummary"
+                    "$ref": "#/components/schemas/InsightsDeployments"
                   },
                   "type": "array"
                 }
@@ -4162,7 +4162,7 @@
     },
     "/insights/trends": {
       "get": {
-        "description": "One point per UTC day across the window, including days with no run — a gap would read as missing data rather than as a quiet day. The deployment count reads the fork's own deploy_deployment table rather than counting deploy runs, so this dashboard and the delivery grid share one source of truth. Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and one schema has to answer both.",
+        "description": "One point per UTC day across the window, including days with no run — a gap would read as missing data rather than as a quiet day. The deployment count reads the fork's own deploy_deployment table rather than counting deploy runs, so this dashboard and the deployments matrix share one source of truth. Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and one schema has to answer both.",
         "operationId": "getInsightsTrends",
         "parameters": [
           {
@@ -4511,7 +4511,7 @@
             "description": "No such resource."
           }
         },
-        "summary": "List the repositories the caller can see delivery data for",
+        "summary": "List the repositories the caller can see deployment data for",
         "tags": [
           "repos"
         ]
@@ -5847,7 +5847,7 @@
             "description": "No such resource."
           }
         },
-        "summary": "List a repository's releases, the rows of the grid",
+        "summary": "List a repository's releases, the rows of the deployment matrix",
         "tags": [
           "releases"
         ]

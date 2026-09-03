@@ -251,7 +251,7 @@ var reviewGateDeps = productionReviewDeps
 func JobIsHeldForReview(ctx context.Context, repoID, jobID int64) bool {
 	gated, err := reviewGateDeps.repoIsGated(ctx, repoID)
 	if err != nil {
-		log.Error("delivery: read the review policies of repo %d: %v — holding job %d unassigned; check the database is reachable, the runner retries on its next poll", repoID, err, jobID)
+		log.Error("deployments: read the review policies of repo %d: %v — holding job %d unassigned; check the database is reachable, the runner retries on its next poll", repoID, err, jobID)
 		return true
 	}
 	if !gated {
@@ -262,13 +262,13 @@ func JobIsHeldForReview(ctx context.Context, repoID, jobID int64) bool {
 
 	job, err := reviewGateDeps.loadJob(ctx, repoID, jobID)
 	if err != nil {
-		log.Error("delivery: load job %d of repo %d: %v — holding it unassigned; check the database is reachable, the runner retries on its next poll", jobID, repoID, err)
+		log.Error("deployments: load job %d of repo %d: %v — holding it unassigned; check the database is reachable, the runner retries on its next poll", jobID, repoID, err)
 		return true
 	}
 
 	environment, err := reviewGateDeps.environment(ctx, job)
 	if err != nil {
-		log.Error("delivery: resolve the environment of job %d: %v — holding it unassigned; check the workflow file is readable at the run's commit", jobID, err)
+		log.Error("deployments: resolve the environment of job %d: %v — holding it unassigned; check the workflow file is readable at the run's commit", jobID, err)
 		return true
 	}
 	if environment == "" {
@@ -278,7 +278,7 @@ func JobIsHeldForReview(ctx context.Context, repoID, jobID int64) bool {
 
 	env, err := reviewGateDeps.environmentRecord(ctx, repoID, environment)
 	if err != nil {
-		log.Error("delivery: read environment %q of repo %d: %v — holding job %d unassigned; create the environment, or set its review_policy to \"none\"", environment, repoID, err, jobID)
+		log.Error("deployments: read environment %q of repo %d: %v — holding job %d unassigned; create the environment, or set its review_policy to \"none\"", environment, repoID, err, jobID)
 		return true
 	}
 	if env.ReviewPolicy == "" || env.ReviewPolicy == PolicyNone {
@@ -287,13 +287,13 @@ func JobIsHeldForReview(ctx context.Context, repoID, jobID int64) bool {
 
 	hold, err := reviewGateDeps.hold(ctx, job, environment)
 	if err != nil {
-		log.Error("delivery: record the review hold for job %d in %q: %v — holding it unassigned; check the database is reachable, the runner retries on its next poll", jobID, environment, err)
+		log.Error("deployments: record the review hold for job %d in %q: %v — holding it unassigned; check the database is reachable, the runner retries on its next poll", jobID, environment, err)
 		return true
 	}
 
 	votes, err := reviewGateDeps.votes(ctx, hold)
 	if err != nil {
-		log.Error("delivery: read the reviews cast on run %d in %q: %v — holding job %d unassigned; check the database is reachable", hold.RunID, environment, err, jobID)
+		log.Error("deployments: read the reviews cast on run %d in %q: %v — holding job %d unassigned; check the database is reachable", hold.RunID, environment, err, jobID)
 		return true
 	}
 

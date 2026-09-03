@@ -52,7 +52,7 @@ var runSpec = query.Spec{
 	Paging:       query.PagingOffset,
 }
 
-// Run is the delivery view of an Actions run. It carries run_url so every row links out to
+// Run is the deployments view of an Actions run. It carries run_url so every row links out to
 // Gitea's own run page: the insights duplicate no Gitea page.
 type Run struct {
 	ID              int64  `json:"id"`

@@ -17,7 +17,7 @@ Commands:
   issue-move-milestone  Move an issue between the chart's milestone rows
   issue-set-dates       Set a bar's start and end
   milestone-create      Create a milestone row
-  roadmap               The delivery roadmap: one bar per issue, with dependency arrows
+  roadmap               The roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -350,7 +350,7 @@ Flags:
 ## gitea-planning roadmap
 
 ```
-gitea-planning roadmap — The delivery roadmap: one bar per issue, with dependency arrows
+gitea-planning roadmap — The roadmap: one bar per issue, with dependency arrows
 
   GET /roadmap
 

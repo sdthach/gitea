@@ -14,10 +14,10 @@ import (
 // rulerStart is a Monday, so the week ticks land on it and the labels are checkable by eye.
 var rulerStart = time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
 
-// TestDeliveryRulerUnitFollowsTheSpanAtEveryBoundary walks each row of the unit table and the
+// TestPlanningRulerUnitFollowsTheSpanAtEveryBoundary walks each row of the unit table and the
 // second either side of it: a ruler that stays in days across a two-year plan is the failure
 // this catches, and so is one that jumps a unit early.
-func TestDeliveryRulerUnitFollowsTheSpanAtEveryBoundary(t *testing.T) {
+func TestPlanningRulerUnitFollowsTheSpanAtEveryBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		end  time.Time
@@ -40,9 +40,9 @@ func TestDeliveryRulerUnitFollowsTheSpanAtEveryBoundary(t *testing.T) {
 	}
 }
 
-// TestDeliveryRulerTicksAlignToUnitBoundariesInUTC is what makes the ruler readable: a tick
+// TestPlanningRulerTicksAlignToUnitBoundariesInUTC is what makes the ruler readable: a tick
 // is a date, not an offset from whenever the first bar happens to start.
-func TestDeliveryRulerTicksAlignToUnitBoundariesInUTC(t *testing.T) {
+func TestPlanningRulerTicksAlignToUnitBoundariesInUTC(t *testing.T) {
 	// Mid-afternoon on a Wednesday: every unit has to round back to its own boundary.
 	from := time.Date(2026, 3, 4, 15, 30, 0, 0, time.UTC)
 
@@ -70,9 +70,9 @@ func TestDeliveryRulerTicksAlignToUnitBoundariesInUTC(t *testing.T) {
 	assert.Equal(t, "Q2 2026", ticks[1].Label)
 }
 
-// TestDeliveryRulerCoversTheWholeSpanAndIsBounded checks the two ends of the tick loop: the
+// TestPlanningRulerCoversTheWholeSpanAndIsBounded checks the two ends of the tick loop: the
 // last tick is inside the span, and an absurd span does not build gridlines nobody reads.
-func TestDeliveryRulerCoversTheWholeSpanAndIsBounded(t *testing.T) {
+func TestPlanningRulerCoversTheWholeSpanAndIsBounded(t *testing.T) {
 	_, ticks := RulerFor(rulerStart.Unix(), rulerStart.AddDate(0, 0, 14).Unix())
 	assert.Len(t, ticks, 15, "both endpoints are inside a labelled day")
 	assert.Equal(t, rulerStart.AddDate(0, 0, 14).Unix(), ticks[len(ticks)-1].Unix)

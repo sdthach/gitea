@@ -67,3 +67,30 @@ func TestDeploymentsPagesEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestSwimlanesEnabled(t *testing.T) {
+	previous := setting.CfgProvider
+	t.Cleanup(func() { setting.CfgProvider = previous })
+
+	setting.CfgProvider = nil
+	assert.False(t, SwimlanesEnabled(), "unlike the pages, this changes a page the fork does not own, so it defaults off")
+
+	cases := map[string]bool{
+		"":                                       false,
+		"[delivery]\n":                           false,
+		"[delivery]\nENABLE_SWIMLANES = true":    true,
+		"[deployments]\nENABLE_SWIMLANES = true": false, // swimlanes decorate the board, a planning page, not deployments
+		"[planning]\n":                           false,
+		"[planning]\nENABLE_SWIMLANES = true":    true,
+		// the new section wins when both are set.
+		"[delivery]\nENABLE_SWIMLANES = true\n[planning]\nENABLE_SWIMLANES = false": false,
+	}
+	for ini, want := range cases {
+		t.Run(ini, func(t *testing.T) {
+			provider, err := setting.NewConfigProviderFromData(ini)
+			require.NoError(t, err)
+			setting.CfgProvider = provider
+			assert.Equal(t, want, SwimlanesEnabled())
+		})
+	}
+}

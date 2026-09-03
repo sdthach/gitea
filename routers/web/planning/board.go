@@ -1,7 +1,7 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Package planning renders the fork's board and timeline pages. Each page is a client of a
+// Package planning renders the fork's board and roadmap pages. Each page is a client of a
 // documented /api/planning/v1 endpoint: the handler serves the page shell and nothing else,
 // and every figure on the page arrives over the public API.
 package planning
@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	tplBoard    templates.TplName = "delivery/board"
-	tplTimeline templates.TplName = "delivery/timeline"
+	tplBoard   templates.TplName = "planning/board"
+	tplRoadmap templates.TplName = "planning/roadmap"
 )
 
 // RouteRegistrar is the slice of *web.Router this package needs.
@@ -30,31 +30,31 @@ type RouteRegistrar interface {
 // RegisterRoutes mounts the planning pages. routers/web/hubroutes calls this from its own
 // RegisterRoutes, behind hub's own settings gate.
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
-	m.Get("/delivery/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
-	m.Get("/delivery/timeline", reqSignIn, hub_web.PlanningPagesEnabled, Timeline)
+	m.Get("/planning/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
+	m.Get("/planning/roadmap", reqSignIn, hub_web.PlanningPagesEnabled, Roadmap)
 }
 
-// Board renders /delivery/board: Gitea's project columns vertically, with horizontal groups
+// Board renders /planning/board: Gitea's project columns vertically, with horizontal groups
 // Gitea does not model. Group assignment, the empty-value group and both writes are the
 // server's, so the page and the CLI cannot disagree about which group a card is in.
 func Board(ctx *context.Context) {
 	ctx.Data["Title"] = "Board"
-	ctx.Data["PageIsDelivery"] = true
-	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + planningv1.BasePath
+	ctx.Data["PageIsPlanning"] = true
+	ctx.Data["APIBase"] = setting.AppSubURL + planningv1.BasePath
 	ctx.Data["AppSubURL"] = setting.AppSubURL
 	ctx.Data["Groupings"] = planning_service.Groupings
 	hub_web.SetPageToken(ctx)
 	ctx.HTML(http.StatusOK, tplBoard)
 }
 
-// Timeline renders /delivery/timeline: one bar per issue with dependency arrows. It needs
+// Roadmap renders /planning/roadmap: one bar per issue with dependency arrows. It needs
 // no Projects API, so it renders on a build whose board degrades. Every bar names the source
 // of each endpoint, and an inferred end is drawn distinctly from a recorded one.
-func Timeline(ctx *context.Context) {
-	ctx.Data["Title"] = "Delivery timeline"
-	ctx.Data["PageIsDelivery"] = true
-	ctx.Data["DeliveryAPIBase"] = setting.AppSubURL + planningv1.BasePath
+func Roadmap(ctx *context.Context) {
+	ctx.Data["Title"] = "Roadmap"
+	ctx.Data["PageIsPlanning"] = true
+	ctx.Data["APIBase"] = setting.AppSubURL + planningv1.BasePath
 	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
-	ctx.HTML(http.StatusOK, tplTimeline)
+	ctx.HTML(http.StatusOK, tplRoadmap)
 }

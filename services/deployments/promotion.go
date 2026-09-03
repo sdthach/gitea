@@ -22,7 +22,7 @@ import (
 )
 
 // PredecessorState is what the predecessor environment has done with the release being
-// deployed. It is read from the append-only log by the same projection the grid renders, so
+// deployed. It is read from the append-only log by the same projection the deployment matrix renders, so
 // the confirm step and the cell can never disagree about what happened.
 type PredecessorState string
 
@@ -81,7 +81,7 @@ func AcceptsRelease(env *deployments_model.Environment, isPrerelease bool) bool 
 // it, the last one's own current state (held or live) is what is reported.
 //
 // It is pure and reuses ProjectCells, so the confirm step reads the release's history
-// through the same projection the grid draws it with.
+// through the same projection the deployment matrix draws it with.
 func EvaluateDependencies(dependsOn []string, releaseTag string, events []Event) (dependency string, state PredecessorState) {
 	deps := make([]string, 0, len(dependsOn))
 	for _, raw := range dependsOn {
@@ -256,7 +256,7 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 	}
 
 	// A prerelease reaching an environment that takes finished builds only is refused
-	// wherever it is asked for, so the CLI is not a path around the rule the grid applies.
+	// wherever it is asked for, so the CLI is not a path around the rule the deployment matrix applies.
 	if !AcceptsRelease(env, release.IsPrerelease) {
 		out.Decision = Decision{
 			Outcome:          OutcomeRefuse,
@@ -334,7 +334,7 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 	out.RunURL = fmt.Sprintf("%s/actions/runs/%d", req.Repo.HTMLURL(ctx), runID)
 
 	// The deployment row and its `requested` event are written by the notifier, which sees
-	// this run like any other — one code path, so the grid is complete by construction.
+	// this run like any other — one code path, so the deployment matrix is complete by construction.
 	return out, nil
 }
 
@@ -343,7 +343,7 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 // sit at "in progress" over a run that does not exist.
 func dispatchFailed(ctx reqctx.RequestContext, req PromotionRequest, out *Promotion, message, action string) error {
 	if err := appendPromotionEvent(ctx, req, out, deployments_model.AuditFailed, ""); err != nil {
-		log.Error("delivery: record failed dispatch of %s to %s: %v", out.ReleaseTag, out.Environment, err)
+		log.Error("deployments: record failed dispatch of %s to %s: %v", out.ReleaseTag, out.Environment, err)
 	}
 	return &hub_model.Error{Message: message, SuggestedAction: action}
 }

@@ -17,7 +17,7 @@ import (
 // Deployment is one deployment of a release to an environment.
 //
 // The table is APPEND-ONLY. It is never upserted per (release_tag, environment): deploying
-// v1 to qa, then v2, then v1 again leaves three rows, and without all three the grid cannot
+// v1 to qa, then v2, then v1 again leaves three rows, and without all three the deployment matrix cannot
 // show that a version was deployed somewhere previously.
 //
 // Version identity belongs to the release. A row points at a release tag and carries no

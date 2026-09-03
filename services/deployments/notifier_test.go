@@ -18,7 +18,7 @@ import (
 	"xorm.io/builder"
 )
 
-func TestDeliveryEnvironmentFromWorkflowID(t *testing.T) {
+func TestDeploymentsEnvironmentFromWorkflowID(t *testing.T) {
 	cases := map[string]string{
 		"deploy-prod.yaml":                  "prod",
 		"deploy-qa.yml":                     "qa",
@@ -38,7 +38,7 @@ func TestDeliveryEnvironmentFromWorkflowID(t *testing.T) {
 	}
 }
 
-func TestDeliveryEventForRunStatus(t *testing.T) {
+func TestDeploymentsEventForRunStatus(t *testing.T) {
 	cases := map[actions_model.Status]string{
 		actions_model.StatusWaiting:   deployments_model.AuditRequested,
 		actions_model.StatusBlocked:   deployments_model.AuditRequested,
@@ -62,7 +62,7 @@ func deployRun(workflowID, ref string, status actions_model.Status) *actions_mod
 	}
 }
 
-func TestDeliveryRecordsForRun(t *testing.T) {
+func TestDeploymentsRecordsForRun(t *testing.T) {
 	repo := &repo_model.Repository{ID: 1, OwnerName: "user2", Name: "repo1"}
 	sender := &user_model.User{ID: 2, Name: "user2"}
 
@@ -121,10 +121,10 @@ func TestDeliveryRecordsForRun(t *testing.T) {
 	})
 }
 
-// TestDeliveryNotifierWritesTheLog exercises the exported entry point Gitea's own notifier
+// TestDeploymentsNotifierWritesTheLog exercises the exported entry point Gitea's own notifier
 // registry calls — not the pure helper underneath it — so a wrapper that dropped the write
 // could not pass.
-func TestDeliveryNotifierWritesTheLog(t *testing.T) {
+func TestDeploymentsNotifierWritesTheLog(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 

@@ -25,7 +25,7 @@ func managed(in BarInput) BarInput {
 }
 
 // Each of the three start sources, with the source label asserted.
-func TestDeliveryResolveBarNamesItsStartSource(t *testing.T) {
+func TestPlanningResolveBarNamesItsStartSource(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, EffortSeconds: 2 * 86400}))
 	require.True(t, ok)
 	assert.Equal(t, StartFromProgress, bar.StartSource, "a recorded ccpm start wins")
@@ -45,7 +45,7 @@ func TestDeliveryResolveBarNamesItsStartSource(t *testing.T) {
 
 // Each of the three end sources, with the source label asserted, and the inferred one
 // distinguishable from the recorded ones.
-func TestDeliveryResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) {
+func TestPlanningResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed, DeadlineUnix: deadline}))
 	require.True(t, ok)
 	assert.Equal(t, EndFromClosed, bar.EndSource, "a close time outranks a deadline")
@@ -68,7 +68,7 @@ func TestDeliveryResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) 
 
 // A task with a recorded start and a close time draws from actuals; one with neither
 // draws from created plus estimate and is visually distinct.
-func TestDeliveryResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing.T) {
+func TestPlanningResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing.T) {
 	actual, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed}))
 	require.True(t, ok)
 	assert.Equal(t, StartFromProgress, actual.StartSource)
@@ -83,7 +83,7 @@ func TestDeliveryResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing
 	assert.Equal(t, created+DefaultEffortDays*86400, guess.EndUnix, "an unstated estimate still gives the bar a width")
 }
 
-func TestDeliveryResolveBarClampsAnEndThatPrecedesItsStart(t *testing.T) {
+func TestPlanningResolveBarClampsAnEndThatPrecedesItsStart(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, DeadlineUnix: created - 86400}))
 	require.True(t, ok)
 	assert.Equal(t, EndFromDeadline, bar.EndSource, "a deadline before the start is real data and keeps its source")
@@ -91,7 +91,7 @@ func TestDeliveryResolveBarClampsAnEndThatPrecedesItsStart(t *testing.T) {
 }
 
 // An issue ccpm does not manage is listed with the reason, never given a bar.
-func TestDeliveryUnmanagedIssueGetsNoBarAndOneStatedReason(t *testing.T) {
+func TestPlanningUnmanagedIssueGetsNoBarAndOneStatedReason(t *testing.T) {
 	in := BarInput{IssueID: 9002, Number: 7, Title: "filed by hand", URL: "/acme/widgets/issues/7", CreatedUnix: created}
 
 	_, ok := ResolveBar(in)
@@ -105,7 +105,7 @@ func TestDeliveryUnmanagedIssueGetsNoBarAndOneStatedReason(t *testing.T) {
 }
 
 // A hard gate and a sequencing hint do not read the same on a schedule.
-func TestDeliveryArrowKindPerRelationType(t *testing.T) {
+func TestPlanningArrowKindPerRelationType(t *testing.T) {
 	for _, word := range []string{"depends_on", "blocked-by", "blocked_by", "blocks"} {
 		kind, ok := ArrowKindFor(word)
 		require.True(t, ok, word)
@@ -125,14 +125,14 @@ func TestDeliveryArrowKindPerRelationType(t *testing.T) {
 	}
 }
 
-func TestDeliveryParseStartedMarkerReadsCcpmsOwnRecord(t *testing.T) {
+func TestPlanningParseStartedMarkerReadsCcpmsOwnRecord(t *testing.T) {
 	body := "## Progress Update\n\n---\n*Progress: 40%*\n\n<!-- ccpm:started=2026-08-31T22:33:25Z -->\n"
 	assert.Equal(t, "2026-08-31T22:33:25Z", ParseStartedMarker(body))
 	assert.Empty(t, ParseStartedMarker("a plain comment with no marker"),
 		"most comments are not progress updates, and that is not an error")
 }
 
-func TestDeliveryParseEffortSecondsReadsTheRenderedSection(t *testing.T) {
+func TestPlanningParseEffortSecondsReadsTheRenderedSection(t *testing.T) {
 	assert.Equal(t, 5*int64(86400), ParseEffortSeconds("### Effort Estimate\n\n- Size: M\n"))
 	assert.Equal(t, 1*int64(86400), ParseEffortSeconds("### Effort Estimate\n\n- Size: XS\n"))
 	assert.Equal(t, 20*int64(86400), ParseEffortSeconds("- size: xl"))
@@ -144,8 +144,8 @@ func TestDeliveryParseEffortSecondsReadsTheRenderedSection(t *testing.T) {
 }
 
 // The sequencing edges come from the rendered body, the enforced ones from
-// issue_dependency, so the timeline can always say which source an edge came from.
-func TestDeliveryParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T) {
+// issue_dependency, so the roadmap can always say which source an edge came from.
+func TestRoadmapParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T) {
 	body := "### Relations\n\nPredecessor #12\nSuccessor #13\nBlocked by #14\nRelated to #15\nCaused by #16\n"
 	assert.Equal(t, [][2]string{{"predecessor", "12"}, {"successor", "13"}}, ParseSequenceRelations(body))
 	assert.Empty(t, ParseSequenceRelations("### Description\n\nnothing here\n"))
@@ -153,7 +153,7 @@ func TestDeliveryParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T)
 
 // An epic or milestone row spans earliest start to latest end of its children, and its
 // progress is ccpm's existing task-close percentage.
-func TestDeliveryBuildRollupCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) {
+func TestPlanningBuildRollupCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 1, StartUnix: 300, EndUnix: 900, IsClosed: true},
 		{IssueID: 2, StartUnix: 100, EndUnix: 400},
@@ -172,7 +172,7 @@ func TestDeliveryBuildRollupCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) 
 	assert.False(t, ok, "a rollup over no bars is not a row")
 }
 
-func TestDeliveryBuildRollupsEmitsEpicsThenMilestones(t *testing.T) {
+func TestPlanningBuildRollupsEmitsEpicsThenMilestones(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 1, Epic: "checkout", StartUnix: 100, EndUnix: 200, MilestoneID: 4, Milestone: "beta"},
 		{IssueID: 2, Epic: "billing", StartUnix: 150, EndUnix: 900, IsClosed: true},
@@ -188,11 +188,11 @@ func TestDeliveryBuildRollupsEmitsEpicsThenMilestones(t *testing.T) {
 	assert.Equal(t, 0, rows[1].Progress)
 }
 
-// TestDeliveryBuildRollupsExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
+// TestPlanningBuildRollupsExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
 // check meaningful: ccpm puts epic:<name> on the epic's own issue beside type:epic, so
 // without the exclusion the parent counts among its own children and its declared window has
 // nothing left to be compared against.
-func TestDeliveryBuildRollupsExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
+func TestPlanningBuildRollupsExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 100, EndUnix: 5000},
 		{IssueID: 1, Number: 57, Epic: "checkout", Type: "story", StartUnix: 300, EndUnix: 900, IsClosed: true},
@@ -216,10 +216,10 @@ func TestDeliveryBuildRollupsExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) 
 	assert.Equal(t, 3, rows[1].Children, "a milestone counts every issue filed under it")
 }
 
-// TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren is the warning the chart is the
+// TestPlanningContainmentFlagsAnEpicThatEndsBeforeItsChildren is the warning the chart is the
 // only place to see, and the case it must NOT fire on: children running in parallel past no
 // deadline at all.
-func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
+func TestPlanningContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
 	// 2026-03-11 declared, 2026-03-25 derived: a fortnight of overhang.
 	declared := Bar{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 1772323200, EndUnix: 1773187200}
 	child := Bar{IssueID: 7, Number: 57, Epic: "checkout", Type: "story", StartUnix: 1772323200, EndUnix: 1774396800}
@@ -259,9 +259,9 @@ func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
 	assert.Zero(t, rows[0].IssueID)
 }
 
-// TestDeliveryRollupRowPartialWithdrawsItsProgress: a fraction of an unknown denominator is not
+// TestPlanningRollupRowPartialWithdrawsItsProgress: a fraction of an unknown denominator is not
 // a measurement, so a capped rollup publishes no percentage.
-func TestDeliveryRollupRowPartialWithdrawsItsProgress(t *testing.T) {
+func TestPlanningRollupRowPartialWithdrawsItsProgress(t *testing.T) {
 	row, ok := BuildRollup("epic", "checkout", "checkout", []Bar{
 		{IssueID: 1, StartUnix: 100, EndUnix: 200, IsClosed: true},
 		{IssueID: 2, StartUnix: 100, EndUnix: 200},
@@ -274,9 +274,9 @@ func TestDeliveryRollupRowPartialWithdrawsItsProgress(t *testing.T) {
 	assert.Zero(t, row.Progress)
 }
 
-// TestDeliveryResolveBarReadsItsTypeOffTheLabels: the chart cannot tell a story from a bug
+// TestPlanningResolveBarReadsItsTypeOffTheLabels: the chart cannot tell a story from a bug
 // from an epic without it, and the epic self-exclusion depends on the answer.
-func TestDeliveryResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
+func TestPlanningResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
 	bar, ok := ResolveBar(managed(BarInput{
 		Labels: []string{"epic:checkout", "type:story"}, Assignees: []string{"jo"},
 	}))
@@ -292,9 +292,9 @@ func TestDeliveryResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
 	assert.Empty(t, bar.Type, "an issue with no type: label has no type, rather than a guessed one")
 }
 
-// TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest mirrors the grouping parser: an
+// TestPlanningParseZoomAcceptsTheDeclaredSetAndRefusesTheRest mirrors the grouping parser: an
 // unknown value is refused rather than silently becoming the default.
-func TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
+func TestPlanningParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
 	for _, tc := range []struct {
 		raw  string
 		want Zoom
@@ -310,9 +310,9 @@ func TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
 	assert.Equal(t, ZoomIssue, zoom)
 }
 
-// TestDeliveryBuildRollupsListsAnEpicThatHasNoChildrenYet: a freshly filed epic has a window
+// TestPlanningBuildRollupsListsAnEpicThatHasNoChildrenYet: a freshly filed epic has a window
 // and no children, and drawing nothing for it would say nothing about it.
-func TestDeliveryBuildRollupsListsAnEpicThatHasNoChildrenYet(t *testing.T) {
+func TestPlanningBuildRollupsListsAnEpicThatHasNoChildrenYet(t *testing.T) {
 	declared := Bar{IssueID: 42, Number: 42, Epic: "lonely", Type: TypeEpic, StartUnix: 100, EndUnix: 900, EndInferred: true}
 
 	rows := BuildRollups([]Bar{declared})

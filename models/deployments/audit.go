@@ -16,7 +16,7 @@ import (
 	"xorm.io/builder"
 )
 
-// The audit event set, declared once. The enum is complete here so the grid projection has
+// The audit event set, declared once. The enum is complete here so the deployment matrix projection has
 // one closed set to switch on rather than a string it has to guess at.
 const (
 	AuditRequested = "requested"
@@ -97,13 +97,13 @@ func errAppendOnly(table string, id int64) error {
 func ValidateAuditEvent(e *AuditEvent) error {
 	if !slices.Contains(AuditEvents, e.Event) {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("%q is not a delivery audit event", e.Event),
+			Message:         fmt.Sprintf("%q is not a deployments audit event", e.Event),
 			SuggestedAction: "Use one of: " + strings.Join(AuditEvents, ", ") + ".",
 		}
 	}
 	if !slices.Contains(AuditSources, e.Source) {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("%q is not a delivery audit source", e.Source),
+			Message:         fmt.Sprintf("%q is not a deployments audit source", e.Source),
 			SuggestedAction: "Use one of: " + strings.Join(AuditSources, ", ") + ".",
 		}
 	}

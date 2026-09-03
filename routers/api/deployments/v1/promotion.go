@@ -95,7 +95,7 @@ func CreateDeployment(ctx *context.APIContext) {
 		return
 	}
 	// The same check the rest of Gitea makes for dispatching a workflow, applied in process.
-	// A CLI deploy is refused exactly where the grid refuses.
+	// A CLI deploy is refused exactly where the deployment matrix refuses.
 	if !perm.CanWrite(unit.TypeActions) {
 		hubapi.APIError(ctx, http.StatusForbidden, "forbidden",
 			"your account has no write access to the Actions unit of "+repo.FullName(),

@@ -28,7 +28,7 @@ import (
 func CanBypassEnvironmentSequence(ctx context.Context, env *deployments_model.Environment, user *user_model.User, isRepoAdmin bool) bool {
 	if env == nil || user == nil {
 		// Upstream dereferences its user without this guard because its only caller holds a
-		// signed-in one. The delivery API is reachable by an anonymous request that got past
+		// signed-in one. The deployments API is reachable by an anonymous request that got past
 		// the router, so the nil case is answered rather than panicked on.
 		return false
 	}

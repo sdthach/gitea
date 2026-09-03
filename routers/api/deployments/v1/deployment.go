@@ -59,7 +59,7 @@ func listDeploymentsEndpoint() *hubapi.Endpoint {
 			ID: "listDeployments", Method: http.MethodGet, Path: "/deployments",
 			Summary: "List deployments across every repository the caller can see",
 			Description: "Append-only: deploying a release to an environment twice leaves two rows, never one upserted row, " +
-				"or the grid could not show that a version was deployed somewhere previously. " +
+				"or the deployment matrix could not show that a version was deployed somewhere previously. " +
 				"Pages by cursor; the continuation token is in the " + hubapi.NextCursorHeader + " header and in Link rel=next. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "deployments", Query: &deploymentSpec, Response: "Deployment", ResponseIs: "array",
@@ -165,7 +165,7 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 }
 
 // accessibleRepoIDs resolves the repositories the caller can see, through Gitea's existing
-// permission filtering on the Actions unit — the same filter the grid uses.
+// permission filtering on the Actions unit — the same filter the deployment matrix uses.
 func accessibleRepoIDs(ctx *context.APIContext) ([]int64, bool) {
 	ids, err := repo_model.SearchRepositoryIDsByCondition(ctx,
 		repo_model.AccessibleRepositoryCondition(ctx.Doer, unit.TypeActions))

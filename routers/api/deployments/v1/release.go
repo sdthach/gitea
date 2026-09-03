@@ -37,7 +37,7 @@ var releaseSpec = query.Spec{
 	Paging:       query.PagingOffset,
 }
 
-// Release is the delivery view of a release. Releases own version identity: a deployment
+// Release is the deployments view of a release. Releases own version identity: a deployment
 // points at a release tag and carries no version string to be parsed.
 //
 // Nothing here is synced, cached or mirrored — it is read from Gitea's own Release model at
@@ -86,7 +86,7 @@ func listReleasesEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
 			ID: "listReleases", Method: http.MethodGet, Path: "/repos/{owner}/{repo}/releases",
-			Summary: "List a repository's releases, the rows of the grid",
+			Summary: "List a repository's releases, the rows of the deployment matrix",
 			Description: "Read from Gitea's own Release model at render time. Nothing is synced, cached or mirrored, " +
 				"so a release cut outside this feature appears immediately. " +
 				"Expand deployments to get every deployment of each release.",

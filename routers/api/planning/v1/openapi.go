@@ -21,7 +21,7 @@ var componentSchemas = map[string]any{
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
 		"project_id":     hubapi.Prop("integer", "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json."),
 		"title":          hubapi.Prop("string", "The board's title."),
-		"group_by":       hubapi.EnumProp("The active group grouping. A view setting, never stored on the project.", planning_service.Groupings),
+		"group_by":       hubapi.EnumProp("The active grouping. A view setting, never stored on the project.", planning_service.Groupings),
 		"columns":        hubapi.ArrayProp("object", "Gitea's own project columns, in its own order. Each carries column_id, title, color and default."),
 		"groups": hubapi.ArrayProp("object", "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, "+
 			"cards and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the "+
@@ -52,7 +52,7 @@ var componentSchemas = map[string]any{
 			"denominator is not a measurement."),
 		"unmanaged": hubapi.ArrayProp("object", "Issues with no bar, each with the reason and a suggested action. An issue ccpm does "+
 			"not manage has no start to draw and is listed rather than given a fabricated bar."),
-		"group_by": hubapi.EnumProp("The active group grouping, reusing the board's own. A view setting, never stored.", planning_service.Groupings),
+		"group_by": hubapi.EnumProp("The active grouping, reusing the board's own. A view setting, never stored.", planning_service.Groupings),
 		"zoom":     hubapi.EnumProp("The depth the chart is read at. At epic or milestone only rollup rows are listed and no bar is drawn.", planning_service.Zooms),
 		"groups": hubapi.ArrayProp("object", "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, "+
 			"and empty at a rolled-up zoom, which publishes no bars to group. Each group carries key, label, is_empty_value, "+

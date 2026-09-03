@@ -85,13 +85,13 @@ var componentSchemas = map[string]any{
 		"artifacts":     hubapi.ArrayProp("object", "The release's attachments."),
 		"deployments":   hubapi.ArrayProp("object", "Deployments of this release, when ?expand=deployments was asked for."),
 	}, "id", "repo_id", "tag_name", "target", "url", "created_unix"),
-	"GridRow": hubapi.ObjectSchema(map[string]any{
+	"MatrixRow": hubapi.ObjectSchema(map[string]any{
 		"repo_id":        hubapi.Prop("integer", "Repository the release belongs to."),
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
 		"release_tag":    hubapi.Prop("string", "The release this row renders."),
 		"release_url":    hubapi.Prop("string", "Link to the release; a release row opens the release."),
 		"created_unix":   hubapi.Prop("integer", "Release creation time, unix seconds."),
-		"cells":          hubapi.ArrayProp("object", "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run."),
+		"cells":          hubapi.ArrayProp("object", "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a matrix spanning repositories. A cell opens its run."),
 	}, "repo_id", "repo_full_name", "release_tag", "cells"),
 	"Promotion": hubapi.ObjectSchema(map[string]any{
 		"repo_id":                  hubapi.Prop("integer", "Repository the deploy targets."),
@@ -163,7 +163,7 @@ var componentSchemas = map[string]any{
 		"disabled_workflows":     hubapi.Prop("integer", "Workflow files the viewer's repositories have disabled."),
 	}, "window", "total_runs", "runs", "success_rate", "total_duration_seconds",
 		"active_repositories", "inactive_repositories", "active_workflows", "disabled_workflows"),
-	"Overview": hubapi.ObjectSchema(map[string]any{
+	"Insights": hubapi.ObjectSchema(map[string]any{
 		"summary":   hubapi.Prop("object", "The selected window's Summary."),
 		"previous":  hubapi.Prop("object", "The previous window of equal length, shown beside each tile for comparison."),
 		"truncated": hubapi.Prop("boolean", "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so."),
@@ -205,7 +205,7 @@ var componentSchemas = map[string]any{
 		"created_unix": hubapi.Prop("integer", "Creation time, unix seconds."),
 		"updated_unix": hubapi.Prop("integer", "Last update, unix seconds."),
 	}, "id", "repo_id", "name", "environment"),
-	"DeploymentSummary": hubapi.ObjectSchema(map[string]any{
+	"InsightsDeployments": hubapi.ObjectSchema(map[string]any{
 		"id":               hubapi.Prop("integer", "Primary key."),
 		"repo_id":          hubapi.Prop("integer", "Repository the deployment belongs to."),
 		"repo_full_name":   hubapi.Prop("string", "owner/name."),

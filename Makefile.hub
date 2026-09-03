@@ -32,7 +32,7 @@ hub-check: hub-test hub-generate-check hub-parity hub-spoke-check ## every hub g
 
 .PHONY: hub-integration
 # One unanchored pattern, not a list of prefixes: enumerating them silently dropped
-# TestDeliverySecretNarrowingEndToEnd and TestDeliveryJobEnvironmentReadsTheWorkflowFile,
-# which matched neither. Every hub test carries "Delivery" in its name.
+# TestDeploymentsSecretNarrowingEndToEnd and TestDeploymentsJobEnvironmentReadsTheWorkflowFile,
+# which matched neither. Every hub test carries "Planning" or "Deployments" in its name.
 hub-integration: ## run the hub fork's integration tests under Gitea's own harness
-	@$(MAKE) --no-print-directory "test-integration#Delivery"
+	@$(MAKE) --no-print-directory "test-integration#Planning\|Deployments"

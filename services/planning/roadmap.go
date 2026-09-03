@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// The delivery timeline draws one bar per issue with dependency arrows. It needs no
+// The roadmap draws one bar per issue with dependency arrows. It needs no
 // Projects API, so it renders on a build the board cannot.
 //
 // Gitea stores NO start date: models/issues/issue.go declares DeadlineUnix and ClosedUnix
@@ -316,7 +316,7 @@ var relationLine = regexp.MustCompile(`(?i)^(predecessor|successor)\s+#(\d+)\s*$
 
 // ParseSequenceRelations reads the sequencing edges out of an issue body. The enforced edges
 // are deliberately NOT read from here: they live in issue_dependency, and reading them from
-// the body too would make the timeline unable to say which source an edge came from.
+// the body too would make the roadmap unable to say which source an edge came from.
 //
 // It returns (word, number) pairs in the order they appear.
 func ParseSequenceRelations(body string) [][2]string {

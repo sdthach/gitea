@@ -138,7 +138,7 @@ var Commands = []hubcli.Command{
 		OperationID:  "getRoadmap",
 		Method:       "GET",
 		Path:         "/roadmap",
-		Summary:      "The delivery roadmap: one bar per issue, with dependency arrows",
+		Summary:      "The roadmap: one bar per issue, with dependency arrows",
 		PathParams:   nil,
 		QueryParams:  []string{"epic", "group_by", "limit", "milestone_id", "page", "repo_id", "state", "zoom"},
 		BodyParams:   nil,

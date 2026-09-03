@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeliveryAuditEnumsAreDeclaredOnce(t *testing.T) {
+func TestDeploymentsAuditEnumsAreDeclaredOnce(t *testing.T) {
 	assert.Equal(t,
 		[]string{"requested", "started", "succeeded", "failed", "cancelled", "approved", "rejected", "overridden"},
 		AuditEvents, "the event set is declared once, in order, with override appended rather than inserted")
 	assert.Equal(t, []string{"ui", "notifier", "reconcile"}, AuditSources)
 }
 
-func TestDeliveryValidateAuditEvent(t *testing.T) {
+func TestDeploymentsValidateAuditEvent(t *testing.T) {
 	valid := func() *AuditEvent {
 		return &AuditEvent{Event: AuditSucceeded, Source: SourceNotifier, RepoID: 1, Environment: "prod"}
 	}
@@ -47,9 +47,9 @@ func TestDeliveryValidateAuditEvent(t *testing.T) {
 	}
 }
 
-// TestDeliveryAuditIsAppendOnly: the log only grows, and it keeps
+// TestDeploymentsAuditIsAppendOnly: the log only grows, and it keeps
 // naming the actor after the Gitea user is gone.
-func TestDeliveryAuditIsAppendOnly(t *testing.T) {
+func TestDeploymentsAuditIsAppendOnly(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -83,7 +83,7 @@ func TestDeliveryAuditIsAppendOnly(t *testing.T) {
 	assert.Len(t, still, 2, "the refused write left the log untouched")
 }
 
-func TestDeliveryAuditStampsOccurredWhenTheCallerDoesNot(t *testing.T) {
+func TestDeploymentsAuditStampsOccurredWhenTheCallerDoesNot(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 

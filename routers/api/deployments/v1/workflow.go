@@ -14,7 +14,7 @@ import (
 
 // workflowSpec is the per-workflow statistics resource's whitelist declaration.
 //
-// Like the grid, these rows are a PROJECTION rather than a table: run counts, success rate
+// Like the deployment matrix, these rows are a PROJECTION rather than a table: run counts, success rate
 // and average duration are computed in process over the window's runs, because bucketing and
 // averaging in SQL would need constructs SQLite and PostgreSQL spell differently.
 // Filtering and sorting therefore select what to project instead of rendering into a SQL

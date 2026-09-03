@@ -362,10 +362,10 @@ func TestSubcommandHelpGoesToStdoutAndExitsZero(t *testing.T) {
 	}
 }
 
-// TestDeliveryRunsFilterComposesTheFailedRunsRequest is the CLI half: the command has to
+// TestDeploymentsRunsFilterComposesTheFailedRunsRequest is the CLI half: the command has to
 // compose exactly the request the page's failed-runs list makes, or the two would disagree
 // about what "failed" means.
-func TestDeliveryRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
+func TestDeploymentsRunsFilterComposesTheFailedRunsRequest(t *testing.T) {
 	rec := &recorder{body: "[]"}
 	withRecorder(t, rec)
 
