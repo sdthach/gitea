@@ -15,7 +15,7 @@ import (
 )
 
 // The CI overview adds NO table. Every figure it shows is read from Gitea's own action_run
-// and from the fork's delivery_deployment, so there is nothing to keep in step with either.
+// and from the fork's deploy_deployment, so there is nothing to keep in step with either.
 //
 // Aggregates are computed in process over reduced rows rather than in SQL. Grouping runs by
 // UTC day is the reason: SQLite spells it strftime and PostgreSQL spells it date_trunc, and

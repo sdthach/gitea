@@ -43,9 +43,10 @@ var spokes = map[string]spoke{
 	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
 	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if
 	// body unconditionally). Import plus guard is therefore four, not two.
-	"models/actions/task.go": {4, "task-assignment gate: one import plus a three-line `if ... { continue }` guard"},
-	".gitignore":             {4, "ignores the planning directory and the generated theme preview, with the preview's comment and separator; carries no fork logic"},
-	"Makefile":               {2, "one -include line per spoke makefile, Makefile.hub and Makefile.themes, so neither adds a target to it"},
+	"models/actions/task.go":      {4, "task-assignment gate: one import plus a three-line `if ... { continue }` guard"},
+	".gitignore":                  {4, "ignores the planning directory and the generated theme preview, with the preview's comment and separator; carries no fork logic"},
+	"Makefile":                    {2, "one -include line per spoke makefile, Makefile.hub and Makefile.themes, so neither adds a target to it"},
+	"custom/conf/app.example.ini": {14, "documents the [planning] and [deployments] settings sections; carries no fork logic"},
 }
 
 // overrides are upstream files the fork replaces wholesale rather than delegating from.

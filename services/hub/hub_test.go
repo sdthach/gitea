@@ -42,6 +42,9 @@ func TestInitMigratesAndSeeds(t *testing.T) {
 	count, err := db.GetEngine(ctx).Where("repo_id = ?", deployments_model.DefaultsRepoID).Count(new(deployments_model.Environment))
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, count, "Init seeds the configured set")
+	seeded, err := db.GetEngine(ctx).Where("repo_id = ? AND admins_can_bypass = ?", deployments_model.DefaultsRepoID, true).Count(new(deployments_model.Environment))
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, seeded, "seeded environments let administrators bypass, as they did before")
 
 	// Booting twice is safe.
 	require.NoError(t, Init(ctx))

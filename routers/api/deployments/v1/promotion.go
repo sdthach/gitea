@@ -50,7 +50,7 @@ func createDeploymentEndpoint() *hubapi.Endpoint {
 				"rule decided. With confirm true the environment's deploy workflow is dispatched at the release tag, as the " +
 				"calling user, so Gitea names the human who asked. " +
 				"Rolling back is this same call with a prior release tag; there is no separate rollback path. " +
-				"An environment that sets require_predecessor refuses a release its predecessor has never held, unless the " +
+				"An environment that sets require_prior_deployment refuses a release its dependencies have never held, unless the " +
 				"caller can bypass — the same helper and the same allowlist fields branch protection uses — in which case the " +
 				"override and its reason are appended to the audit log. " +
 				"Authorized by Gitea's own write check on the Actions unit.",

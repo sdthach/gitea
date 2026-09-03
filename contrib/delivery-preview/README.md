@@ -35,8 +35,8 @@ whatever `app.ini`'s `[delivery] DEFAULT_ENVIRONMENTS` names — `dev, qa, uat, 
 here, but nothing in the fork reads those words — and each gets a `deploy-<env>.yaml`
 declaring it. Labels keep the `type:` and `epic:` prefixes the board keys its lanes off.
 
-Gating is the seeder's choice, not the fork's: each environment names its `predecessor`, and
-`staging` and `prod` set `require_full_release` so prereleases stop at `uat`.
+Gating is the seeder's choice, not the fork's: each environment names its `depends_on`, and
+`staging` and `prod` set `releases_only` so prereleases stop at `uat`.
 
 Useful flags: `--repos`, `--issues`, `--releases`, `--users` (accounts per role),
 `--failure-rate`, `--wait-approvals`, `--seed` to repeat the content, `--tag` to repeat the

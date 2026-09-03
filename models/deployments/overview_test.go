@@ -115,7 +115,7 @@ func TestDeliveryFindRunFactsHonoursTheWindow(t *testing.T) {
 }
 
 // TestDeliveryFindDeploymentFactsReadsTheForksOwnTable: the daily trend's deployment count
-// comes from delivery_deployment, not from counting runs.
+// comes from deploy_deployment, not from counting runs.
 func TestDeliveryFindDeploymentFactsReadsTheForksOwnTable(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()

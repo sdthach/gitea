@@ -40,7 +40,7 @@
 				<tr><td>Target environment</td><td id="plan-environment">…</td></tr>
 				<tr><td>Release to deploy</td><td id="plan-release">…</td></tr>
 				<tr><td>Currently live there</td><td id="plan-live">…</td></tr>
-				<tr><td>Predecessor</td><td id="plan-predecessor">…</td></tr>
+				<tr><td>Depends on</td><td id="plan-depends-on">…</td></tr>
 				<tr><td>Workflow</td><td id="plan-workflow">…</td></tr>
 			</tbody>
 		</table>
@@ -124,8 +124,8 @@ function renderPlan(plan) {
 	text('#plan-release', plan.release_tag + (plan.is_prerelease ? ' (prerelease)' : '') +
 		(plan.is_rollback ? ' — this is a rollback' : ''));
 	text('#plan-live', plan.currently_live || 'nothing has ever succeeded here');
-	text('#plan-predecessor', plan.predecessor
-		? `${plan.predecessor} — ${plan.predecessor_state}`
+	text('#plan-depends-on', plan.depends_on && plan.depends_on.length
+		? `${plan.depends_on.join(', ')} — ${plan.predecessor_state}`
 		: 'none declared');
 	text('#plan-workflow', `${plan.workflow_id} at ${plan.ref}`);
 

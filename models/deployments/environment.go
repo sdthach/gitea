@@ -1,7 +1,7 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Package deployments holds the fork's environment, deployment, approval and audit
+// Package deployments holds the fork's environment, deployment, review and audit
 // aggregates, plus secret scoping and job-environment resolution, one file each.
 package deployments
 
@@ -18,7 +18,7 @@ import (
 	"xorm.io/builder"
 )
 
-// Approval policies. A new environment defaults to PolicyNone, so adding the fork
+// Review policies. A new environment defaults to PolicyNone, so adding the fork
 // changes no existing behaviour until a policy is set.
 const (
 	PolicyNone        = "none"
@@ -26,8 +26,8 @@ const (
 	PolicyOthersOnly  = "others_only"
 )
 
-// ApprovalPolicies is the complete policy set, declared once.
-var ApprovalPolicies = []string{PolicyNone, PolicyAnyApprover, PolicyOthersOnly}
+// ReviewPolicies is the complete policy set, declared once.
+var ReviewPolicies = []string{PolicyNone, PolicyAnyApprover, PolicyOthersOnly}
 
 // DefaultsRepoID marks the instance-wide default environment set. A row with this RepoID
 // is a template: a repository that has declared no environment of its own renders these.
@@ -35,37 +35,39 @@ const DefaultsRepoID int64 = 0
 
 // Environment is authoritative for which environments exist and what is scoped to them.
 // Column order is configuration read at render time; the model expresses no sequence beyond
-// the predecessor link below.
+// the dependency list below.
 type Environment struct {
 	ID                int64              `xorm:"pk autoincr" json:"id"`
 	RepoID            int64              `xorm:"INDEX UNIQUE(repo_name) NOT NULL DEFAULT 0" json:"repo_id"`
 	Name              string             `xorm:"VARCHAR(64) UNIQUE(repo_name) NOT NULL" json:"name"`
 	SortOrder         int64              `xorm:"NOT NULL DEFAULT 0" json:"sort_order"`
-	ApprovalPolicy    string             `xorm:"VARCHAR(32) NOT NULL DEFAULT 'none'" json:"approval_policy"`
-	RequiredApprovals int64              `xorm:"NOT NULL DEFAULT 1" json:"required_approvals"`
+	ReviewPolicy      string             `xorm:"VARCHAR(32) NOT NULL DEFAULT 'none'" json:"review_policy"`
+	RequiredReviewers int64              `xorm:"NOT NULL DEFAULT 1" json:"required_reviewers"`
 	CreatedUnix       timeutil.TimeStamp `xorm:"created NOT NULL" json:"created_unix"`
 	UpdatedUnix       timeutil.TimeStamp `xorm:"updated NOT NULL" json:"updated_unix"`
 
-	// The sequence policy and its bypass. RequirePredecessor defaults to false,
+	// The sequence policy and its bypass. RequirePriorDeployment defaults to false,
 	// so an environment with no policy only warns and never refuses.
 	// The three allowlist fields are branch protection's own, spelled exactly as
 	// models/git/protected_branch.go:46-48 spells them, so no gate models permission twice.
-	// BlockAdminOverride is upstream's BlockAdminMergeOverride without the "Merge",
-	// which names a step no deploy has; see promotion.go. RequireFullRelease is per
+	// AdminsCanBypass is upstream's BlockAdminMergeOverride without the "Merge" and without
+	// the negation — a repository admin passes when this is true, the opposite sense of the
+	// column it replaces (migration 3 backfills it as that column's negation); see
+	// promotion.go. ReleasesOnly is per
 	// environment rather than a list of names: an operator names environments whatever
 	// suits them, so which of them takes an unfinished build is a property of the row.
-	Predecessor            string  `xorm:"VARCHAR(64) NOT NULL DEFAULT ''" json:"predecessor"`
-	RequirePredecessor     bool    `xorm:"NOT NULL DEFAULT false" json:"require_predecessor"`
-	RequireFullRelease     bool    `xorm:"NOT NULL DEFAULT false" json:"require_full_release"`
-	BlockAdminOverride     bool    `xorm:"NOT NULL DEFAULT false" json:"block_admin_override"`
-	EnableBypassAllowlist  bool    `xorm:"NOT NULL DEFAULT false" json:"enable_bypass_allowlist"`
-	BypassAllowlistUserIDs []int64 `xorm:"JSON TEXT" json:"bypass_allowlist_user_ids"`
-	BypassAllowlistTeamIDs []int64 `xorm:"JSON TEXT" json:"bypass_allowlist_team_ids"`
+	DependsOn              []string `xorm:"JSON TEXT" json:"depends_on"`
+	RequirePriorDeployment bool     `xorm:"NOT NULL DEFAULT false" json:"require_prior_deployment"`
+	ReleasesOnly           bool     `xorm:"NOT NULL DEFAULT false" json:"releases_only"`
+	AdminsCanBypass        bool     `xorm:"NOT NULL DEFAULT true" json:"admins_can_bypass"`
+	RestrictReviewers      bool     `xorm:"NOT NULL DEFAULT false" json:"restrict_reviewers"`
+	ReviewerUserIDs        []int64  `xorm:"JSON TEXT" json:"reviewer_user_ids"`
+	ReviewerTeamIDs        []int64  `xorm:"JSON TEXT" json:"reviewer_team_ids"`
 }
 
 // TableName keeps every fork table under one prefix, so no fork table can collide with an
 // upstream one a later pin introduces.
-func (*Environment) TableName() string { return "delivery_environment" }
+func (*Environment) TableName() string { return "deploy_environment" }
 
 func init() {
 	db.RegisterModel(new(Environment))
@@ -75,6 +77,24 @@ func init() {
 // identifiers, so they are compared and stored lower-cased.
 func NormalizeEnvironmentName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// normalizeDependsOn drops every name that normalizes to empty or repeats one already kept.
+// NormalizePromotionPolicy only lowercases each entry, so depends_on: [""] or a duplicate
+// dependency would otherwise reach the row: EvaluateDependencies then reports the release
+// never held in an environment named "", where declaring no dependency at all reports none.
+func normalizeDependsOn(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, raw := range names {
+		name := NormalizeEnvironmentName(raw)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 // ValidateEnvironment refuses a row the API would otherwise persist. Every message carries
@@ -92,22 +112,22 @@ func ValidateEnvironment(env *Environment) error {
 			SuggestedAction: "Shorten the name to 64 characters or fewer.",
 		}
 	}
-	if !isKnownPolicy(env.ApprovalPolicy) {
+	if !isKnownPolicy(env.ReviewPolicy) {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("%q is not an approval policy", env.ApprovalPolicy),
-			SuggestedAction: "Use one of: " + strings.Join(ApprovalPolicies, ", ") + ".",
+			Message:         fmt.Sprintf("%q is not a review policy", env.ReviewPolicy),
+			SuggestedAction: "Use one of: " + strings.Join(ReviewPolicies, ", ") + ".",
 		}
 	}
-	if env.RequiredApprovals < 1 {
+	if env.RequiredReviewers < 1 {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("required_approvals is %d, which would make the gate unsatisfiable", env.RequiredApprovals),
-			SuggestedAction: "Set required_approvals to 1 or more, or set approval_policy to \"none\" to remove the gate.",
+			Message:         fmt.Sprintf("required_reviewers is %d, which would make the gate unsatisfiable", env.RequiredReviewers),
+			SuggestedAction: "Set required_reviewers to 1 or more, or set review_policy to \"none\" to remove the gate.",
 		}
 	}
 	return ValidatePromotionPolicy(env) // the sequence rule, in promotion.go
 }
 
-func isKnownPolicy(policy string) bool { return slices.Contains(ApprovalPolicies, policy) }
+func isKnownPolicy(policy string) bool { return slices.Contains(ReviewPolicies, policy) }
 
 // FindEnvironments lists environments matching cond, ordered by orderBy, with the
 // grammar's own paging applied by the caller.
@@ -171,11 +191,12 @@ func CreateEnvironment(ctx context.Context, env *Environment) error {
 	}
 	env.Name = NormalizeEnvironmentName(env.Name)
 	NormalizePromotionPolicy(env)
-	if env.ApprovalPolicy == "" {
-		env.ApprovalPolicy = PolicyNone
+	env.DependsOn = normalizeDependsOn(env.DependsOn)
+	if env.ReviewPolicy == "" {
+		env.ReviewPolicy = PolicyNone
 	}
-	if env.RequiredApprovals < 1 {
-		env.RequiredApprovals = 1
+	if env.RequiredReviewers < 1 {
+		env.RequiredReviewers = 1
 	}
 	if err := ValidateEnvironment(env); err != nil {
 		return err
@@ -193,6 +214,7 @@ func UpdateEnvironment(ctx context.Context, env *Environment) error {
 	}
 	env.Name = NormalizeEnvironmentName(env.Name)
 	NormalizePromotionPolicy(env)
+	env.DependsOn = normalizeDependsOn(env.DependsOn)
 	if err := ValidateEnvironment(env); err != nil {
 		return err
 	}

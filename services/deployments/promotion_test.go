@@ -31,8 +31,8 @@ func TestDeliveryAcceptsRelease(t *testing.T) {
 	assert.True(t, AcceptsRelease(open, true), "an environment offers prereleases by default")
 	assert.True(t, AcceptsRelease(open, false), "and full releases too")
 
-	closed := &deployments_model.Environment{Name: "anything-at-all", RequireFullRelease: true}
-	assert.False(t, AcceptsRelease(closed, true), "require_full_release refuses a prerelease")
+	closed := &deployments_model.Environment{Name: "anything-at-all", ReleasesOnly: true}
+	assert.False(t, AcceptsRelease(closed, true), "releases_only refuses a prerelease")
 	assert.True(t, AcceptsRelease(closed, false), "it still takes a full release")
 
 	assert.True(t, AcceptsRelease(nil, true), "a missing environment refuses nothing here; the caller has already 404ed")
@@ -43,38 +43,71 @@ func succeeded(id int64, environment, tag string, at int64) Event {
 	return Event{ID: id, Environment: environment, ReleaseTag: tag, Event: deployments_model.AuditSucceeded, OccurredUnix: at}
 }
 
-// TestDeliveryEvaluatePredecessor covers the three states the sequence rule distinguishes: never held,
-// held previously, and currently live.
-func TestDeliveryEvaluatePredecessor(t *testing.T) {
-	assert.Equal(t, PredecessorNone, EvaluatePredecessor("", "v1.0", nil),
-		"an environment that declares no predecessor has no sequence to check")
+// TestDeliveryEvaluateDependencies covers the three states the sequence rule distinguishes
+// for a single dependency: never held, held previously, and currently live.
+func TestDeliveryEvaluateDependencies(t *testing.T) {
+	dep, state := EvaluateDependencies(nil, "v1.0", nil)
+	assert.Empty(t, dep)
+	assert.Equal(t, PredecessorNone, state, "an environment that declares no dependency has no sequence to check")
 
-	assert.Equal(t, PredecessorNever, EvaluatePredecessor("staging", "v1.0", nil))
-	assert.Equal(t, PredecessorNever, EvaluatePredecessor("staging", "v1.0", []Event{
+	dep, state = EvaluateDependencies([]string{""}, "v1.0", nil)
+	assert.Empty(t, dep)
+	assert.Equal(t, PredecessorNone, state, "a depends_on holding only an empty name is the same as none")
+
+	dep, state = EvaluateDependencies([]string{"staging"}, "v1.0", nil)
+	assert.Equal(t, "staging", dep)
+	assert.Equal(t, PredecessorNever, state)
+
+	dep, state = EvaluateDependencies([]string{"staging"}, "v1.0", []Event{
 		succeeded(1, "qa", "v1.0", 100),
 		succeeded(2, "staging", "v0.9", 200),
-	}), "a success of a different release, or in a different environment, is not this release having held")
+	})
+	assert.Equal(t, "staging", dep)
+	assert.Equal(t, PredecessorNever, state, "a success of a different release, or in a different environment, is not this release having held")
 
-	assert.Equal(t, PredecessorLive, EvaluatePredecessor("staging", "v1.0", []Event{
+	dep, state = EvaluateDependencies([]string{"staging"}, "v1.0", []Event{
 		succeeded(1, "staging", "v1.0", 100),
-	}))
+	})
+	assert.Equal(t, "staging", dep)
+	assert.Equal(t, PredecessorLive, state)
 
-	assert.Equal(t, PredecessorHeld, EvaluatePredecessor("staging", "v1.0", []Event{
+	dep, state = EvaluateDependencies([]string{"staging"}, "v1.0", []Event{
 		succeeded(1, "staging", "v1.0", 100),
 		succeeded(2, "staging", "v1.1", 200),
-	}), "v1.0 held staging and v1.1 replaced it; the sequence was still satisfied")
+	})
+	assert.Equal(t, "staging", dep)
+	assert.Equal(t, PredecessorHeld, state, "v1.0 held staging and v1.1 replaced it; the sequence was still satisfied")
 
-	assert.Equal(t, PredecessorHeld, EvaluatePredecessor("STAGING", "v1.0", []Event{
+	dep, state = EvaluateDependencies([]string{"STAGING"}, "v1.0", []Event{
 		succeeded(1, "staging", "v1.0", 100),
 		{ID: 2, Environment: "staging", ReleaseTag: "v1.0", Event: deployments_model.AuditFailed, OccurredUnix: 200},
-	}), "a later failure does not unmake the success that already happened")
+	})
+	assert.Equal(t, "staging", dep)
+	assert.Equal(t, PredecessorHeld, state, "a later failure does not unmake the success that already happened")
+}
+
+// TestDeliveryEvaluateDependenciesRequiresEveryOne proves the generalisation: with several
+// dependencies every one of them must hold the release, and the first that has not is the
+// one named.
+func TestDeliveryEvaluateDependenciesRequiresEveryOne(t *testing.T) {
+	events := []Event{
+		succeeded(1, "qa", "v1.0", 100),
+	}
+	dep, state := EvaluateDependencies([]string{"qa", "staging"}, "v1.0", events)
+	assert.Equal(t, "staging", dep, "qa held it; staging is the first that has not")
+	assert.Equal(t, PredecessorNever, state)
+
+	both := append(append([]Event{}, events...), succeeded(2, "staging", "v1.0", 200))
+	dep, state = EvaluateDependencies([]string{"qa", "staging"}, "v1.0", both)
+	assert.Equal(t, "staging", dep, "once every dependency has held it, the last one is reported")
+	assert.Equal(t, PredecessorLive, state, "v1.0 is the only success staging has had, so it is still live there")
 }
 
 // TestDeliveryDecidePromotion covers the sequence-rule table, every row, in its accepting
 // and its refusing case.
 func TestDeliveryDecidePromotion(t *testing.T) {
-	warnOnly := &deployments_model.Environment{Name: "prod", Predecessor: "staging"}
-	gated := &deployments_model.Environment{Name: "prod", Predecessor: "staging", RequirePredecessor: true}
+	warnOnly := &deployments_model.Environment{Name: "prod", DependsOn: []string{"staging"}}
+	gated := &deployments_model.Environment{Name: "prod", DependsOn: []string{"staging"}, RequirePriorDeployment: true}
 
 	cases := []struct {
 		name       string
@@ -92,12 +125,12 @@ func TestDeliveryDecidePromotion(t *testing.T) {
 		{name: "flag on, held, can bypass — proceeds without needing a reason", env: gated, state: PredecessorHeld, canBypass: true, want: OutcomeProceed},
 		{name: "flag on, never held, cannot bypass — refused", env: gated, state: PredecessorNever, want: OutcomeRefuse},
 		{name: "flag on, never held, can bypass — offered as an override with a reason", env: gated, state: PredecessorNever, canBypass: true, want: OutcomeOverride, needReason: true},
-		{name: "no predecessor declared — nothing to decide", env: &deployments_model.Environment{Name: "dev"}, state: PredecessorNone, want: OutcomeProceed},
+		{name: "no dependency declared — nothing to decide", env: &deployments_model.Environment{Name: "dev"}, state: PredecessorNone, want: OutcomeProceed},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d := DecidePromotion(tc.env, tc.state, tc.canBypass)
+			d := DecidePromotion(tc.env, "staging", tc.state, tc.canBypass)
 			assert.Equal(t, tc.want, d.Outcome)
 			assert.Equal(t, tc.needReason, d.RequiresOverrideReason)
 			assert.Equal(t, tc.state, d.PredecessorState)

@@ -24,7 +24,7 @@ import (
 // The fork's integration tests run under Gitea's own harness, so they execute the way
 // upstream's do and survive a rebase.
 
-// deliveryFixtureEnvironments is how many rows models/fixtures/delivery_environment.yml
+// deliveryFixtureEnvironments is how many rows models/fixtures/deploy_environment.yml
 // defines at repo_id 0. Nothing about the count or the names is a fork default; an operator
 // names their own set in [delivery] DEFAULT_ENVIRONMENTS.
 const deliveryFixtureEnvironments = 5
@@ -45,7 +45,7 @@ func TestAPIDeliveryEnvironmentsAreListed(t *testing.T) {
 	names := make([]string, len(envs))
 	for i, env := range envs {
 		names[i] = env.Name
-		assert.Equal(t, deployments_model.PolicyNone, env.ApprovalPolicy, "adding the fork gates nothing until a policy is set")
+		assert.Equal(t, deployments_model.PolicyNone, env.ReviewPolicy, "adding the fork gates nothing until a policy is set")
 	}
 	assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, names, "environments render in configured order")
 
@@ -180,7 +180,7 @@ func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
 	var env deployments_model.Environment
 	DecodeJSON(t, resp, &env)
 	assert.Equal(t, "prod", env.Name, "environment names are identifiers, matched case-insensitively")
-	assert.Equal(t, deployments_model.PolicyNone, env.ApprovalPolicy)
+	assert.Equal(t, deployments_model.PolicyNone, env.ReviewPolicy)
 
 	// An unknown name is a hub error rendered through renderHubError, which carries a
 	// suggested next action.
@@ -197,10 +197,11 @@ func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
 }
 
 type deliveryEnvironmentRow struct {
-	ID       int64  `json:"id"`
-	RepoID   int64  `json:"repo_id"`
-	Name     string `json:"name"`
-	CanWrite bool   `json:"can_write"`
+	ID              int64  `json:"id"`
+	RepoID          int64  `json:"repo_id"`
+	Name            string `json:"name"`
+	AdminsCanBypass bool   `json:"admins_can_bypass"`
+	CanWrite        bool   `json:"can_write"`
 }
 
 func deliveryEnvironmentToken(t *testing.T, login string) string {
@@ -215,7 +216,7 @@ func TestAPIDeliveryEnvironmentCanWrite(t *testing.T) {
 	// with write on it, which the gate refuses.
 	repoEnv := &deployments_model.Environment{
 		RepoID: 4, Name: "prod", SortOrder: 50,
-		ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
+		ReviewPolicy: deployments_model.PolicyNone, RequiredReviewers: 1,
 	}
 	require.NoError(t, db.Insert(t.Context(), repoEnv))
 
@@ -234,7 +235,7 @@ func TestAPIDeliveryEnvironmentCanWrite(t *testing.T) {
 		return false
 	}
 
-	const defaultsEnvID = 1 // models/fixtures/delivery_environment.yml, repo_id 0
+	const defaultsEnvID = 1 // models/fixtures/deploy_environment.yml, repo_id 0
 	assert.False(t, canWrite("user2", defaultsEnvID), "an ordinary user may not write the instance-wide default set")
 	assert.True(t, canWrite("user1", defaultsEnvID), "a site administrator may")
 	assert.True(t, canWrite("user5", repoEnv.ID), "the repository's administrator may write its own environment")
@@ -255,7 +256,7 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 	for _, repoID := range []int64{1, 2, 4} {
 		env := &deployments_model.Environment{
 			RepoID: repoID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
+			ReviewPolicy: deployments_model.PolicyNone, RequiredReviewers: 1,
 		}
 		require.NoError(t, db.Insert(t.Context(), env))
 		envs[repoID] = env
@@ -283,15 +284,22 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 
 	// A write answers with the same row shape a read does, can_write included.
 	writeToken := getTokenForLoggedInUser(t, loginUser(t, "user5"), auth_model.AccessTokenScopeAll)
-	body := map[string]any{"repo_id": 4, "name": "qa", "sort_order": 20, "approval_policy": "none", "required_approvals": 1}
+	body := map[string]any{"repo_id": 4, "name": "qa", "sort_order": 20, "review_policy": "none", "required_reviewers": 1}
 	var written deliveryEnvironmentRow
 	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/environments", body).AddTokenAuth(writeToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &written)
 	assert.True(t, written.CanWrite)
+	assert.True(t, written.AdminsCanBypass, "a create body without admins_can_bypass defaults to true")
 	body["sort_order"] = 30
 	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, written.ID), body).AddTokenAuth(writeToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &written)
 	assert.True(t, written.CanWrite)
+
+	falseBody := map[string]any{"repo_id": 4, "name": "qa-no-bypass", "review_policy": "none", "required_reviewers": 1, "admins_can_bypass": false}
+	var writtenFalse deliveryEnvironmentRow
+	req = NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/environments", falseBody).AddTokenAuth(writeToken)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &writtenFalse)
+	assert.False(t, writtenFalse.AdminsCanBypass, "a create body with admins_can_bypass: false is honored")
 
 	// A row in a repository the caller cannot see is answered exactly as one that does not
 	// exist, so the 404 never confirms the row is there. Its owner still reads it.

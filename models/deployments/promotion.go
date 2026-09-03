@@ -10,48 +10,52 @@ import (
 )
 
 // The promotion policy is the sequence rule an environment declares about itself:
-// which environment must have held a release before this one may take it, whether that is a
+// which environments must have held a release before this one may take it, whether that is a
 // warning or a gate, and who may pass the gate anyway.
 //
 // The bypass fields on Environment reuse branch protection's own names, defaults and API
-// names — EnableBypassAllowlist, BypassAllowlistUserIDs, BypassAllowlistTeamIDs, verified
+// names — RestrictReviewers, ReviewerUserIDs, ReviewerTeamIDs, verified
 // at models/git/protected_branch.go:46-48 — because a gate that invents its own notion of
 // who may pass is a defect.
 
 // NormalizePromotionPolicy applies the one spelling rule to the policy's own fields. An
-// environment name is an identifier, and a predecessor is an environment name, so the two
-// are normalized the same way or a predecessor would never match the row it names.
+// environment name is an identifier, and a dependency is an environment name, so both are
+// normalized the same way or a dependency would never match the row it names.
 func NormalizePromotionPolicy(env *Environment) {
-	env.Predecessor = NormalizeEnvironmentName(env.Predecessor)
+	for i, dep := range env.DependsOn {
+		env.DependsOn[i] = NormalizeEnvironmentName(dep)
+	}
 }
 
 // ValidatePromotionPolicy refuses a policy the API would otherwise persist. Every message
-// carries a suggested next action.
+// carries a suggested next action, and names the first dependency it refuses on.
 //
 // It is called from ValidateEnvironment, so no write path can reach the table around it.
 func ValidatePromotionPolicy(env *Environment) error {
 	name := NormalizeEnvironmentName(env.Name)
-	predecessor := NormalizeEnvironmentName(env.Predecessor)
 
-	if len(predecessor) > 64 {
-		return &hub_model.Error{
-			Message:         fmt.Sprintf("predecessor %q is %d characters, the maximum is 64", env.Predecessor, len(predecessor)),
-			SuggestedAction: "Name the predecessor environment exactly as its own row spells it, at 64 characters or fewer.",
+	for _, raw := range env.DependsOn {
+		dep := NormalizeEnvironmentName(raw)
+		if len(dep) > 64 {
+			return &hub_model.Error{
+				Message:         fmt.Sprintf("dependency %q is %d characters, the maximum is 64", raw, len(dep)),
+				SuggestedAction: "Name the dependency environment exactly as its own row spells it, at 64 characters or fewer.",
+			}
+		}
+		if dep != "" && dep == name {
+			return &hub_model.Error{
+				Message:         fmt.Sprintf("environment %q names itself in depends_on", name),
+				SuggestedAction: "Name the environments a release must pass through first, for example depends_on [\"staging\"] on \"prod\", or leave depends_on empty.",
+			}
 		}
 	}
-	if predecessor != "" && predecessor == name {
-		return &hub_model.Error{
-			Message:         fmt.Sprintf("environment %q names itself as its predecessor", name),
-			SuggestedAction: "Name the environment a release passes through first, for example predecessor \"staging\" on \"prod\", or leave predecessor empty.",
-		}
-	}
-	// require_predecessor with nothing to require is a gate whose condition can never be
+	// require_prior_deployment with nothing to require is a gate whose condition can never be
 	// evaluated. Refusing it here is what keeps it from reading as "always refuse" to one
 	// caller and "always pass" to another.
-	if env.RequirePredecessor && predecessor == "" {
+	if env.RequirePriorDeployment && len(env.DependsOn) == 0 {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("environment %q sets require_predecessor but declares no predecessor", name),
-			SuggestedAction: "Set predecessor to the environment a release must pass through first, or set require_predecessor to false.",
+			Message:         fmt.Sprintf("environment %q sets require_prior_deployment but declares no dependency", name),
+			SuggestedAction: "Set depends_on to the environments a release must pass through first, or set require_prior_deployment to false.",
 		}
 	}
 	return nil

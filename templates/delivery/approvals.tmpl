@@ -157,7 +157,7 @@ async function load() {
 		cell(tr, approval.requester_login || `#${approval.requester_id}`);
 		cell(tr, age(approval.age_seconds));
 		cell(tr, approval.state);
-		cell(tr, `${approval.approvals_count}/${approval.required_approvals}`);
+		cell(tr, `${approval.approvals_count}/${approval.required_reviewers}`);
 
 		const run = document.createElement('td');
 		if (approval.run_url) {

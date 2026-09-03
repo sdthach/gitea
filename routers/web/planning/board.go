@@ -30,8 +30,8 @@ type RouteRegistrar interface {
 // RegisterRoutes mounts the planning pages. routers/web/hubroutes calls this from its own
 // RegisterRoutes, behind hub's own settings gate.
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
-	m.Get("/delivery/board", reqSignIn, hub_web.PagesEnabled, Board)
-	m.Get("/delivery/timeline", reqSignIn, hub_web.PagesEnabled, Timeline)
+	m.Get("/delivery/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
+	m.Get("/delivery/timeline", reqSignIn, hub_web.PlanningPagesEnabled, Timeline)
 }
 
 // Board renders /delivery/board: Gitea's project columns vertically, with horizontal lanes

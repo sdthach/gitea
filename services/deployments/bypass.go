@@ -17,10 +17,10 @@ import (
 // sequence rule.
 //
 // It mirrors CanBypassBranchProtection at models/git/protected_branch.go:213 branch for
-// branch, and reads branch protection's own fields under their own names: a repository
-// admin passes unless BlockAdminOverride is set, otherwise an opt-in allowlist of named
-// users and teams decides. Bypass is never admin-only, and no gate in this work models
-// permission a second way.
+// branch, and reads branch protection's own fields under their own names, save one: a
+// repository admin passes when AdminsCanBypass is set, otherwise an opt-in allowlist of
+// named users and teams decides. Bypass is never admin-only, and no gate in this work
+// models permission a second way.
 //
 // It is fail-CLOSED throughout. Every branch that cannot answer the question returns false,
 // including a team lookup that errors: a gate that opens when its own check breaks is worse
@@ -32,22 +32,22 @@ func CanBypassEnvironmentSequence(ctx context.Context, env *deployments_model.En
 		// the router, so the nil case is answered rather than panicked on.
 		return false
 	}
-	if isRepoAdmin && !env.BlockAdminOverride {
+	if isRepoAdmin && env.AdminsCanBypass {
 		return true
 	}
-	if !env.EnableBypassAllowlist {
+	if !env.RestrictReviewers {
 		return false
 	}
-	if slices.Contains(env.BypassAllowlistUserIDs, user.ID) {
+	if slices.Contains(env.ReviewerUserIDs, user.ID) {
 		return true
 	}
-	if len(env.BypassAllowlistTeamIDs) == 0 {
+	if len(env.ReviewerTeamIDs) == 0 {
 		return false
 	}
-	in, err := organization.IsUserInTeams(ctx, user.ID, env.BypassAllowlistTeamIDs)
+	in, err := organization.IsUserInTeams(ctx, user.ID, env.ReviewerTeamIDs)
 	if err != nil {
 		log.Error("IsUserInTeams failed: userID=%d, environment=%q, allowlistTeamIDs=%v, err=%v",
-			user.ID, env.Name, env.BypassAllowlistTeamIDs, err)
+			user.ID, env.Name, env.ReviewerTeamIDs, err)
 		return false
 	}
 	return in

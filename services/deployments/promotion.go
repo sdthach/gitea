@@ -69,28 +69,42 @@ func WorkflowIDForEnvironment(environment string) string {
 // a name. A full release reaches every environment — the rule exists to keep an unfinished
 // build out of the environments an operator has named, not to keep a finished one out.
 func AcceptsRelease(env *deployments_model.Environment, isPrerelease bool) bool {
-	return !isPrerelease || env == nil || !env.RequireFullRelease
+	return !isPrerelease || env == nil || !env.ReleasesOnly
 }
 
-// EvaluatePredecessor reduces the log to what the sequence rule asks of it: has the
-// predecessor held this release, and does it hold it now.
+// EvaluateDependencies reduces the log to what the sequence rule asks of it: has every
+// environment this one depends on held this release, and does it hold it now.
+//
+// With one dependency this is exactly the old predecessor check. With several, every one of
+// them must hold the release for the sequence to be satisfied: the first one that never has
+// decides the state, and is the dependency named alongside it; once every dependency has held
+// it, the last one's own current state (held or live) is what is reported.
 //
 // It is pure and reuses ProjectCells, so the confirm step reads the release's history
 // through the same projection the grid draws it with.
-func EvaluatePredecessor(predecessor, releaseTag string, events []Event) PredecessorState {
-	predecessor = deployments_model.NormalizeEnvironmentName(predecessor)
-	if predecessor == "" {
-		return PredecessorNone
+func EvaluateDependencies(dependsOn []string, releaseTag string, events []Event) (dependency string, state PredecessorState) {
+	deps := make([]string, 0, len(dependsOn))
+	for _, raw := range dependsOn {
+		if dep := deployments_model.NormalizeEnvironmentName(raw); dep != "" {
+			deps = append(deps, dep)
+		}
 	}
-	cells := ProjectCells([]string{predecessor}, []string{releaseTag}, events, nil)
-	row := cells[releaseTag]
-	if len(row) == 0 || row[0].Successes == 0 {
-		return PredecessorNever
+	if len(deps) == 0 {
+		return "", PredecessorNone
 	}
-	if row[0].State == CellLive {
-		return PredecessorLive
+	for _, dep := range deps {
+		cells := ProjectCells([]string{dep}, []string{releaseTag}, events, nil)
+		row := cells[releaseTag]
+		if len(row) == 0 || row[0].Successes == 0 {
+			return dep, PredecessorNever
+		}
+		dependency = dep
+		state = PredecessorHeld
+		if row[0].State == CellLive {
+			state = PredecessorLive
+		}
 	}
-	return PredecessorHeld
+	return dependency, state
 }
 
 // Decision is the sequence rule's answer. It is data rather than a boolean because the
@@ -106,36 +120,38 @@ type Decision struct {
 // DecidePromotion applies the sequence-rule table. It is pure: the state comes from the log and the
 // permission from CanBypassEnvironmentSequence, and neither is re-derived here.
 //
-//	require_predecessor | predecessor held | can bypass | outcome
+// dependency names the environment EvaluateDependencies decided the state on — with one
+// dependency the one declared, with several the first that has not held the release.
+//
+//	require_prior_deployment | dependency held | can bypass | outcome
 //	false               | either           | either     | warn when never held, else proceed
 //	true                | yes              | either     | proceed
 //	true                | no               | no         | refuse
 //	true                | no               | yes        | override, with a reason
-func DecidePromotion(env *deployments_model.Environment, state PredecessorState, canBypass bool) Decision {
+func DecidePromotion(env *deployments_model.Environment, dependency string, state PredecessorState, canBypass bool) Decision {
 	d := Decision{Outcome: OutcomeProceed, PredecessorState: state}
 	if env == nil || state != PredecessorNever {
 		return d
 	}
-	predecessor := deployments_model.NormalizeEnvironmentName(env.Predecessor)
 	name := deployments_model.NormalizeEnvironmentName(env.Name)
 
-	if !env.RequirePredecessor {
+	if !env.RequirePriorDeployment {
 		// With the flag off the sequence is a warning only, so an environment that has set
 		// no policy keeps the behaviour it had before the fork.
 		d.Outcome = OutcomeWarn
-		d.Message = fmt.Sprintf("%s has never held this release, and %s names it as its predecessor", predecessor, name)
-		d.SuggestedAction = fmt.Sprintf("Deploy to %s first, or continue — %s does not require its predecessor.", predecessor, name)
+		d.Message = fmt.Sprintf("%s has never held this release, and %s depends on it", dependency, name)
+		d.SuggestedAction = fmt.Sprintf("Deploy to %s first, or continue — %s does not require its dependencies.", dependency, name)
 		return d
 	}
 	if !canBypass {
 		d.Outcome = OutcomeRefuse
-		d.Message = fmt.Sprintf("%s requires its predecessor %s to have held this release, and it never has", name, predecessor)
-		d.SuggestedAction = fmt.Sprintf("Deploy the release to %s first, or ask someone on %s's bypass allowlist to override with a reason.", predecessor, name)
+		d.Message = fmt.Sprintf("%s requires %s to have held this release, and it never has", name, dependency)
+		d.SuggestedAction = fmt.Sprintf("Deploy the release to %s first, or ask someone on %s's bypass allowlist to override with a reason.", dependency, name)
 		return d
 	}
 	d.Outcome = OutcomeOverride
 	d.RequiresOverrideReason = true
-	d.Message = fmt.Sprintf("%s requires its predecessor %s to have held this release, and it never has; you may override", name, predecessor)
+	d.Message = fmt.Sprintf("%s requires %s to have held this release, and it never has; you may override", name, dependency)
 	d.SuggestedAction = "Send override_reason saying why the sequence is being bypassed; it is recorded on the audit log."
 	return d
 }
@@ -178,14 +194,14 @@ type Promotion struct {
 	// IsRollback reports that the target release is older than what is live there. Rolling
 	// back is deploying a prior release tag — the same action, so this labels the request
 	// rather than selecting a different one.
-	IsRollback     bool   `json:"is_rollback"`
-	Predecessor    string `json:"predecessor"`
-	WorkflowID     string `json:"workflow_id"`
-	Ref            string `json:"ref"`
-	Confirmed      bool   `json:"confirmed"`
-	OverrideReason string `json:"override_reason,omitempty"`
-	RunID          int64  `json:"run_id"`
-	RunURL         string `json:"run_url"`
+	IsRollback     bool     `json:"is_rollback"`
+	DependsOn      []string `json:"depends_on"`
+	WorkflowID     string   `json:"workflow_id"`
+	Ref            string   `json:"ref"`
+	Confirmed      bool     `json:"confirmed"`
+	OverrideReason string   `json:"override_reason,omitempty"`
+	RunID          int64    `json:"run_id"`
+	RunURL         string   `json:"run_url"`
 	Decision
 }
 
@@ -234,7 +250,7 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 		Environment:  env.Name,
 		ReleaseTag:   release.TagName,
 		IsPrerelease: release.IsPrerelease,
-		Predecessor:  env.Predecessor,
+		DependsOn:    env.DependsOn,
 		WorkflowID:   WorkflowIDForEnvironment(env.Name),
 		Ref:          git.RefNameFromTag(release.TagName).String(),
 	}
@@ -246,21 +262,21 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 			Outcome:          OutcomeRefuse,
 			PredecessorState: PredecessorNone,
 			Message:          fmt.Sprintf("%s is a prerelease and %s takes finished releases only", release.TagName, env.Name),
-			SuggestedAction:  fmt.Sprintf("Deploy it to an environment that accepts prereleases, cut a full release, or clear require_full_release on %s.", env.Name),
+			SuggestedAction:  fmt.Sprintf("Deploy it to an environment that accepts prereleases, cut a full release, or clear releases_only on %s.", env.Name),
 		}
 		return out, nil
 	}
 
-	events, err := promotionEvents(ctx, req.Repo.ID, env.Name, env.Predecessor, release.TagName)
+	events, err := promotionEvents(ctx, req.Repo.ID, env.Name, env.DependsOn, release.TagName)
 	if err != nil {
 		return nil, err
 	}
 	out.CurrentlyLive = liveRelease(ctx, req.Repo.ID, env.Name)
 	out.IsRollback = isRollback(ctx, req.Repo.ID, out.CurrentlyLive, release)
 
-	state := EvaluatePredecessor(env.Predecessor, release.TagName, events)
+	dependency, state := EvaluateDependencies(env.DependsOn, release.TagName, events)
 	canBypass := CanBypassEnvironmentSequence(ctx, env, req.Doer, req.IsRepoAdmin)
-	out.Decision = DecidePromotion(env, state, canBypass)
+	out.Decision = DecidePromotion(env, dependency, state, canBypass)
 	return out, nil
 }
 
@@ -354,12 +370,14 @@ func appendPromotionEvent(ctx reqctx.RequestContext, req PromotionRequest, out *
 	})
 }
 
-// promotionEvents reads the log rows the predecessor evaluation needs: this release, in the
-// target environment and its predecessor.
-func promotionEvents(ctx reqctx.RequestContext, repoID int64, environment, predecessor, releaseTag string) ([]Event, error) {
+// promotionEvents reads the log rows the dependency evaluation needs: this release, in the
+// target environment and in every environment it depends on.
+func promotionEvents(ctx reqctx.RequestContext, repoID int64, environment string, dependsOn []string, releaseTag string) ([]Event, error) {
 	names := []string{environment}
-	if predecessor = deployments_model.NormalizeEnvironmentName(predecessor); predecessor != "" {
-		names = append(names, predecessor)
+	for _, raw := range dependsOn {
+		if dep := deployments_model.NormalizeEnvironmentName(raw); dep != "" {
+			names = append(names, dep)
+		}
 	}
 	cond := builder.Eq{"repo_id": repoID, "release_tag": releaseTag}.And(builder.In("environment", names))
 	rows, err := deployments_model.FindAuditEvents(ctx, cond, "occurred_unix ASC, id ASC", 0)

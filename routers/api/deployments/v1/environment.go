@@ -30,9 +30,9 @@ var environmentSpec = query.Spec{
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt},
 		{Name: "name", Column: "name", Kind: query.KindString},
 		{Name: "sort_order", Column: "sort_order", Kind: query.KindInt},
-		{Name: "approval_policy", Column: "approval_policy", Kind: query.KindString},
-		{Name: "required_approvals", Column: "required_approvals", Kind: query.KindInt},
-		{Name: "require_full_release", Column: "require_full_release", Kind: query.KindBool},
+		{Name: "review_policy", Column: "review_policy", Kind: query.KindString},
+		{Name: "required_reviewers", Column: "required_reviewers", Kind: query.KindInt},
+		{Name: "releases_only", Column: "releases_only", Kind: query.KindBool},
 		{Name: "created_unix", Column: "created_unix", Kind: query.KindTime},
 		{Name: "updated_unix", Column: "updated_unix", Kind: query.KindTime},
 	},
@@ -40,7 +40,7 @@ var environmentSpec = query.Spec{
 	DefaultSort:  "sort_order",
 	DefaultOrder: query.OrderAsc,
 	PrimaryKey:   "id",
-	SearchFields: []string{"name", "approval_policy"},
+	SearchFields: []string{"name", "review_policy"},
 	Paging:       query.PagingOffset,
 }
 

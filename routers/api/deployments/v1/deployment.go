@@ -49,8 +49,8 @@ type Deployment struct {
 	deployments_model.Deployment
 	Release *Release                        `json:"release,omitempty"`
 	Audit   []*deployments_model.AuditEvent `json:"audit,omitempty"`
-	// Approval is the hold the approval gate placed on this run, when there was one.
-	Approval *deployments_model.Approval `json:"approval,omitempty"`
+	// Approval is the hold the review gate placed on this run, when there was one.
+	Approval *deployments_model.Review `json:"approval,omitempty"`
 }
 
 func listDeploymentsEndpoint() *hubapi.Endpoint {
@@ -151,7 +151,7 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 		case "approval":
 			for _, row := range rows {
 				cond := builder.Eq{"repo_id": row.RepoID, "run_id": row.RunID, "environment": row.Environment}
-				holds, _, err := deployments_model.FindApprovals(ctx, cond, "id DESC", 1, 0)
+				holds, _, err := deployments_model.FindReviews(ctx, cond, "id DESC", 1, 0)
 				if err != nil {
 					return err
 				}

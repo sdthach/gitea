@@ -160,7 +160,7 @@ func TestFlagsBecomeQueryParameters(t *testing.T) {
 
 	_, _, err := exec(t, rec, "environments",
 		"--filter", "sort_order[gte]=20",
-		"--filter", "approval_policy=none",
+		"--filter", "review_policy=none",
 		"-q", "prod",
 		"--sort-by", "name",
 		"--order", "desc",
@@ -171,7 +171,7 @@ func TestFlagsBecomeQueryParameters(t *testing.T) {
 
 	q := rec.requests[0].URL.Query()
 	assert.Equal(t, "20", q.Get("sort_order[gte]"))
-	assert.Equal(t, "none", q.Get("approval_policy"))
+	assert.Equal(t, "none", q.Get("review_policy"))
 	assert.Equal(t, "prod", q.Get("q"))
 	assert.Equal(t, "name", q.Get("sort_by"))
 	assert.Equal(t, "desc", q.Get("order"))
@@ -191,7 +191,7 @@ func TestRepeatedFilterOnOneFieldIsSentTwice(t *testing.T) {
 }
 
 func TestJSONIsVerbatim(t *testing.T) {
-	payload := `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`
+	payload := `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"review_policy":"none","required_reviewers":1}]`
 	rec := &recorder{body: payload}
 	withRecorder(t, rec)
 
@@ -201,14 +201,14 @@ func TestJSONIsVerbatim(t *testing.T) {
 }
 
 func TestTableIsTheDefault(t *testing.T) {
-	rec := &recorder{body: `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"approval_policy":"none","required_approvals":1}]`}
+	rec := &recorder{body: `[{"id":1,"repo_id":0,"name":"prod","sort_order":50,"review_policy":"none","required_reviewers":1}]`}
 	withRecorder(t, rec)
 
 	stdout, _, err := exec(t, rec, "environments")
 	require.Nil(t, err)
 	assert.Contains(t, stdout, "NAME")
 	assert.Contains(t, stdout, "prod")
-	assert.Contains(t, stdout, "APPROVAL_POLICY")
+	assert.Contains(t, stdout, "REVIEW_POLICY")
 }
 
 // TestServerRejectionSurfacesItsSuggestedAction: the server's suggested next action

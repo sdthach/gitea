@@ -61,7 +61,7 @@ func TestMigration0001LowercasesEnvironmentNames(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
-	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 4242, Name: "PROD", ApprovalPolicy: PolicyNone, RequiredApprovals: 1}))
+	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 4242, Name: "PROD", ReviewPolicy: PolicyNone, RequiredReviewers: 1}))
 
 	migration := migrationByID(t, 1)
 	require.NoError(t, migration.Migrate(ctx, db.GetEngine(ctx)))
@@ -87,7 +87,7 @@ func TestMigration0002CarriesThePrereleaseNameListOntoTheColumn(t *testing.T) {
 
 	for _, name := range []string{"sandbox", "live"} {
 		require.NoError(t, db.Insert(ctx, &Environment{
-			RepoID: 4242, Name: name, ApprovalPolicy: PolicyNone, RequiredApprovals: 1,
+			RepoID: 4242, Name: name, ReviewPolicy: PolicyNone, RequiredReviewers: 1,
 		}))
 	}
 
@@ -95,11 +95,43 @@ func TestMigration0002CarriesThePrereleaseNameListOntoTheColumn(t *testing.T) {
 
 	sandbox, err := GetEnvironment(ctx, 4242, "sandbox")
 	require.NoError(t, err)
-	assert.False(t, sandbox.RequireFullRelease, "an environment the key named still takes prereleases")
+	assert.False(t, sandbox.ReleasesOnly, "an environment the key named still takes prereleases")
 
 	live, err := GetEnvironment(ctx, 4242, "live")
 	require.NoError(t, err)
-	assert.True(t, live.RequireFullRelease, "every other environment now asks for finished releases")
+	assert.True(t, live.ReleasesOnly, "every other environment now asks for finished releases")
+}
+
+// TestMigration0002PrefersTheNewReleasesOnlyKey proves the documented [deployments]
+// RELEASES_ONLY_ENVIRONMENTS key is what an upgrade actually reads, ahead of the old
+// [delivery] PRERELEASE_ENVIRONMENTS fallback, and that it names the releases-only
+// environments directly rather than their complement.
+func TestMigration0002PrefersTheNewReleasesOnlyKey(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	previous := setting.CfgProvider
+	t.Cleanup(func() { setting.CfgProvider = previous })
+	cfg, err := setting.NewConfigProviderFromData(
+		"[delivery]\nPRERELEASE_ENVIRONMENTS = sandbox\n[deployments]\nRELEASES_ONLY_ENVIRONMENTS = live\n")
+	require.NoError(t, err)
+	setting.CfgProvider = cfg
+
+	for _, name := range []string{"sandbox", "live"} {
+		require.NoError(t, db.Insert(ctx, &Environment{
+			RepoID: 4242, Name: name, ReviewPolicy: PolicyNone, RequiredReviewers: 1,
+		}))
+	}
+
+	require.NoError(t, migrationByID(t, 2).Migrate(ctx, db.GetEngine(ctx)))
+
+	sandbox, err := GetEnvironment(ctx, 4242, "sandbox")
+	require.NoError(t, err)
+	assert.False(t, sandbox.ReleasesOnly, "the new key names live only, not sandbox")
+
+	live, err := GetEnvironment(ctx, 4242, "live")
+	require.NoError(t, err)
+	assert.True(t, live.ReleasesOnly, "the new key names live directly, so it wins over the old fallback")
 }
 
 func migrationByID(t *testing.T, id int64) *hub_model.Migration {

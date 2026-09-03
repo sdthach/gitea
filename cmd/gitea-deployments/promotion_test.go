@@ -126,7 +126,7 @@ func TestDeliveryDeployNamesItsMissingArguments(t *testing.T) {
 func TestDeliveryCLIRefusalCarriesTheAPIsOwnAction(t *testing.T) {
 	rec := &recorder{
 		status: http.StatusForbidden,
-		body: `{"message":"prod requires its predecessor staging to have held this release, and it never has",` +
+		body: `{"message":"prod requires staging to have held this release, and it never has",` +
 			`"suggested_action":"Deploy the release to staging first, or ask someone on prod's bypass allowlist to override with a reason."}`,
 	}
 	withRecorder(t, rec)
@@ -135,6 +135,6 @@ func TestDeliveryCLIRefusalCarriesTheAPIsOwnAction(t *testing.T) {
 		"--release-tag", "v2.0", "--confirm")
 	require.NotNil(t, err)
 	assert.Equal(t, 3, err.ExitCode, "refused by the server")
-	assert.Contains(t, err.Message, "requires its predecessor staging")
+	assert.Contains(t, err.Message, "requires staging")
 	assert.Contains(t, err.SuggestedAction, "bypass allowlist")
 }

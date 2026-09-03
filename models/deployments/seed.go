@@ -11,8 +11,22 @@ import (
 	"gitea.dev/modules/setting"
 )
 
-// SettingSection is the app.ini section the fork reads.
-const SettingSection = "delivery"
+// SettingSection is the app.ini section the fork reads for deployment settings.
+const SettingSection = "deployments"
+
+// legacySettingSection is where every fork setting lived before [delivery] was split by
+// area. Reads fall back to it for one release so an app.ini written before the split keeps
+// working.
+const legacySettingSection = "delivery"
+
+// configValue reads key from SettingSection, falling back to legacySettingSection when the
+// new section does not declare it.
+func configValue(key string) string {
+	if setting.CfgProvider.Section(SettingSection).HasKey(key) {
+		return setting.CfgProvider.Section(SettingSection).Key(key).String()
+	}
+	return setting.CfgProvider.Section(legacySettingSection).Key(key).String()
+}
 
 // seededSortStep spaces the seeded rows so an operator can insert between two of them
 // without renumbering either.
@@ -26,17 +40,17 @@ type SeededEnvironment struct {
 
 // SeededEnvironments reads the set a fresh instance starts with:
 //
-//	[delivery]
+//	[deployments]
 //	DEFAULT_ENVIRONMENTS = sandbox, live
 //
 // An unset key seeds nothing. Environment names are the operator's, not the fork's: no
-// name carries meaning anywhere in the model, and order is the Predecessor chain each row
+// name carries meaning anywhere in the model, and order is the dependency chain each row
 // declares, so there is no set the fork can pick on an operator's behalf.
 func SeededEnvironments() []SeededEnvironment {
 	if setting.CfgProvider == nil {
 		return nil
 	}
-	raw := setting.CfgProvider.Section(SettingSection).Key("DEFAULT_ENVIRONMENTS").String()
+	raw := configValue("DEFAULT_ENVIRONMENTS")
 	out := make([]SeededEnvironment, 0, 8)
 	for name := range strings.SplitSeq(raw, ",") {
 		if name = NormalizeEnvironmentName(name); name != "" {
@@ -89,8 +103,9 @@ func Seed(ctx context.Context, wanted []SeededEnvironment) error {
 			RepoID:            DefaultsRepoID,
 			Name:              NormalizeEnvironmentName(want.Name),
 			SortOrder:         want.SortOrder,
-			ApprovalPolicy:    PolicyNone,
-			RequiredApprovals: 1,
+			ReviewPolicy:      PolicyNone,
+			RequiredReviewers: 1,
+			AdminsCanBypass:   true,
 		}
 		if err := db.Insert(ctx, env); err != nil {
 			return err

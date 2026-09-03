@@ -82,17 +82,17 @@ func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 	assert.Equal(t, []string{"sandbox", "live"}, envNames(first),
 		"the environment set is seeded in the order it was configured")
 	for _, env := range first {
-		assert.Equal(t, PolicyNone, env.ApprovalPolicy, "a new environment gates nothing")
-		assert.EqualValues(t, 1, env.RequiredApprovals)
-		assert.False(t, env.RequireFullRelease, "and refuses no release kind")
+		assert.Equal(t, PolicyNone, env.ReviewPolicy, "a new environment gates nothing")
+		assert.EqualValues(t, 1, env.RequiredReviewers)
+		assert.False(t, env.ReleasesOnly, "and refuses no release kind")
 	}
 
 	// A user edits a seeded row.
 	edited := first[len(first)-1]
-	edited.ApprovalPolicy = PolicyOthersOnly
-	edited.RequiredApprovals = 2
+	edited.ReviewPolicy = PolicyOthersOnly
+	edited.RequiredReviewers = 2
 	edited.SortOrder = 999
-	_, err = db.GetEngine(ctx).ID(edited.ID).Cols("approval_policy", "required_approvals", "sort_order").Update(edited)
+	_, err = db.GetEngine(ctx).ID(edited.ID).Cols("review_policy", "required_reviewers", "sort_order").Update(edited)
 	require.NoError(t, err)
 
 	// A second start.
@@ -102,8 +102,8 @@ func TestSeedIsIdempotentAndRestoring(t *testing.T) {
 
 	after, err := GetEnvironment(ctx, DefaultsRepoID, edited.Name)
 	require.NoError(t, err)
-	assert.Equal(t, PolicyOthersOnly, after.ApprovalPolicy, "an edited row is not overwritten")
-	assert.EqualValues(t, 2, after.RequiredApprovals)
+	assert.Equal(t, PolicyOthersOnly, after.ReviewPolicy, "an edited row is not overwritten")
+	assert.EqualValues(t, 2, after.RequiredReviewers)
 	assert.EqualValues(t, 999, after.SortOrder)
 
 	// Deleting a seeded row and restarting restores it.
@@ -144,7 +144,7 @@ func TestGetEnvironmentFallsBackToTheDefaultSet(t *testing.T) {
 	assert.Equal(t, DefaultsRepoID, env.RepoID)
 	assert.Equal(t, "prod", env.Name)
 
-	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 4242, Name: "prod", SortOrder: 7, ApprovalPolicy: PolicyAnyApprover, RequiredApprovals: 1}))
+	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 4242, Name: "prod", SortOrder: 7, ReviewPolicy: PolicyAnyApprover, RequiredReviewers: 1}))
 	env, err = GetEnvironment(ctx, 4242, "prod")
 	require.NoError(t, err)
 	assert.EqualValues(t, 4242, env.RepoID, "the repository's own row wins over the default")

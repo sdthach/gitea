@@ -227,64 +227,64 @@ const checks = [
 	{
 		key: 'approvals',
 		label: 'Approvals',
-		present: (env) => env.approval_policy !== 'none',
-		summary: (env) => `${env.required_approvals} approval${env.required_approvals === 1 ? '' : 's'}`
-			+ (env.approval_policy === 'others_only'
+		present: (env) => env.review_policy !== 'none',
+		summary: (env) => `${env.required_reviewers} approval${env.required_reviewers === 1 ? '' : 's'}`
+			+ (env.review_policy === 'others_only'
 				? ', and not from whoever asked for the deploy'
 				: ', from anyone with write on Actions'),
 		add: (draft) => {
-			draft.approval_policy = 'any_approver';
-			draft.required_approvals = 1;
+			draft.review_policy = 'any_approver';
+			draft.required_reviewers = 1;
 		},
 		remove: (draft) => {
-			draft.approval_policy = 'none';
-			draft.required_approvals = 1;
+			draft.review_policy = 'none';
+			draft.required_reviewers = 1;
 		},
 		editor: approvalsEditor,
 	},
 	{
 		key: 'sequence',
 		label: 'Sequence',
-		present: (env) => env.predecessor !== '',
-		summary: (env) => `a release must have passed through ${env.predecessor} first`
-			+ (env.require_predecessor ? '' : ' — a deploy that skips it is warned about, not refused'),
-		add: () => {}, // the editor picks the predecessor; refusing is off until a writer asks for it
+		present: (env) => env.depends_on.length > 0,
+		summary: (env) => `a release must have passed through ${env.depends_on[0]} first`
+			+ (env.require_prior_deployment ? '' : ' — a deploy that skips it is warned about, not refused'),
+		add: () => {}, // the editor picks the dependency; refusing is off until a writer asks for it
 		remove: (draft) => {
-			draft.predecessor = '';
-			draft.require_predecessor = false;
+			draft.depends_on = [];
+			draft.require_prior_deployment = false;
 		},
 		editor: sequenceEditor,
 	},
 	{
 		key: 'release_kind',
 		label: 'Release kind',
-		present: (env) => env.require_full_release,
+		present: (env) => env.releases_only,
 		summary: () => 'prereleases are refused here',
 		add: (draft) => {
-			draft.require_full_release = true;
+			draft.releases_only = true;
 		},
 		remove: (draft) => {
-			draft.require_full_release = false;
+			draft.releases_only = false;
 		},
 		editor: releaseKindEditor,
 	},
 	{
 		key: 'bypass',
 		label: 'Bypass allowlist',
-		present: (env) => env.enable_bypass_allowlist,
-		summary: (env) => `${env.bypass_allowlist_user_ids.length} user`
-			+ `${env.bypass_allowlist_user_ids.length === 1 ? '' : 's'} and `
-			+ `${env.bypass_allowlist_team_ids.length} team`
-			+ `${env.bypass_allowlist_team_ids.length === 1 ? '' : 's'} decide`
-			+ (env.block_admin_override ? '; admins cannot override' : '; an administrator may still override'),
+		present: (env) => env.restrict_reviewers,
+		summary: (env) => `${env.reviewer_user_ids.length} user`
+			+ `${env.reviewer_user_ids.length === 1 ? '' : 's'} and `
+			+ `${env.reviewer_team_ids.length} team`
+			+ `${env.reviewer_team_ids.length === 1 ? '' : 's'} decide`
+			+ (env.admins_can_bypass ? '; an administrator may still override' : '; admins cannot override'),
 		add: (draft) => {
-			draft.enable_bypass_allowlist = true;
+			draft.restrict_reviewers = true;
 		},
 		remove: (draft) => {
-			draft.enable_bypass_allowlist = false;
-			draft.bypass_allowlist_user_ids = [];
-			draft.bypass_allowlist_team_ids = [];
-			draft.block_admin_override = false;
+			draft.restrict_reviewers = false;
+			draft.reviewer_user_ids = [];
+			draft.reviewer_team_ids = [];
+			draft.admins_can_bypass = true;
 		},
 		editor: bypassEditor,
 	},
@@ -293,9 +293,9 @@ const checks = [
 function normalize(env) {
 	return {
 		...env,
-		predecessor: env.predecessor ?? '',
-		bypass_allowlist_user_ids: env.bypass_allowlist_user_ids ?? [],
-		bypass_allowlist_team_ids: env.bypass_allowlist_team_ids ?? [],
+		depends_on: env.depends_on ?? [],
+		reviewer_user_ids: env.reviewer_user_ids ?? [],
+		reviewer_team_ids: env.reviewer_team_ids ?? [],
 	};
 }
 
@@ -304,15 +304,15 @@ function payloadOf(env) {
 		repo_id: env.repo_id,
 		name: env.name,
 		sort_order: env.sort_order,
-		approval_policy: env.approval_policy,
-		required_approvals: env.required_approvals,
-		predecessor: env.predecessor,
-		require_predecessor: env.require_predecessor,
-		require_full_release: env.require_full_release,
-		block_admin_override: env.block_admin_override,
-		enable_bypass_allowlist: env.enable_bypass_allowlist,
-		bypass_allowlist_user_ids: env.bypass_allowlist_user_ids,
-		bypass_allowlist_team_ids: env.bypass_allowlist_team_ids,
+		review_policy: env.review_policy,
+		required_reviewers: env.required_reviewers,
+		depends_on: env.depends_on,
+		require_prior_deployment: env.require_prior_deployment,
+		releases_only: env.releases_only,
+		admins_can_bypass: env.admins_can_bypass,
+		restrict_reviewers: env.restrict_reviewers,
+		reviewer_user_ids: env.reviewer_user_ids,
+		reviewer_team_ids: env.reviewer_team_ids,
 	};
 }
 
@@ -359,19 +359,19 @@ function checkField(form, text, id) {
 
 function approvalsEditor(draft) {
 	const form = el('div', 'ui form');
-	const count = textField(form, 'Required approvals', 'delivery-required-approvals', 'number');
+	const count = textField(form, 'Required approvals', 'delivery-required-reviewers', 'number');
 	count.min = '1';
-	count.value = String(draft.required_approvals || 1);
+	count.value = String(draft.required_reviewers || 1);
 	count.addEventListener('input', () => {
-		draft.required_approvals = Number(count.value);
+		draft.required_reviewers = Number(count.value);
 	});
-	const policy = selectField(form, 'Who may approve', 'delivery-approval-policy', [
+	const policy = selectField(form, 'Who may approve', 'delivery-review-policy', [
 		['any_approver', 'anyone with write on Actions'],
 		['others_only', 'anyone except whoever asked'],
 	]);
-	policy.value = draft.approval_policy === 'others_only' ? 'others_only' : 'any_approver';
+	policy.value = draft.review_policy === 'others_only' ? 'others_only' : 'any_approver';
 	policy.addEventListener('change', () => {
-		draft.approval_policy = policy.value;
+		draft.review_policy = policy.value;
 	});
 	return form;
 }
@@ -385,18 +385,18 @@ function sequenceEditor(draft, state) {
 			+ 'Create a second environment in this scope, then add this check.'));
 		return form;
 	}
-	const picker = selectField(form, 'Predecessor', 'delivery-predecessor',
+	const picker = selectField(form, 'Depends on', 'delivery-depends-on',
 		candidates.map((env) => [env.name, env.name]));
-	if (!draft.predecessor) draft.predecessor = candidates[0].name;
-	picker.value = draft.predecessor;
+	if (!draft.depends_on.length) draft.depends_on = [candidates[0].name];
+	picker.value = draft.depends_on[0];
 	picker.addEventListener('change', () => {
-		draft.predecessor = picker.value;
+		draft.depends_on = [picker.value];
 	});
-	const strict = checkField(form, 'refuse a deploy whose predecessor has never held the release',
-		'delivery-require-predecessor');
-	strict.checked = draft.require_predecessor;
+	const strict = checkField(form, 'refuse a deploy whose dependency has never held the release',
+		'delivery-require-prior-deployment');
+	strict.checked = draft.require_prior_deployment;
 	strict.addEventListener('change', () => {
-		draft.require_predecessor = strict.checked;
+		draft.require_prior_deployment = strict.checked;
 	});
 	return form;
 }
@@ -404,10 +404,10 @@ function sequenceEditor(draft, state) {
 function releaseKindEditor(draft) {
 	const form = el('div', 'ui form');
 	const box = checkField(form, 'refuse prereleases; this environment takes finished releases only',
-		'delivery-require-full-release');
-	box.checked = draft.require_full_release;
+		'delivery-releases-only');
+	box.checked = draft.releases_only;
 	box.addEventListener('change', () => {
-		draft.require_full_release = box.checked;
+		draft.releases_only = box.checked;
 	});
 	return form;
 }
@@ -419,10 +419,10 @@ function bypassEditor(draft, state) {
 	users.append(el('label', '', 'Users who may bypass'));
 	const chips = el('div', 'tw-flex tw-gap-2 tw-flex-wrap');
 	const drawUsers = () => {
-		chips.replaceChildren(...draft.bypass_allowlist_user_ids.map((id) => {
+		chips.replaceChildren(...draft.reviewer_user_ids.map((id) => {
 			const chip = el('span', 'ui label', state.userNames.get(id) ?? `user ${id}`);
 			chip.append(button('×', 'mini basic', () => {
-				draft.bypass_allowlist_user_ids = draft.bypass_allowlist_user_ids.filter((other) => other !== id);
+				draft.reviewer_user_ids = draft.reviewer_user_ids.filter((other) => other !== id);
 				drawUsers();
 			}));
 			return chip;
@@ -443,7 +443,7 @@ function bypassEditor(draft, state) {
 			return;
 		}
 		state.userNames.set(user.id, user.login);
-		if (!draft.bypass_allowlist_user_ids.includes(user.id)) draft.bypass_allowlist_user_ids.push(user.id);
+		if (!draft.reviewer_user_ids.includes(user.id)) draft.reviewer_user_ids.push(user.id);
 		name.value = '';
 		clearError();
 		drawUsers();
@@ -454,17 +454,17 @@ function bypassEditor(draft, state) {
 			state.teams.map((team) => [String(team.id), team.name]));
 		picker.multiple = true;
 		for (const option of picker.options) {
-			option.selected = draft.bypass_allowlist_team_ids.includes(Number(option.value));
+			option.selected = draft.reviewer_team_ids.includes(Number(option.value));
 		}
 		picker.addEventListener('change', () => {
-			draft.bypass_allowlist_team_ids = [...picker.selectedOptions].map((option) => Number(option.value));
+			draft.reviewer_team_ids = [...picker.selectedOptions].map((option) => Number(option.value));
 		});
 	}
 
-	const block = checkField(form, 'a repository administrator cannot bypass this', 'delivery-block-admin-override');
-	block.checked = draft.block_admin_override;
-	block.addEventListener('change', () => {
-		draft.block_admin_override = block.checked;
+	const admin = checkField(form, 'a repository administrator may bypass this', 'delivery-admins-can-bypass');
+	admin.checked = draft.admins_can_bypass;
+	admin.addEventListener('change', () => {
+		draft.admins_can_bypass = admin.checked;
 	});
 	return form;
 }
@@ -720,7 +720,7 @@ if (envID) {
 			state.available = await probe(`${gitea}/repos/${state.repo.full_name}/actions/secrets?limit=100`);
 			state.teams = await probe(`${gitea}/orgs/${state.repo.owner.login}/teams?limit=100`) ?? [];
 		}
-		for (const id of state.env.bypass_allowlist_user_ids) {
+		for (const id of state.env.reviewer_user_ids) {
 			const found = await probe(`${gitea}/users/search?uid=${id}`);
 			if (found?.data?.length) state.userNames.set(id, found.data[0].login);
 		}
@@ -783,7 +783,7 @@ if (envID) {
 			repoID = repo.id;
 		}
 		const created = await write('POST', '/environments',
-			{repo_id: repoID, name, sort_order: 10, approval_policy: 'none', required_approvals: 1});
+			{repo_id: repoID, name, sort_order: 10, review_policy: 'none', required_reviewers: 1});
 		if (!created) return;
 		window.location.href = `${subURL}/delivery/environments/${created.id}/edit`;
 	}

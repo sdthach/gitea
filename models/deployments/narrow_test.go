@@ -208,13 +208,13 @@ func TestProductionNarrowDepsAreWired(t *testing.T) {
 	assert.Equal(t, reflect.ValueOf(productionNarrowDeps.scopesOf).Pointer(), reflect.ValueOf(narrowSecretDeps.scopesOf).Pointer())
 	assert.Equal(t, reflect.ValueOf(productionNarrowDeps.environment).Pointer(), reflect.ValueOf(narrowSecretDeps.environment).Pointer())
 	assert.Equal(t, reflect.ValueOf(scopesForRepo).Pointer(), reflect.ValueOf(productionNarrowDeps.scopesOf).Pointer(),
-		"the default scope lookup must be the one that reads delivery_secret_scope")
+		"the default scope lookup must be the one that reads deploy_secret_scope")
 	assert.Equal(t, reflect.ValueOf(JobEnvironment).Pointer(), reflect.ValueOf(productionNarrowDeps.environment).Pointer(),
 		"the default environment lookup must be the one that re-reads the workflow file")
 }
 
 // TestNarrowSecretsThroughTheProductionDeps runs the entry point with NO seam replacement,
-// against SQLite: the real LoadRun, the real scopesForRepo reading delivery_secret_scope,
+// against SQLite: the real LoadRun, the real scopesForRepo reading deploy_secret_scope,
 // and the real JobEnvironment. The run records no workflow source, so JobEnvironment
 // refuses and the environment-scoped secrets are withheld.
 func TestNarrowSecretsThroughTheProductionDeps(t *testing.T) {
@@ -293,7 +293,7 @@ func TestFindEnvironments(t *testing.T) {
 
 	envs, total, err := FindEnvironments(ctx, builderEq("repo_id", DefaultsRepoID), "sort_order ASC, id ASC", 2, 0)
 	require.NoError(t, err)
-	assert.EqualValues(t, 5, total, "models/fixtures/delivery_environment.yml defines five default rows")
+	assert.EqualValues(t, 5, total, "models/fixtures/deploy_environment.yml defines five default rows")
 	require.Len(t, envs, 2)
 	assert.Equal(t, "dev", envs[0].Name)
 	assert.Equal(t, "qa", envs[1].Name)

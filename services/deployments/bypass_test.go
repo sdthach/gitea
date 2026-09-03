@@ -34,13 +34,13 @@ func TestDeliveryCanBypassEnvironmentSequence(t *testing.T) {
 		want        bool
 	}{
 		{
-			name: "a repository admin passes when the override is not blocked",
-			env:  &deployments_model.Environment{Name: "prod"},
+			name: "a repository admin passes when admins_can_bypass is set",
+			env:  &deployments_model.Environment{Name: "prod", AdminsCanBypass: true},
 			user: user2, isRepoAdmin: true, want: true,
 		},
 		{
-			name: "block_admin_override refuses the same admin",
-			env:  &deployments_model.Environment{Name: "prod", BlockAdminOverride: true},
+			name: "admins_can_bypass false refuses the same admin",
+			env:  &deployments_model.Environment{Name: "prod"},
 			user: user2, isRepoAdmin: true, want: false,
 		},
 		{
@@ -51,56 +51,56 @@ func TestDeliveryCanBypassEnvironmentSequence(t *testing.T) {
 		{
 			name: "an allowlisted user passes",
 			env: &deployments_model.Environment{
-				Name:                  "prod",
-				EnableBypassAllowlist: true, BypassAllowlistUserIDs: []int64{2},
+				Name:              "prod",
+				RestrictReviewers: true, ReviewerUserIDs: []int64{2},
 			},
 			user: user2, want: true,
 		},
 		{
 			name: "a user not on the allowlist is refused by the same environment",
 			env: &deployments_model.Environment{
-				Name:                  "prod",
-				EnableBypassAllowlist: true, BypassAllowlistUserIDs: []int64{2},
+				Name:              "prod",
+				RestrictReviewers: true, ReviewerUserIDs: []int64{2},
 			},
 			user: user4, want: false,
 		},
 		{
 			name: "naming users without enabling the allowlist refuses them; the switch is the opt-in",
 			env: &deployments_model.Environment{
-				Name:                   "prod",
-				BypassAllowlistUserIDs: []int64{2},
+				Name:            "prod",
+				ReviewerUserIDs: []int64{2},
 			},
 			user: user2, want: false,
 		},
 		{
 			name: "a member of an allowlisted team passes",
 			env: &deployments_model.Environment{
-				Name:                  "prod",
-				EnableBypassAllowlist: true, BypassAllowlistTeamIDs: []int64{1},
+				Name:              "prod",
+				RestrictReviewers: true, ReviewerTeamIDs: []int64{1},
 			},
 			user: user2, want: true,
 		},
 		{
 			name: "a non-member of the same team is refused",
 			env: &deployments_model.Environment{
-				Name:                  "prod",
-				EnableBypassAllowlist: true, BypassAllowlistTeamIDs: []int64{1},
+				Name:              "prod",
+				RestrictReviewers: true, ReviewerTeamIDs: []int64{1},
 			},
 			user: user4, want: false,
 		},
 		{
-			name: "an admin blocked from overriding still passes through the allowlist",
+			name: "an admin with no bypass of their own still passes through the allowlist",
 			env: &deployments_model.Environment{
-				Name: "prod", BlockAdminOverride: true,
-				EnableBypassAllowlist: true, BypassAllowlistUserIDs: []int64{2},
+				Name: "prod", AdminsCanBypass: false,
+				RestrictReviewers: true, ReviewerUserIDs: []int64{2},
 			},
 			user: user2, isRepoAdmin: true, want: true,
 		},
 		{
 			name: "an anonymous caller is refused rather than panicked on",
 			env: &deployments_model.Environment{
-				Name:                  "prod",
-				EnableBypassAllowlist: true, BypassAllowlistUserIDs: []int64{2},
+				Name:              "prod",
+				RestrictReviewers: true, ReviewerUserIDs: []int64{2},
 			},
 			user: nil, want: false,
 		},

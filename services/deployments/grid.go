@@ -110,10 +110,10 @@ type key struct {
 
 // ProjectCells projects the append-only log onto one cell per (release, environment).
 //
-// policies maps an environment name to its approval policy. `⏸` renders from the
+// policies maps an environment name to its review policy. `⏸` renders from the
 // environment record, never inferred from run status, which cannot distinguish a held
 // deploy from a queued one. The projection answers it here so the grid does not change
-// shape when the approval gate gives the state a second source.
+// shape when the review gate gives the state a second source.
 //
 // The result is keyed by release tag, and each slice holds one cell per environment in the
 // order environments were given — sequence is configuration, since nothing in Gitea
@@ -320,7 +320,7 @@ func environmentsOf(ctx context.Context, repoID int64, only string) ([]string, m
 			continue
 		}
 		names = append(names, env.Name)
-		policies[env.Name] = env.ApprovalPolicy
+		policies[env.Name] = env.ReviewPolicy
 		orders[env.Name] = env.SortOrder
 	}
 	return names, policies, orders, nil

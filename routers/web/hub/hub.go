@@ -16,10 +16,17 @@ import (
 	hub_service "gitea.dev/services/hub"
 )
 
-// PagesEnabled is the settings gate, mirroring reqMilestonesDashboardPageEnabled so the
-// whole feature can be switched off.
-func PagesEnabled(ctx *context.Context) {
-	if !hub_service.PagesEnabled() {
+// PlanningPagesEnabled is the settings gate for routers/web/planning's routes, mirroring
+// reqMilestonesDashboardPageEnabled so that area can be switched off on its own.
+func PlanningPagesEnabled(ctx *context.Context) {
+	if !hub_service.PlanningPagesEnabled() {
+		ctx.HTTPError(http.StatusForbidden)
+	}
+}
+
+// DeploymentsPagesEnabled is the settings gate for routers/web/deployments' routes.
+func DeploymentsPagesEnabled(ctx *context.Context) {
+	if !hub_service.DeploymentsPagesEnabled() {
 		ctx.HTTPError(http.StatusForbidden)
 	}
 }

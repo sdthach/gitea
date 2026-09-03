@@ -41,7 +41,7 @@ type Deployment struct {
 
 // TableName keeps every fork table under one prefix, so no fork table can collide with an
 // upstream one a later pin introduces.
-func (*Deployment) TableName() string { return "delivery_deployment" }
+func (*Deployment) TableName() string { return "deploy_deployment" }
 
 func init() {
 	db.RegisterModel(new(Deployment))
@@ -79,7 +79,7 @@ func ValidateDeployment(d *Deployment) error {
 // so a run that reports several status changes still leaves exactly one deployment row.
 func AppendDeployment(ctx context.Context, d *Deployment) error {
 	if d.ID != 0 {
-		return errAppendOnly("delivery_deployment", d.ID)
+		return errAppendOnly("deploy_deployment", d.ID)
 	}
 	d.Environment = NormalizeEnvironmentName(d.Environment)
 	if err := ValidateDeployment(d); err != nil {

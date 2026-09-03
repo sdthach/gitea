@@ -51,12 +51,12 @@ var approvalSpec = query.Spec{
 // Approval is the approvals resource's response shape: the hold row, plus the state
 // projected over the audit log and what the calling user is allowed to do about it.
 type Approval struct {
-	deployments_model.Approval
+	deployments_model.Review
 	// State is pending, approved or rejected. It is a projection, never a stored column.
 	State             string `json:"state"`
-	ApprovalPolicy    string `json:"approval_policy"`
+	ReviewPolicy      string `json:"review_policy"`
 	ApprovalsCount    int64  `json:"approvals_count"`
-	RequiredApprovals int64  `json:"required_approvals"`
+	RequiredReviewers int64  `json:"required_reviewers"`
 	// AgeSeconds is how long the deploy has been held, which is what the pending list
 	// sorts a reviewer's attention by.
 	AgeSeconds int64 `json:"age_seconds"`
@@ -130,7 +130,7 @@ func ListApprovals(ctx *context.APIContext) {
 	}
 
 	cond := q.Cond().And(builder.In("repo_id", repoIDs))
-	rows, total, err := deployments_model.FindApprovals(ctx, cond, q.OrderBy(), q.Limit, q.Offset())
+	rows, total, err := deployments_model.FindReviews(ctx, cond, q.OrderBy(), q.Limit, q.Offset())
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -142,11 +142,11 @@ func ListApprovals(ctx *context.APIContext) {
 	// otherwise costs one permission lookup per hold.
 	canApprove := map[int64]bool{}
 	for _, row := range rows {
-		state, count, required, err := deployments_model.ResolveApprovalState(ctx, row)
+		state, count, required, err := deployments_model.ResolveReviewState(ctx, row)
 		if err != nil {
 			// A hold whose environment has since been removed still belongs in the list;
 			// it just cannot say what would release it.
-			state, count, required = deployments_model.ApprovalPending, 0, 0
+			state, count, required = deployments_model.ReviewPending, 0, 0
 		}
 		allowed, seen := canApprove[row.RepoID]
 		if !seen {
@@ -154,13 +154,13 @@ func ListApprovals(ctx *context.APIContext) {
 			canApprove[row.RepoID] = allowed
 		}
 		out = append(out, &Approval{
-			Approval:          *row,
+			Review:            *row,
 			State:             state,
-			ApprovalPolicy:    approvalPolicyOf(ctx, row),
+			ReviewPolicy:      approvalPolicyOf(ctx, row),
 			ApprovalsCount:    count,
-			RequiredApprovals: required,
+			RequiredReviewers: required,
 			AgeSeconds:        now - int64(row.CreatedUnix),
-			CanApprove:        allowed && state == deployments_model.ApprovalPending,
+			CanApprove:        allowed && state == deployments_model.ReviewPending,
 		})
 	}
 	if err := expandApprovals(ctx, q.Expand, out); err != nil {
@@ -172,12 +172,12 @@ func ListApprovals(ctx *context.APIContext) {
 
 // approvalPolicyOf reports the live policy of a hold's environment, so a client can explain
 // why a deploy is held without a second request.
-func approvalPolicyOf(ctx *context.APIContext, a *deployments_model.Approval) string {
+func approvalPolicyOf(ctx *context.APIContext, a *deployments_model.Review) string {
 	env, err := deployments_model.GetEnvironment(ctx, a.RepoID, a.Environment)
 	if err != nil {
 		return ""
 	}
-	return env.ApprovalPolicy
+	return env.ReviewPolicy
 }
 
 // callerMayApprove answers the same question the approve endpoint enforces, so a view never
@@ -237,7 +237,7 @@ func decide(ctx *context.APIContext, event string) {
 		return
 	}
 
-	approval, err := deployments_model.GetApprovalByID(ctx, id)
+	approval, err := deployments_model.GetReviewByID(ctx, id)
 	if err != nil {
 		hubapi.RenderHubError(ctx, http.StatusNotFound, err)
 		return
@@ -268,8 +268,8 @@ func decide(ctx *context.APIContext, event string) {
 		return
 	}
 
-	decision, err := deployments_service.Decide(ctx, deployments_service.ApprovalRequest{
-		Approval:    approval,
+	decision, err := deployments_service.Decide(ctx, deployments_service.ReviewRequest{
+		Review:      approval,
 		Environment: env,
 		Actor:       ctx.Doer,
 		Event:       event,
@@ -278,7 +278,7 @@ func decide(ctx *context.APIContext, event string) {
 		CanDispatch: perm.CanWrite(unit.TypeActions),
 	})
 	if err != nil {
-		if refused, ok := err.(*deployments_service.ErrApprovalRefused); ok {
+		if refused, ok := err.(*deployments_service.ErrReviewRefused); ok {
 			hubapi.RenderHubError(ctx, http.StatusForbidden, refused.Err)
 			return
 		}
@@ -287,12 +287,12 @@ func decide(ctx *context.APIContext, event string) {
 	}
 
 	ctx.JSON(http.StatusOK, &Approval{
-		Approval:          *decision.Approval,
+		Review:            *decision.Review,
 		State:             decision.State,
-		ApprovalPolicy:    env.ApprovalPolicy,
-		ApprovalsCount:    decision.ApprovalsCount,
-		RequiredApprovals: decision.RequiredApprovals,
-		AgeSeconds:        int64(timeutil.TimeStampNow()) - int64(decision.Approval.CreatedUnix),
+		ReviewPolicy:      env.ReviewPolicy,
+		ApprovalsCount:    decision.ReviewsCount,
+		RequiredReviewers: decision.RequiredReviewers,
+		AgeSeconds:        int64(timeutil.TimeStampNow()) - int64(decision.Review.CreatedUnix),
 		CanApprove:        false,
 	})
 }

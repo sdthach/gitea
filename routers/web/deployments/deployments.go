@@ -19,12 +19,12 @@ type RouteRegistrar interface {
 // RegisterRoutes mounts the deployments pages. routers/web/hubroutes calls this from its own
 // RegisterRoutes, behind hub's own settings gate.
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
-	m.Get("/delivery/environments", reqSignIn, hub_web.PagesEnabled, Environment)
-	m.Get("/delivery/environments/{name}", reqSignIn, hub_web.PagesEnabled, Environment)
-	m.Get("/delivery/environments/{id}/edit", reqSignIn, hub_web.PagesEnabled, EnvironmentEdit)
-	m.Get("/delivery/grid", reqSignIn, hub_web.PagesEnabled, Grid)
-	m.Get("/delivery/ci", reqSignIn, hub_web.PagesEnabled, CI)
-	m.Get("/delivery/promote", reqSignIn, hub_web.PagesEnabled, Promote)
-	m.Get("/delivery/approvals", reqSignIn, hub_web.PagesEnabled, Approvals)
-	m.Get("/delivery/environments/{name}/approvals", reqSignIn, hub_web.PagesEnabled, Approvals)
+	m.Get("/delivery/environments", reqSignIn, hub_web.DeploymentsPagesEnabled, Environment)
+	m.Get("/delivery/environments/{name}", reqSignIn, hub_web.DeploymentsPagesEnabled, Environment)
+	m.Get("/delivery/environments/{id}/edit", reqSignIn, hub_web.DeploymentsPagesEnabled, EnvironmentEdit)
+	m.Get("/delivery/grid", reqSignIn, hub_web.DeploymentsPagesEnabled, Grid)
+	m.Get("/delivery/ci", reqSignIn, hub_web.DeploymentsPagesEnabled, CI)
+	m.Get("/delivery/promote", reqSignIn, hub_web.DeploymentsPagesEnabled, Promote)
+	m.Get("/delivery/approvals", reqSignIn, hub_web.DeploymentsPagesEnabled, Approvals)
+	m.Get("/delivery/environments/{name}/approvals", reqSignIn, hub_web.DeploymentsPagesEnabled, Approvals)
 }

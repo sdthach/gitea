@@ -6,12 +6,15 @@ package hubroutes
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	hubapi "gitea.dev/routers/api/hub"
 	planningv1 "gitea.dev/routers/api/planning/v1"
+	hub_web "gitea.dev/routers/web/hub"
+	"gitea.dev/services/context"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,6 +166,23 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 	}
 }
 
+// gateFor is which settings gate TestRoutesAreRegisteredBehindTheGate expects on each
+// pattern: routers/web/deployments' routes carry DeploymentsPagesEnabled, and
+// routers/web/planning's carry PlanningPagesEnabled, so switching one area off never
+// touches the other's pages.
+var gateFor = map[string]func(*context.Context){
+	"/delivery/environments":                  hub_web.DeploymentsPagesEnabled,
+	"/delivery/environments/{name}":           hub_web.DeploymentsPagesEnabled,
+	"/delivery/environments/{id}/edit":        hub_web.DeploymentsPagesEnabled,
+	"/delivery/grid":                          hub_web.DeploymentsPagesEnabled,
+	"/delivery/ci":                            hub_web.DeploymentsPagesEnabled,
+	"/delivery/promote":                       hub_web.DeploymentsPagesEnabled,
+	"/delivery/approvals":                     hub_web.DeploymentsPagesEnabled,
+	"/delivery/environments/{name}/approvals": hub_web.DeploymentsPagesEnabled,
+	"/delivery/board":                         hub_web.PlanningPagesEnabled,
+	"/delivery/timeline":                      hub_web.PlanningPagesEnabled,
+}
+
 func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 	r := &recordingRouter{}
 	RegisterRoutes(r, "signin")
@@ -174,9 +194,20 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 		"/delivery/approvals", "/delivery/environments/{name}/approvals",
 		"/delivery/board", "/delivery/timeline",
 	}, r.patterns)
-	for _, handlers := range r.handlers {
+	for i, pattern := range r.patterns {
+		handlers := r.handlers[i]
 		require.Len(t, handlers, 3, "each page sits behind reqSignIn and the settings gate")
+		wantGate, ok := gateFor[pattern]
+		require.True(t, ok, "%s has no expected gate declared in this test", pattern)
+		assert.True(t, sameFunc(handlers[1], wantGate),
+			"%s must sit behind its own area's settings gate, not the other area's", pattern)
 	}
+}
+
+// sameFunc compares two middleware values by the function they point at: func values are
+// otherwise comparable only to nil, and the router type-erases them to any.
+func sameFunc(a, b any) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
 
 type recordingRouter struct {

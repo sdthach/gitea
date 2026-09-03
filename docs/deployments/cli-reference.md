@@ -294,18 +294,12 @@ gitea-deployments environment-create — Create an environment
   POST /environments
 
 Flags:
-  -approval-policy string
-    	Approval policy. Defaults to none.
-  -block-admin-override
-    	Block repo admin from bypassing the gate.
-  -bypass-allowlist-team-ids string
-    	Team IDs allowed to bypass.
-  -bypass-allowlist-user-ids string
-    	User IDs allowed to bypass.
+  -admins-can-bypass
+    	Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.
   -cursor string
     	opaque cursor from a previous response
-  -enable-bypass-allowlist
-    	Enable bypass allowlist.
+  -depends-on string
+    	Environments a release must pass through first.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -320,18 +314,24 @@ Flags:
     	row offset, converted to the 1-based page the API takes
   -order string
     	asc or desc
-  -predecessor string
-    	Environment a release must pass through first.
   -q string
     	free-text search
+  -releases-only
+    	Refuse prereleases; this environment takes finished releases only.
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
-  -require-full-release
-    	Refuse prereleases; this environment takes finished releases only.
-  -require-predecessor
-    	Gate when the predecessor hasn't held the release.
-  -required-approvals string
-    	Approvals needed. Defaults to 1.
+  -require-prior-deployment
+    	Gate when a dependency hasn't held the release.
+  -required-reviewers string
+    	Reviews needed. Defaults to 1.
+  -restrict-reviewers
+    	Enable bypass allowlist.
+  -review-policy string
+    	Review policy. Defaults to none.
+  -reviewer-team-ids string
+    	Team IDs allowed to bypass.
+  -reviewer-user-ids string
+    	User IDs allowed to bypass.
   -server string
     	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string
@@ -386,18 +386,12 @@ gitea-deployments environment-update — Update an environment
 Positional arguments: id
 
 Flags:
-  -approval-policy string
-    	Approval policy. Defaults to none.
-  -block-admin-override
-    	Block repo admin from bypassing the gate.
-  -bypass-allowlist-team-ids string
-    	Team IDs allowed to bypass.
-  -bypass-allowlist-user-ids string
-    	User IDs allowed to bypass.
+  -admins-can-bypass
+    	Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.
   -cursor string
     	opaque cursor from a previous response
-  -enable-bypass-allowlist
-    	Enable bypass allowlist.
+  -depends-on string
+    	Environments a release must pass through first.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -412,18 +406,24 @@ Flags:
     	row offset, converted to the 1-based page the API takes
   -order string
     	asc or desc
-  -predecessor string
-    	Environment a release must pass through first.
   -q string
     	free-text search
+  -releases-only
+    	Refuse prereleases; this environment takes finished releases only.
   -repo-id string
     	Repository id; 0 is the instance-wide default set.
-  -require-full-release
-    	Refuse prereleases; this environment takes finished releases only.
-  -require-predecessor
-    	Gate when the predecessor hasn't held the release.
-  -required-approvals string
-    	Approvals needed. Defaults to 1.
+  -require-prior-deployment
+    	Gate when a dependency hasn't held the release.
+  -required-reviewers string
+    	Reviews needed. Defaults to 1.
+  -restrict-reviewers
+    	Enable bypass allowlist.
+  -review-policy string
+    	Review policy. Defaults to none.
+  -reviewer-team-ids string
+    	Team IDs allowed to bypass.
+  -reviewer-user-ids string
+    	User IDs allowed to bypass.
   -server string
     	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string

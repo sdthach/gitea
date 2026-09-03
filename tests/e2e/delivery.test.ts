@@ -18,7 +18,7 @@ async function apiRepoID(request: APIRequestContext, owner: string, name: string
 async function apiCreateEnvironment(request: APIRequestContext, repoID: number, name: string, sortOrder = 10): Promise<number> {
   const response = await request.post(`${baseUrl()}/api/deployments/v1/environments`, {
     headers: apiHeaders(),
-    data: {repo_id: repoID, name, sort_order: sortOrder, approval_policy: 'none', required_approvals: 1},
+    data: {repo_id: repoID, name, sort_order: sortOrder, review_policy: 'none', required_reviewers: 1},
   });
   expect(response.ok(), `create environment ${name}: ${await response.text()}`).toBe(true);
   return (await response.json()).id;
@@ -172,8 +172,8 @@ test('delivery environment editor creates an environment and gates it', async ({
   const row = await page.request.get(`${baseUrl()}/api/deployments/v1/environments/${environmentID}`, {headers: apiHeaders()});
   expect(row.ok(), `read environment ${environmentID}: ${await row.text()}`).toBe(true);
   const stored = await row.json();
-  expect(stored.approval_policy).toBe('none');
-  expect(stored.required_approvals).toBe(1);
+  expect(stored.review_policy).toBe('none');
+  expect(stored.required_reviewers).toBe(1);
 
   await page.goto('/delivery/environments');
   await expect(page.locator('tr', {hasText: `${owner}/${repoName}`})).toContainText('Release kind');

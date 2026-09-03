@@ -20,33 +20,33 @@ import (
 const maxEnvironmentBody = 16 << 10
 
 type environmentBody struct {
-	RepoID                 int64   `json:"repo_id"`
-	Name                   string  `json:"name"`
-	SortOrder              int64   `json:"sort_order"`
-	ApprovalPolicy         string  `json:"approval_policy"`
-	RequiredApprovals      int64   `json:"required_approvals"`
-	Predecessor            string  `json:"predecessor"`
-	RequirePredecessor     bool    `json:"require_predecessor"`
-	RequireFullRelease     bool    `json:"require_full_release"`
-	BlockAdminOverride     bool    `json:"block_admin_override"`
-	EnableBypassAllowlist  bool    `json:"enable_bypass_allowlist"`
-	BypassAllowlistUserIDs []int64 `json:"bypass_allowlist_user_ids"`
-	BypassAllowlistTeamIDs []int64 `json:"bypass_allowlist_team_ids"`
+	RepoID                 int64    `json:"repo_id"`
+	Name                   string   `json:"name"`
+	SortOrder              int64    `json:"sort_order"`
+	ReviewPolicy           string   `json:"review_policy"`
+	RequiredReviewers      int64    `json:"required_reviewers"`
+	DependsOn              []string `json:"depends_on"`
+	RequirePriorDeployment bool     `json:"require_prior_deployment"`
+	ReleasesOnly           bool     `json:"releases_only"`
+	AdminsCanBypass        *bool    `json:"admins_can_bypass"`
+	RestrictReviewers      bool     `json:"restrict_reviewers"`
+	ReviewerUserIDs        []int64  `json:"reviewer_user_ids"`
+	ReviewerTeamIDs        []int64  `json:"reviewer_team_ids"`
 }
 
 var environmentBodyParams = []hubapi.Param{
 	{Name: "repo_id", In: "body", Type: "integer", Description: "Repository id; 0 is the instance-wide default set."},
 	{Name: "name", In: "body", Type: "string", Required: true, Description: "Environment name."},
 	{Name: "sort_order", In: "body", Type: "integer", Description: "Render order."},
-	{Name: "approval_policy", In: "body", Type: "string", Description: "Approval policy. Defaults to none.", Enum: deployments_model.ApprovalPolicies},
-	{Name: "required_approvals", In: "body", Type: "integer", Description: "Approvals needed. Defaults to 1."},
-	{Name: "predecessor", In: "body", Type: "string", Description: "Environment a release must pass through first."},
-	{Name: "require_predecessor", In: "body", Type: "boolean", Description: "Gate when the predecessor hasn't held the release."},
-	{Name: "require_full_release", In: "body", Type: "boolean", Description: "Refuse prereleases; this environment takes finished releases only."},
-	{Name: "block_admin_override", In: "body", Type: "boolean", Description: "Block repo admin from bypassing the gate."},
-	{Name: "enable_bypass_allowlist", In: "body", Type: "boolean", Description: "Enable bypass allowlist."},
-	{Name: "bypass_allowlist_user_ids", In: "body", Type: "array", Description: "User IDs allowed to bypass."},
-	{Name: "bypass_allowlist_team_ids", In: "body", Type: "array", Description: "Team IDs allowed to bypass."},
+	{Name: "review_policy", In: "body", Type: "string", Description: "Review policy. Defaults to none.", Enum: deployments_model.ReviewPolicies},
+	{Name: "required_reviewers", In: "body", Type: "integer", Description: "Reviews needed. Defaults to 1."},
+	{Name: "depends_on", In: "body", Type: "array", Description: "Environments a release must pass through first."},
+	{Name: "require_prior_deployment", In: "body", Type: "boolean", Description: "Gate when a dependency hasn't held the release."},
+	{Name: "releases_only", In: "body", Type: "boolean", Description: "Refuse prereleases; this environment takes finished releases only."},
+	{Name: "admins_can_bypass", In: "body", Type: "boolean", Description: "Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged."},
+	{Name: "restrict_reviewers", In: "body", Type: "boolean", Description: "Enable bypass allowlist."},
+	{Name: "reviewer_user_ids", In: "body", Type: "array", Description: "User IDs allowed to bypass."},
+	{Name: "reviewer_team_ids", In: "body", Type: "array", Description: "Team IDs allowed to bypass."},
 }
 
 var environmentIDParam = []hubapi.Param{
@@ -59,7 +59,7 @@ func createEnvironmentEndpoint() *hubapi.Endpoint {
 			ID: "createEnvironment", Method: http.MethodPost, Path: "/environments",
 			Summary: "Create an environment",
 			Description: "Site admin for instance-wide defaults (repo_id 0), repo admin for " +
-				"repository environments. Validates name, approval policy and predecessor.",
+				"repository environments. Validates name, review policy and dependencies.",
 			Tag: "environments", Body: environmentBodyParams,
 			CLINames: []string{"environment-create"},
 			Response: "Environment", ResponseIs: "object",
@@ -156,6 +156,10 @@ func CreateEnvironmentHandler(ctx *context.APIContext) {
 		return
 	}
 	env := bodyToEnvironment(body)
+	env.AdminsCanBypass = true // GitHub's own default; overridden below when the body sets it
+	if body.AdminsCanBypass != nil {
+		env.AdminsCanBypass = *body.AdminsCanBypass
+	}
 	if err := deployments_model.CreateEnvironment(ctx, env); err != nil {
 		hubapi.RenderHubError(ctx, http.StatusBadRequest, err)
 		return
@@ -186,6 +190,10 @@ func UpdateEnvironmentHandler(ctx *context.APIContext) {
 	env := bodyToEnvironment(body)
 	env.ID = id
 	env.RepoID = existing.RepoID
+	env.AdminsCanBypass = existing.AdminsCanBypass // unchanged unless the body sets it
+	if body.AdminsCanBypass != nil {
+		env.AdminsCanBypass = *body.AdminsCanBypass
+	}
 	if err := deployments_model.UpdateEnvironment(ctx, env); err != nil {
 		hubapi.RenderHubError(ctx, http.StatusBadRequest, err)
 		return
@@ -216,20 +224,23 @@ func DeleteEnvironmentHandler(ctx *context.APIContext) {
 	ctx.JSON(http.StatusNoContent, nil)
 }
 
+// bodyToEnvironment carries every field with a plain zero-value default. AdminsCanBypass is
+// not among them — a pointer, so its caller can tell an absent field from an explicit false —
+// and is set by CreateEnvironmentHandler and UpdateEnvironmentHandler once they know whether
+// they are defaulting it or preserving the existing row's value.
 func bodyToEnvironment(body *environmentBody) *deployments_model.Environment {
 	return &deployments_model.Environment{
 		RepoID:                 body.RepoID,
 		Name:                   body.Name,
 		SortOrder:              body.SortOrder,
-		ApprovalPolicy:         body.ApprovalPolicy,
-		RequiredApprovals:      body.RequiredApprovals,
-		Predecessor:            body.Predecessor,
-		RequirePredecessor:     body.RequirePredecessor,
-		RequireFullRelease:     body.RequireFullRelease,
-		BlockAdminOverride:     body.BlockAdminOverride,
-		EnableBypassAllowlist:  body.EnableBypassAllowlist,
-		BypassAllowlistUserIDs: body.BypassAllowlistUserIDs,
-		BypassAllowlistTeamIDs: body.BypassAllowlistTeamIDs,
+		ReviewPolicy:           body.ReviewPolicy,
+		RequiredReviewers:      body.RequiredReviewers,
+		DependsOn:              body.DependsOn,
+		RequirePriorDeployment: body.RequirePriorDeployment,
+		ReleasesOnly:           body.ReleasesOnly,
+		RestrictReviewers:      body.RestrictReviewers,
+		ReviewerUserIDs:        body.ReviewerUserIDs,
+		ReviewerTeamIDs:        body.ReviewerTeamIDs,
 	}
 }
 
@@ -250,7 +261,7 @@ func readEnvironmentBody(ctx *context.APIContext) (*environmentBody, bool) {
 	if err := json.Unmarshal(raw, body); err != nil {
 		hubapi.APIError(ctx, http.StatusBadRequest, "malformed_body",
 			"the request body is not the JSON object this endpoint takes",
-			`Send {"name": "staging", "approval_policy": "none"}.`)
+			`Send {"name": "staging", "review_policy": "none"}.`)
 		return nil, false
 	}
 	return body, true

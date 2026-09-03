@@ -388,7 +388,7 @@ type TrendPoint struct {
 // DailyTrend buckets the window into UTC days, one point per day including days with no run
 // at all — a gap in the series would be read as missing data rather than as a quiet day.
 //
-// Deployments come from the fork's own delivery_deployment rather than from counting deploy
+// Deployments come from the fork's own deploy_deployment rather than from counting deploy
 // runs, so this dashboard and the delivery grid cannot disagree about how many deploys
 // happened.
 func DailyTrend(facts []deployments_model.RunFact, deployments []deployments_model.DeploymentFact, window Window) []TrendPoint {

@@ -33,20 +33,20 @@ const (
 // than imported so the test asserts the WIRE contract, not the Go struct: a field renamed in
 // the service without the document following would still pass an assertion over the struct.
 type promotionPayload struct {
-	RepoFullName           string `json:"repo_full_name"`
-	Environment            string `json:"environment"`
-	ReleaseTag             string `json:"release_tag"`
-	CurrentlyLive          string `json:"currently_live"`
-	IsRollback             bool   `json:"is_rollback"`
-	Predecessor            string `json:"predecessor"`
-	PredecessorState       string `json:"predecessor_state"`
-	Outcome                string `json:"outcome"`
-	Message                string `json:"message"`
-	SuggestedAction        string `json:"suggested_action"`
-	RequiresOverrideReason bool   `json:"requires_override_reason"`
-	Confirmed              bool   `json:"confirmed"`
-	WorkflowID             string `json:"workflow_id"`
-	Ref                    string `json:"ref"`
+	RepoFullName           string   `json:"repo_full_name"`
+	Environment            string   `json:"environment"`
+	ReleaseTag             string   `json:"release_tag"`
+	CurrentlyLive          string   `json:"currently_live"`
+	IsRollback             bool     `json:"is_rollback"`
+	DependsOn              []string `json:"depends_on"`
+	PredecessorState       string   `json:"predecessor_state"`
+	Outcome                string   `json:"outcome"`
+	Message                string   `json:"message"`
+	SuggestedAction        string   `json:"suggested_action"`
+	RequiresOverrideReason bool     `json:"requires_override_reason"`
+	Confirmed              bool     `json:"confirmed"`
+	WorkflowID             string   `json:"workflow_id"`
+	Ref                    string   `json:"ref"`
 }
 
 // setEnvironmentPolicy writes one repository-scoped environment with the sequence policy the
@@ -54,8 +54,8 @@ type promotionPayload struct {
 // persist cannot be smuggled into a test.
 func setEnvironmentPolicy(t *testing.T, env *deployments_model.Environment) {
 	t.Helper()
-	env.ApprovalPolicy = deployments_model.PolicyNone
-	env.RequiredApprovals = 1
+	env.ReviewPolicy = deployments_model.PolicyNone
+	env.RequiredReviewers = 1
 	require.NoError(t, deployments_model.ValidateEnvironment(env))
 	require.NoError(t, db.Insert(t.Context(), env))
 }
@@ -110,20 +110,20 @@ func TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching(t *testing.T) 
 	assert.Equal(t, "deploy-prod.yaml", plan.WorkflowID)
 	assert.Equal(t, "refs/tags/"+promotionFullRelease, plan.Ref)
 	assert.False(t, plan.Confirmed)
-	assert.Equal(t, "proceed", plan.Outcome, "no predecessor is declared, so there is no sequence to warn about")
+	assert.Equal(t, "proceed", plan.Outcome, "no dependency is declared, so there is no sequence to warn about")
 
 	assert.Len(t, deliveryAuditEvents(t, deployments_model.AuditRequested), before,
 		"the first step appends nothing and dispatches nothing")
 }
 
-// TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt: with require_predecessor off
-// the sequence is a warning and the deploy is still offered, so an environment that has set
-// no policy keeps the behaviour it had before the fork.
-func TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt(t *testing.T) {
+// TestAPIDeliveryPromotionWarnsWhenTheDependencyNeverHeldIt: with require_prior_deployment
+// off the sequence is a warning and the deploy is still offered, so an environment that has
+// set no policy keeps the behaviour it had before the fork.
+func TestAPIDeliveryPromotionWarnsWhenTheDependencyNeverHeldIt(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50, Predecessor: "staging"})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50, DependsOn: []string{"staging"}})
 
 	status, plan := promote(t, deliveryWriteToken(t, "user2"), map[string]any{
 		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
@@ -131,15 +131,15 @@ func TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	assert.Equal(t, "warn", plan.Outcome)
 	assert.Equal(t, "never", plan.PredecessorState)
-	assert.Equal(t, "staging", plan.Predecessor)
+	assert.Equal(t, []string{"staging"}, plan.DependsOn)
 	assert.NotEmpty(t, plan.Message)
 	assert.NotEmpty(t, plan.SuggestedAction, "every decision carries a suggested next action")
 	assert.False(t, plan.RequiresOverrideReason, "a warning owes no reason")
 }
 
-// TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt is the gate's accepting case:
-// the same environment, the same flag, and a predecessor that has held the release.
-func TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt(t *testing.T) {
+// TestAPIDeliveryPromotionProceedsOnceTheDependencyHasHeldIt is the gate's accepting case:
+// the same environment, the same flag, and a dependency that has held the release.
+func TestAPIDeliveryPromotionProceedsOnceTheDependencyHasHeldIt(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
@@ -148,7 +148,7 @@ func TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt(t *testing.T) {
 
 	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
-		Predecessor: "staging", RequirePredecessor: true,
+		DependsOn: []string{"staging"}, RequirePriorDeployment: true,
 	})
 
 	status, plan := promote(t, deliveryWriteToken(t, "user2"), map[string]any{
@@ -160,15 +160,15 @@ func TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt(t *testing.T) {
 	assert.False(t, plan.RequiresOverrideReason)
 }
 
-// TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin is the refusing half: with
-// block_admin_override set, the repository admin is refused, and nothing is written.
-func TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin(t *testing.T) {
+// TestAPIDeliveryPromotionAdminsCanBypassFalseRefusesTheAdmin is the refusing half: with
+// admins_can_bypass unset, the repository admin is refused, and nothing is written.
+func TestAPIDeliveryPromotionAdminsCanBypassFalseRefusesTheAdmin(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
-		Predecessor: "staging", RequirePredecessor: true, BlockAdminOverride: true,
+		DependsOn: []string{"staging"}, RequirePriorDeployment: true, AdminsCanBypass: false,
 	})
 
 	status, plan := promote(t, deliveryWriteToken(t, "user2"), map[string]any{
@@ -196,7 +196,7 @@ func TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
-		Predecessor: "staging", RequirePredecessor: true,
+		DependsOn: []string{"staging"}, RequirePriorDeployment: true, AdminsCanBypass: true,
 	})
 	token := deliveryWriteToken(t, "user2") // user2 owns repo 1, so it is a repository admin
 
@@ -235,13 +235,13 @@ func TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 
 // TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired covers the offer
 // rule at the API, which is what makes it a rule rather than a hidden button: the CLI is
-// refused where the grid is. The two environments differ only in require_full_release, so
+// refused where the grid is. The two environments differ only in releases_only, so
 // nothing here turns on what either is called.
 func TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "live", SortOrder: 50, RequireFullRelease: true})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "live", SortOrder: 50, ReleasesOnly: true})
 	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "sandbox", SortOrder: 20})
 	token := deliveryWriteToken(t, "user2")
 

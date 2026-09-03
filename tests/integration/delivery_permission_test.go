@@ -116,7 +116,7 @@ func (w *deliveryRoleWorld) canSetPolicy(t *testing.T, token string) bool {
 	t.Helper()
 	req := NewRequestWithJSON(t, "PUT",
 		fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, w.devEnvID), map[string]any{
-			"name": "dev", "sort_order": 10, "approval_policy": "none", "required_approvals": 1,
+			"name": "dev", "sort_order": 10, "review_policy": "none", "required_reviewers": 1,
 		}).AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
 }
@@ -185,19 +185,19 @@ func setUpDeliveryRoles(t *testing.T) *deliveryRoleWorld {
 
 	dev := &deployments_model.Environment{
 		RepoID: w.repo.ID, Name: "dev", SortOrder: 10,
-		ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
+		ReviewPolicy: deployments_model.PolicyNone, RequiredReviewers: 1,
 	}
 	require.NoError(t, db.Insert(t.Context(), dev))
 	w.devEnvID = dev.ID
 	require.NoError(t, db.Insert(t.Context(), &deployments_model.Environment{
 		RepoID: w.repo.ID, Name: "prod", SortOrder: 50,
-		ApprovalPolicy: deployments_model.PolicyOthersOnly, RequiredApprovals: 1,
-		EnableBypassAllowlist: true, BypassAllowlistTeamIDs: []int64{teams["approver"]},
+		ReviewPolicy: deployments_model.PolicyOthersOnly, RequiredReviewers: 1,
+		RestrictReviewers: true, ReviewerTeamIDs: []int64{teams["approver"]}, AdminsCanBypass: true,
 	}))
 
 	// The requester is the deployer, so others_only also has something to refuse.
 	deployer := deliveryRoleLogin("deployer")
-	approval := &deployments_model.Approval{
+	approval := &deployments_model.Review{
 		RepoID: w.repo.ID, Environment: "prod", RunID: 9101, JobID: 9101,
 		ReleaseTag: w.releaseTag, RequesterID: userIDByName(t, adminToken, deployer),
 		RequesterLogin: deployer,

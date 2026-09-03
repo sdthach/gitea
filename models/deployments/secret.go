@@ -34,7 +34,7 @@ type SecretScope struct {
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated NOT NULL" json:"updated_unix"`
 }
 
-func (*SecretScope) TableName() string { return "delivery_secret_scope" }
+func (*SecretScope) TableName() string { return "deploy_secret_scope" }
 
 func init() {
 	db.RegisterModel(new(SecretScope))

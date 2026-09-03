@@ -7,15 +7,6 @@
             "description": "How long the deploy has been held.",
             "type": "integer"
           },
-          "approval_policy": {
-            "description": "The environment's live approval policy.",
-            "enum": [
-              "none",
-              "any_approver",
-              "others_only"
-            ],
-            "type": "string"
-          },
           "approvals_count": {
             "description": "Distinct approvers so far, counted under the environment's policy.",
             "type": "integer"
@@ -60,9 +51,18 @@
             "description": "Requester login, denormalized so deleting the user does not erase who asked.",
             "type": "string"
           },
-          "required_approvals": {
-            "description": "Approvals this deploy needs before the job is assigned.",
+          "required_reviewers": {
+            "description": "Reviews this deploy needs before the job is assigned.",
             "type": "integer"
+          },
+          "review_policy": {
+            "description": "The environment's live review policy.",
+            "enum": [
+              "none",
+              "any_approver",
+              "others_only"
+            ],
+            "type": "string"
           },
           "run_id": {
             "description": "Gitea's own Actions run id.",
@@ -94,7 +94,7 @@
           "id",
           "job_id",
           "repo_id",
-          "required_approvals",
+          "required_reviewers",
           "run_id",
           "state"
         ],
@@ -333,15 +333,6 @@
       },
       "Environment": {
         "properties": {
-          "approval_policy": {
-            "description": "Approval policy. Defaults to none, so adding the fork changes no existing behaviour.",
-            "enum": [
-              "none",
-              "any_approver",
-              "others_only"
-            ],
-            "type": "string"
-          },
           "can_write": {
             "description": "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true.",
             "type": "boolean"
@@ -362,9 +353,18 @@
             "description": "Repository the environment belongs to; 0 is the instance-wide default set.",
             "type": "integer"
           },
-          "required_approvals": {
-            "description": "Approvals a held deploy needs. Defaults to 1.",
+          "required_reviewers": {
+            "description": "Reviews a held deploy needs. Defaults to 1.",
             "type": "integer"
+          },
+          "review_policy": {
+            "description": "Review policy. Defaults to none, so adding the fork changes no existing behaviour.",
+            "enum": [
+              "none",
+              "any_approver",
+              "others_only"
+            ],
+            "type": "string"
           },
           "sort_order": {
             "description": "Render order. Order is configuration; the model expresses no sequence.",
@@ -376,12 +376,12 @@
           }
         },
         "required": [
-          "approval_policy",
           "can_write",
           "id",
           "name",
           "repo_id",
-          "required_approvals",
+          "required_reviewers",
+          "review_policy",
           "sort_order"
         ],
         "type": "object"
@@ -489,6 +489,13 @@
             "description": "The release live in the target environment right now, empty when nothing has ever succeeded there. The confirm step names it before anything is dispatched.",
             "type": "string"
           },
+          "depends_on": {
+            "description": "The environments this one depends on; empty when it depends on none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "environment": {
             "description": "Target environment, lower-cased.",
             "type": "string"
@@ -519,12 +526,8 @@
             "description": "The reason given for bypassing the sequence rule.",
             "type": "string"
           },
-          "predecessor": {
-            "description": "The environment this one names as its predecessor, empty when it names none.",
-            "type": "string"
-          },
           "predecessor_state": {
-            "description": "What the predecessor has done with this release: none, never, held or live.",
+            "description": "What the first unsatisfied dependency has done with this release: none, never, held or live.",
             "enum": [
               "none",
               "never",
@@ -3368,7 +3371,7 @@
         ]
       },
       "post": {
-        "description": "Two steps. With confirm false — the default — nothing is dispatched and the response names the target environment, the release tag, the release currently live there, and what the environment's sequence rule decided. With confirm true the environment's deploy workflow is dispatched at the release tag, as the calling user, so Gitea names the human who asked. Rolling back is this same call with a prior release tag; there is no separate rollback path. An environment that sets require_predecessor refuses a release its predecessor has never held, unless the caller can bypass — the same helper and the same allowlist fields branch protection uses — in which case the override and its reason are appended to the audit log. Authorized by Gitea's own write check on the Actions unit.",
+        "description": "Two steps. With confirm false — the default — nothing is dispatched and the response names the target environment, the release tag, the release currently live there, and what the environment's sequence rule decided. With confirm true the environment's deploy workflow is dispatched at the release tag, as the calling user, so Gitea names the human who asked. Rolling back is this same call with a prior release tag; there is no separate rollback path. An environment that sets require_prior_deployment refuses a release its dependencies have never held, unless the caller can bypass — the same helper and the same allowlist fields branch protection uses — in which case the override and its reason are appended to the audit log. Authorized by Gitea's own write check on the Actions unit.",
         "operationId": "createDeployment",
         "parameters": [],
         "requestBody": {
@@ -3687,117 +3690,117 @@
             }
           },
           {
-            "description": "Filter on approval_policy. Bare form means the eq operator.",
+            "description": "Filter on review_policy. Bare form means the eq operator.",
             "in": "query",
-            "name": "approval_policy",
+            "name": "review_policy",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[ne]",
+            "name": "review_policy[ne]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the in operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the in operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[in]",
+            "name": "review_policy[in]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the contains operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the contains operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[contains]",
+            "name": "review_policy[contains]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter on required_approvals. Bare form means the eq operator.",
+            "description": "Filter on required_reviewers. Bare form means the eq operator.",
             "in": "query",
-            "name": "required_approvals",
+            "name": "required_reviewers",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[ne]",
+            "name": "required_reviewers[ne]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the lt operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the lt operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[lt]",
+            "name": "required_reviewers[lt]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the lte operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the lte operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[lte]",
+            "name": "required_reviewers[lte]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the gt operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the gt operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[gt]",
+            "name": "required_reviewers[gt]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the gte operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the gte operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[gte]",
+            "name": "required_reviewers[gte]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the in operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the in operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[in]",
+            "name": "required_reviewers[in]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter on require_full_release. Bare form means the eq operator.",
+            "description": "Filter on releases_only. Bare form means the eq operator.",
             "in": "query",
-            "name": "require_full_release",
+            "name": "releases_only",
             "required": false,
             "schema": {
               "type": "boolean"
             }
           },
           {
-            "description": "Filter require_full_release with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter releases_only with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "require_full_release[ne]",
+            "name": "releases_only[ne]",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -3930,7 +3933,7 @@
             }
           },
           {
-            "description": "Free-text search over name, approval_policy.",
+            "description": "Free-text search over name, review_policy.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -4037,7 +4040,7 @@
         ]
       },
       "post": {
-        "description": "Site admin for instance-wide defaults (repo_id 0), repo admin for repository environments. Validates name, approval policy and predecessor.",
+        "description": "Site admin for instance-wide defaults (repo_id 0), repo admin for repository environments. Validates name, review policy and dependencies.",
         "operationId": "createEnvironment",
         "parameters": [],
         "requestBody": {
@@ -4045,8 +4048,40 @@
             "application/json": {
               "schema": {
                 "properties": {
-                  "approval_policy": {
-                    "description": "Approval policy. Defaults to none.",
+                  "admins_can_bypass": {
+                    "description": "Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.",
+                    "type": "boolean"
+                  },
+                  "depends_on": {
+                    "description": "Environments a release must pass through first.",
+                    "type": "array"
+                  },
+                  "name": {
+                    "description": "Environment name.",
+                    "type": "string"
+                  },
+                  "releases_only": {
+                    "description": "Refuse prereleases; this environment takes finished releases only.",
+                    "type": "boolean"
+                  },
+                  "repo_id": {
+                    "description": "Repository id; 0 is the instance-wide default set.",
+                    "type": "integer"
+                  },
+                  "require_prior_deployment": {
+                    "description": "Gate when a dependency hasn't held the release.",
+                    "type": "boolean"
+                  },
+                  "required_reviewers": {
+                    "description": "Reviews needed. Defaults to 1.",
+                    "type": "integer"
+                  },
+                  "restrict_reviewers": {
+                    "description": "Enable bypass allowlist.",
+                    "type": "boolean"
+                  },
+                  "review_policy": {
+                    "description": "Review policy. Defaults to none.",
                     "enum": [
                       "none",
                       "any_approver",
@@ -4054,45 +4089,13 @@
                     ],
                     "type": "string"
                   },
-                  "block_admin_override": {
-                    "description": "Block repo admin from bypassing the gate.",
-                    "type": "boolean"
-                  },
-                  "bypass_allowlist_team_ids": {
+                  "reviewer_team_ids": {
                     "description": "Team IDs allowed to bypass.",
                     "type": "array"
                   },
-                  "bypass_allowlist_user_ids": {
+                  "reviewer_user_ids": {
                     "description": "User IDs allowed to bypass.",
                     "type": "array"
-                  },
-                  "enable_bypass_allowlist": {
-                    "description": "Enable bypass allowlist.",
-                    "type": "boolean"
-                  },
-                  "name": {
-                    "description": "Environment name.",
-                    "type": "string"
-                  },
-                  "predecessor": {
-                    "description": "Environment a release must pass through first.",
-                    "type": "string"
-                  },
-                  "repo_id": {
-                    "description": "Repository id; 0 is the instance-wide default set.",
-                    "type": "integer"
-                  },
-                  "require_full_release": {
-                    "description": "Refuse prereleases; this environment takes finished releases only.",
-                    "type": "boolean"
-                  },
-                  "require_predecessor": {
-                    "description": "Gate when the predecessor hasn't held the release.",
-                    "type": "boolean"
-                  },
-                  "required_approvals": {
-                    "description": "Approvals needed. Defaults to 1.",
-                    "type": "integer"
                   },
                   "sort_order": {
                     "description": "Render order.",
@@ -4298,8 +4301,40 @@
             "application/json": {
               "schema": {
                 "properties": {
-                  "approval_policy": {
-                    "description": "Approval policy. Defaults to none.",
+                  "admins_can_bypass": {
+                    "description": "Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.",
+                    "type": "boolean"
+                  },
+                  "depends_on": {
+                    "description": "Environments a release must pass through first.",
+                    "type": "array"
+                  },
+                  "name": {
+                    "description": "Environment name.",
+                    "type": "string"
+                  },
+                  "releases_only": {
+                    "description": "Refuse prereleases; this environment takes finished releases only.",
+                    "type": "boolean"
+                  },
+                  "repo_id": {
+                    "description": "Repository id; 0 is the instance-wide default set.",
+                    "type": "integer"
+                  },
+                  "require_prior_deployment": {
+                    "description": "Gate when a dependency hasn't held the release.",
+                    "type": "boolean"
+                  },
+                  "required_reviewers": {
+                    "description": "Reviews needed. Defaults to 1.",
+                    "type": "integer"
+                  },
+                  "restrict_reviewers": {
+                    "description": "Enable bypass allowlist.",
+                    "type": "boolean"
+                  },
+                  "review_policy": {
+                    "description": "Review policy. Defaults to none.",
                     "enum": [
                       "none",
                       "any_approver",
@@ -4307,45 +4342,13 @@
                     ],
                     "type": "string"
                   },
-                  "block_admin_override": {
-                    "description": "Block repo admin from bypassing the gate.",
-                    "type": "boolean"
-                  },
-                  "bypass_allowlist_team_ids": {
+                  "reviewer_team_ids": {
                     "description": "Team IDs allowed to bypass.",
                     "type": "array"
                   },
-                  "bypass_allowlist_user_ids": {
+                  "reviewer_user_ids": {
                     "description": "User IDs allowed to bypass.",
                     "type": "array"
-                  },
-                  "enable_bypass_allowlist": {
-                    "description": "Enable bypass allowlist.",
-                    "type": "boolean"
-                  },
-                  "name": {
-                    "description": "Environment name.",
-                    "type": "string"
-                  },
-                  "predecessor": {
-                    "description": "Environment a release must pass through first.",
-                    "type": "string"
-                  },
-                  "repo_id": {
-                    "description": "Repository id; 0 is the instance-wide default set.",
-                    "type": "integer"
-                  },
-                  "require_full_release": {
-                    "description": "Refuse prereleases; this environment takes finished releases only.",
-                    "type": "boolean"
-                  },
-                  "require_predecessor": {
-                    "description": "Gate when the predecessor hasn't held the release.",
-                    "type": "boolean"
-                  },
-                  "required_approvals": {
-                    "description": "Approvals needed. Defaults to 1.",
-                    "type": "integer"
                   },
                   "sort_order": {
                     "description": "Render order.",
@@ -4895,7 +4898,7 @@
     },
     "/overview/trends": {
       "get": {
-        "description": "One point per UTC day across the window, including days with no run — a gap would read as missing data rather than as a quiet day. The deployment count reads the fork's own delivery_deployment table rather than counting deploy runs, so this dashboard and the delivery grid share one source of truth. Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and one schema has to answer both.",
+        "description": "One point per UTC day across the window, including days with no run — a gap would read as missing data rather than as a quiet day. The deployment count reads the fork's own deploy_deployment table rather than counting deploy runs, so this dashboard and the delivery grid share one source of truth. Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and one schema has to answer both.",
         "operationId": "getOverviewTrends",
         "parameters": [
           {
@@ -5499,117 +5502,117 @@
             }
           },
           {
-            "description": "Filter on approval_policy. Bare form means the eq operator.",
+            "description": "Filter on review_policy. Bare form means the eq operator.",
             "in": "query",
-            "name": "approval_policy",
+            "name": "review_policy",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[ne]",
+            "name": "review_policy[ne]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the in operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the in operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[in]",
+            "name": "review_policy[in]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter approval_policy with the contains operator. Repeating the field ANDs the conditions.",
+            "description": "Filter review_policy with the contains operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "approval_policy[contains]",
+            "name": "review_policy[contains]",
             "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
-            "description": "Filter on required_approvals. Bare form means the eq operator.",
+            "description": "Filter on required_reviewers. Bare form means the eq operator.",
             "in": "query",
-            "name": "required_approvals",
+            "name": "required_reviewers",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[ne]",
+            "name": "required_reviewers[ne]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the lt operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the lt operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[lt]",
+            "name": "required_reviewers[lt]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the lte operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the lte operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[lte]",
+            "name": "required_reviewers[lte]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the gt operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the gt operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[gt]",
+            "name": "required_reviewers[gt]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the gte operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the gte operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[gte]",
+            "name": "required_reviewers[gte]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter required_approvals with the in operator. Repeating the field ANDs the conditions.",
+            "description": "Filter required_reviewers with the in operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "required_approvals[in]",
+            "name": "required_reviewers[in]",
             "required": false,
             "schema": {
               "type": "integer"
             }
           },
           {
-            "description": "Filter on require_full_release. Bare form means the eq operator.",
+            "description": "Filter on releases_only. Bare form means the eq operator.",
             "in": "query",
-            "name": "require_full_release",
+            "name": "releases_only",
             "required": false,
             "schema": {
               "type": "boolean"
             }
           },
           {
-            "description": "Filter require_full_release with the ne operator. Repeating the field ANDs the conditions.",
+            "description": "Filter releases_only with the ne operator. Repeating the field ANDs the conditions.",
             "in": "query",
-            "name": "require_full_release[ne]",
+            "name": "releases_only[ne]",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -5742,7 +5745,7 @@
             }
           },
           {
-            "description": "Free-text search over name, approval_policy.",
+            "description": "Free-text search over name, review_policy.",
             "in": "query",
             "name": "q",
             "required": false,

@@ -269,7 +269,7 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 }
 
 // TestAPIDeliveryCITrendMatchesTheDeliveryTables is the deployment half: the trend's
-// deployment count is the fork's own delivery_deployment, so the CI dashboard and the delivery
+// deployment count is the fork's own deploy_deployment, so the CI dashboard and the delivery
 // grid share one source of truth.
 func TestAPIDeliveryCITrendMatchesTheDeliveryTables(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()

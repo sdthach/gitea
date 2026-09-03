@@ -16,9 +16,9 @@ import (
 func init() {
 	hub_model.RegisterMigration(&hub_model.Migration{
 		ID:          1,
-		Description: "lower-case delivery_environment.name",
+		Description: "lower-case deploy_environment.name",
 		Migrate: func(ctx context.Context, e db.Engine) error {
-			_, err := e.Exec("UPDATE delivery_environment SET name = LOWER(name) WHERE name <> LOWER(name)")
+			_, err := e.Exec("UPDATE deploy_environment SET name = LOWER(name) WHERE name <> LOWER(name)")
 			return err
 		},
 	})

@@ -19,7 +19,7 @@ func TestNormalizeEnvironmentName(t *testing.T) {
 }
 
 func TestValidateEnvironment(t *testing.T) {
-	valid := &Environment{Name: "prod", ApprovalPolicy: PolicyNone, RequiredApprovals: 1}
+	valid := &Environment{Name: "prod", ReviewPolicy: PolicyNone, RequiredReviewers: 1}
 	require.NoError(t, ValidateEnvironment(valid))
 
 	cases := []struct {
@@ -27,10 +27,10 @@ func TestValidateEnvironment(t *testing.T) {
 		env       *Environment
 		wantInMsg string
 	}{
-		{"empty name", &Environment{Name: " ", ApprovalPolicy: PolicyNone, RequiredApprovals: 1}, "empty"},
-		{"over-long name", &Environment{Name: strings.Repeat("x", 65), ApprovalPolicy: PolicyNone, RequiredApprovals: 1}, "65 characters"},
-		{"unknown policy", &Environment{Name: "prod", ApprovalPolicy: "everyone", RequiredApprovals: 1}, "everyone"},
-		{"unsatisfiable gate", &Environment{Name: "prod", ApprovalPolicy: PolicyOthersOnly, RequiredApprovals: 0}, "unsatisfiable"},
+		{"empty name", &Environment{Name: " ", ReviewPolicy: PolicyNone, RequiredReviewers: 1}, "empty"},
+		{"over-long name", &Environment{Name: strings.Repeat("x", 65), ReviewPolicy: PolicyNone, RequiredReviewers: 1}, "65 characters"},
+		{"unknown policy", &Environment{Name: "prod", ReviewPolicy: "everyone", RequiredReviewers: 1}, "everyone"},
+		{"unsatisfiable gate", &Environment{Name: "prod", ReviewPolicy: PolicyOthersOnly, RequiredReviewers: 0}, "unsatisfiable"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,6 +45,6 @@ func TestValidateEnvironment(t *testing.T) {
 }
 
 func TestDefaultPolicyIsNone(t *testing.T) {
-	assert.Equal(t, PolicyNone, ApprovalPolicies[0])
-	assert.False(t, new(Environment).RequireFullRelease, "a new environment refuses no release kind")
+	assert.Equal(t, PolicyNone, ReviewPolicies[0])
+	assert.False(t, new(Environment).ReleasesOnly, "a new environment refuses no release kind")
 }

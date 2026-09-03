@@ -76,7 +76,7 @@ type AuditEvent struct {
 }
 
 // TableName keeps every fork table under one prefix.
-func (*AuditEvent) TableName() string { return "delivery_audit" }
+func (*AuditEvent) TableName() string { return "deploy_audit" }
 
 func init() {
 	db.RegisterModel(new(AuditEvent))
@@ -137,7 +137,7 @@ func ValidateAuditEvent(e *AuditEvent) error {
 // and it is refused rather than silently inserted as a duplicate.
 func AppendAuditEvent(ctx context.Context, e *AuditEvent) error {
 	if e.ID != 0 {
-		return errAppendOnly("delivery_audit", e.ID)
+		return errAppendOnly("deploy_audit", e.ID)
 	}
 	e.Environment = NormalizeEnvironmentName(e.Environment)
 	if err := ValidateAuditEvent(e); err != nil {

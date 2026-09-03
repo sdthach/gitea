@@ -141,7 +141,7 @@ def parse_args(argv=None):
     p.add_argument("--tag", default=None,
                    help="run tag suffixing every name; defaults to random, so runs never collide")
     p.add_argument("--skip-env-policy", action="store_true",
-                   help="leave delivery_environment alone; deploys then never hold for approval")
+                   help="leave deploy_environment alone; deploys then never hold for approval")
     p.add_argument("--failure-rate", type=float, default=0.25,
                    help="fraction of deploy workflows that exit 1, so the CI overview is not all green")
     p.add_argument("--wait-approvals", type=int, default=120, metavar="SECONDS",
@@ -167,15 +167,15 @@ def set_environment_policy(api, approver_team_ids):
     rows = api("GET", f"{DV1}/environments?repo_id=0&limit=100") or []
     existing = {r["name"]: r for r in rows}
     policy = {
-        "qa": {"predecessor": "dev", "require_predecessor": True},
-        "uat": {"predecessor": "qa", "require_predecessor": True},
-        "staging": {"predecessor": "uat", "require_predecessor": True,
-                    "require_full_release": True},
-        "prod": {"predecessor": "staging", "require_predecessor": True,
-                 "require_full_release": True,
-                 "approval_policy": "others_only", "required_approvals": 1,
-                 "enable_bypass_allowlist": True,
-                 "bypass_allowlist_team_ids": approver_team_ids},
+        "qa": {"depends_on": ["dev"], "require_prior_deployment": True},
+        "uat": {"depends_on": ["qa"], "require_prior_deployment": True},
+        "staging": {"depends_on": ["uat"], "require_prior_deployment": True,
+                    "releases_only": True},
+        "prod": {"depends_on": ["staging"], "require_prior_deployment": True,
+                 "releases_only": True,
+                 "review_policy": "others_only", "required_reviewers": 1,
+                 "restrict_reviewers": True,
+                 "reviewer_team_ids": approver_team_ids},
     }
     for env_name, patch in policy.items():
         env = existing.get(env_name)
@@ -184,8 +184,8 @@ def set_environment_policy(api, approver_team_ids):
         body = {
             "name": env["name"],
             "sort_order": env["sort_order"],
-            "approval_policy": env["approval_policy"],
-            "required_approvals": env["required_approvals"],
+            "review_policy": env["review_policy"],
+            "required_reviewers": env["required_reviewers"],
         }
         body.update(patch)
         api("PUT", f"{DV1}/environments/{env['id']}", body, ok=(200,))
@@ -347,7 +347,7 @@ def promote(api, fake, full, release_count, totals, verbose):
                         print(f"  deploy {release_tag(n)} -> {env}: {e.status} {e.payload}",
                               file=sys.stderr)
                     break
-                # The sequence rule speaking: no runner has made the predecessor live, so
+                # The sequence rule speaking: no runner has made the dependency live, so
                 # bypass it with a reason, which lands on the audit log.
                 body["override_reason"] = f"preview seed: {fake.sentence()}"
                 try:

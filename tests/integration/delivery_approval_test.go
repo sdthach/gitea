@@ -106,11 +106,11 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		// prod is gated; nothing else is, so an ordinary job is unaffected.
 		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: deployments_model.PolicyAnyApprover, RequiredApprovals: 1,
+			ReviewPolicy: deployments_model.PolicyAnyApprover, RequiredReviewers: 1,
 		}))
 		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "qa", SortOrder: 20,
-			ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
+			ReviewPolicy: deployments_model.PolicyNone, RequiredReviewers: 1,
 		}))
 
 		session := loginUser(t, "user2")
@@ -199,9 +199,9 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			ReleaseTag        string `json:"release_tag"`
 			RequesterLogin    string `json:"requester_login"`
 			State             string `json:"state"`
-			ApprovalPolicy    string `json:"approval_policy"`
+			ReviewPolicy      string `json:"review_policy"`
 			ApprovalsCount    int64  `json:"approvals_count"`
-			RequiredApprovals int64  `json:"required_approvals"`
+			RequiredReviewers int64  `json:"required_reviewers"`
 			CanApprove        bool   `json:"can_approve"`
 			AgeSeconds        int64  `json:"age_seconds"`
 		}
@@ -216,10 +216,10 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		assert.Equal(t, "user2", hold.RequesterLogin)
 		assert.Equal(t, "pending", hold.State)
 		assert.Equal(t, int64(0), hold.ApprovalsCount)
-		assert.Equal(t, int64(1), hold.RequiredApprovals)
+		assert.Equal(t, int64(1), hold.RequiredReviewers)
 		assert.True(t, hold.CanApprove, "user2 owns the repository, so the forge permits them to approve")
 		assert.GreaterOrEqual(t, hold.AgeSeconds, int64(0))
-		assert.Equal(t, deployments_model.PolicyAnyApprover, hold.ApprovalPolicy,
+		assert.Equal(t, deployments_model.PolicyAnyApprover, hold.ReviewPolicy,
 			"the row says why it is held, so a client need not fetch the environment separately")
 
 		t.Run("a hold expands its deployment", func(t *testing.T) {
@@ -318,7 +318,7 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 
 		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: deployments_model.PolicyOthersOnly, RequiredApprovals: 1,
+			ReviewPolicy: deployments_model.PolicyOthersOnly, RequiredReviewers: 1,
 		}))
 
 		runner := approvalRunner(t, repo, "reject")
@@ -409,7 +409,7 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 
 		gated, err := deployments_model.RepoHasGatedEnvironment(ctx, repo.ID)
 		require.NoError(t, err)
-		require.False(t, gated, "the seeded default environments all carry approval_policy none")
+		require.False(t, gated, "the seeded default environments all carry review_policy none")
 
 		runner := approvalRunner(t, repo, "ungated")
 		run := approvalRun(t, repo, sha, 9903)
@@ -420,7 +420,7 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 		require.True(t, ok, "a job declaring environment prod is assigned when nothing gates prod")
 		assert.Equal(t, job.ID, task.JobID)
 
-		count, err := db.GetEngine(ctx).Where("repo_id = ?", repo.ID).Count(new(deployments_model.Approval))
+		count, err := db.GetEngine(ctx).Where("repo_id = ?", repo.ID).Count(new(deployments_model.Review))
 		require.NoError(t, err)
 		assert.Zero(t, count, "an ungated repository records no hold at all")
 	})

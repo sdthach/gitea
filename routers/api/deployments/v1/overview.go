@@ -94,7 +94,7 @@ func getOverviewTrendsEndpoint() *hubapi.Endpoint {
 			Summary: "The daily trend series: total, successful and failed runs, average duration and deployments",
 			Description: "One point per UTC day across the window, including days with no run — a gap would read as " +
 				"missing data rather than as a quiet day. " +
-				"The deployment count reads the fork's own delivery_deployment table rather than counting deploy " +
+				"The deployment count reads the fork's own deploy_deployment table rather than counting deploy " +
 				"runs, so this dashboard and the delivery grid share one source of truth. " +
 				"Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and " +
 				"one schema has to answer both.",
