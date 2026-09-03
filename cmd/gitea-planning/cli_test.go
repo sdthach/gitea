@@ -93,6 +93,14 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			"/api/planning/v1/issues", http.MethodPost,
 		},
 		"issue": {[]string{"issue", "9042"}, "/api/planning/v1/issues/9042", ""},
+		"issue-set-parent": {
+			[]string{"issue-set-parent", "--repo", "acme/widgets", "--parent-issue-id", "7", "9042"},
+			"/api/planning/v1/issues/9042/parent", http.MethodPut,
+		},
+		"issue-clear-parent": {
+			[]string{"issue-clear-parent", "--repo", "acme/widgets", "9042"},
+			"/api/planning/v1/issues/9042/parent", http.MethodDelete,
+		},
 		"issue-set-start": {
 			[]string{"issue-set-start", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
 			"/api/planning/v1/issues/9042/schedule", http.MethodPut,

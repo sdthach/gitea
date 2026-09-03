@@ -13,6 +13,7 @@ Commands:
   board-move-column       Move a card between the board's columns
   board-move-group        Move a card between the board's groups
   issue                   The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
+  issue-clear-parent      Remove an issue's parent
   issue-clear-start       Clear an issue's start date
   issue-clear-type        Remove an issue's type
   issue-create            Create an issue on a row
@@ -20,6 +21,7 @@ Commands:
   issue-move-milestone    Move an issue between the chart's milestone rows
   issue-set-dates         Set a bar's start and end
   issue-set-estimate      Set an issue's time estimate
+  issue-set-parent        Set an issue's parent
   issue-set-start         Set an issue's start date
   issue-set-type          Assign an issue's type
   issue-type-assignments  Batch-read issues' assigned types
@@ -135,7 +137,7 @@ Flags:
   -filter field[op]=value
     	repeatable field[op]=value filter; sent to the server verbatim
   -group string
-    	The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.
+    	The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the card into the empty-value group, clearing the field.
   -group-by string
     	required. The active grouping. A group move is refused when this is none, because there is nothing to write.
   -json
@@ -186,6 +188,42 @@ Flags:
     	asc or desc
   -q string
     	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-clear-parent
+
+```
+gitea-planning issue-clear-parent — Remove an issue's parent
+
+  DELETE /issues/{issue_id}/parent
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string
@@ -278,8 +316,6 @@ Flags:
     	opaque cursor from a previous response
   -description string
     	Issue body.
-  -epic string
-    	Epic name; the issue is labelled epic:<name> so the chart draws it.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -294,6 +330,8 @@ Flags:
     	row offset, converted to the 1-based page the API takes
   -order string
     	asc or desc
+  -parent-issue-id string
+    	A parent in the same repository; needs type_id, and the parent's own type must outrank it.
   -q string
     	free-text search
   -repo string
@@ -306,6 +344,8 @@ Flags:
     	required. Issue title.
   -token string
     	API token; resolved by the same precedence detect.sh implements
+  -type-id string
+    	A type visible from the repository, assigned to the new issue.
 ```
 
 ## gitea-planning issue-move-group
@@ -325,7 +365,7 @@ Flags:
   -filter field[op]=value
     	repeatable field[op]=value filter; sent to the server verbatim
   -group string
-    	The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.
+    	The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the bar into the empty-value group, clearing the field.
   -group-by string
     	required. The active grouping. A group move is refused when this is none, because there is nothing to write.
   -json
@@ -460,6 +500,44 @@ Flags:
     	sort field
   -time-estimate string
     	required. Duration such as "3d" or "4h30m".
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-set-parent
+
+```
+gitea-planning issue-set-parent — Set an issue's parent
+
+  PUT /issues/{issue_id}/parent
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -parent-issue-id string
+    	required. The parent to link.
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```

@@ -65,7 +65,7 @@ func TestPlanningSwimlanesAreGatedOnTheFlag(t *testing.T) {
 	assert.Contains(t, body, "planning-swimlane-grouping", "with it on the grouping selector renders")
 	assert.Contains(t, body, `data-repo-id="1"`, "and names the repository the board API is asked about")
 	assert.Contains(t, body, `data-project-id="1"`)
-	for _, grouping := range []string{"type", "epic", "assignee"} {
+	for _, grouping := range []string{"type", "parent", "assignee"} {
 		assert.Contains(t, body, `value="`+grouping+`"`, "the selector offers the grouping %q", grouping)
 	}
 }

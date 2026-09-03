@@ -4,7 +4,7 @@
       "Board": {
         "properties": {
           "can_edit_issue": {
-            "description": "Whether the caller may move a card between groups, which edits the issue's own label, assignee or assigned type.",
+            "description": "Whether the caller may move a card between groups, which edits the issue's own label, assignee, assigned type or recorded parent.",
             "type": "boolean"
           },
           "can_write": {
@@ -23,13 +23,13 @@
             "enum": [
               "type",
               "assignee",
-              "epic",
+              "parent",
               "none"
             ],
             "type": "string"
           },
           "groups": {
-            "description": "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, cards and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the issues with no value for the active grouping.",
+            "description": "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, cards, root_issue_id (under parent grouping) and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the issues with no value for the active grouping — under parent grouping, every root with no children of its own.",
             "items": {
               "type": "object"
             },
@@ -51,8 +51,15 @@
             "description": "The board's title.",
             "type": "string"
           },
+          "tree": {
+            "description": "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id, so a client can draw the hierarchy without re-deriving it from each card's own parent_issue_id.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "types": {
-            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color and type_icon.",
+            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, parent_issue_id, root_issue_id, depth and has_children.",
             "items": {
               "type": "object"
             },
@@ -68,6 +75,7 @@
           "project_id",
           "repo_full_name",
           "repo_id",
+          "tree",
           "types"
         ],
         "type": "object"
@@ -111,6 +119,13 @@
             "description": "Whether the caller may write the schedule and estimate endpoints below.",
             "type": "boolean"
           },
+          "children": {
+            "description": "Every issue recorded under this one: issue_id, number, title and is_closed.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "issue_id": {
             "description": "The issue's global id.",
             "type": "integer"
@@ -122,6 +137,14 @@
           "number": {
             "description": "The issue's per-repository number.",
             "type": "integer"
+          },
+          "parent": {
+            "description": "The issue's own recorded parent — issue_id, number and title — or null.",
+            "type": "object"
+          },
+          "progress": {
+            "description": "The children rolled up to a count: total and closed.",
+            "type": "object"
           },
           "repo_id": {
             "description": "Repository the issue belongs to.",
@@ -153,9 +176,12 @@
         },
         "required": [
           "can_write",
+          "children",
           "issue_id",
           "milestone",
           "number",
+          "parent",
+          "progress",
           "repo_id",
           "schedule",
           "time_estimate",
@@ -284,14 +310,14 @@
       "Roadmap": {
         "properties": {
           "arrows": {
-            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_rollup and to_rollup carry the rollup keys as kind:key, while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both rollup fields are absent at issue zoom, where an edge already joins two drawn bars.",
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_rollup and to_rollup carry the rollup keys as kind:key (parent:<issue id> or milestone:<id>), while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both rollup fields are absent at issue zoom, where an edge already joins two drawn bars.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "bars": {
-            "description": "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, title, url, epic, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. type comes from the issue's own assignment, not a label. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
+            "description": "One bar per managed issue, empty at a rolled-up zoom. Each carries issue_id, number, title, url, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth and has_children. type comes from the issue's own assignment, not a label. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
             "items": {
               "type": "object"
             },
@@ -302,7 +328,7 @@
             "enum": [
               "type",
               "assignee",
-              "epic",
+              "parent",
               "none"
             ],
             "type": "string"
@@ -330,7 +356,7 @@
             "type": "integer"
           },
           "rollups": {
-            "description": "Epic and milestone rows rolling up earliest start to latest end of their children, with ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row also carries issue_id, declared_start_unix and declared_end_unix — the epic issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
+            "description": "Parent and milestone rows rolling up earliest start to latest end of their children, with the same task-close percentage every other view uses as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so a parent is checked against its children even where none is drawn. A parent row also carries issue_id, type (its own assigned type), declared_start_unix and declared_end_unix — the parent issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
             "items": {
               "type": "object"
             },
@@ -339,6 +365,13 @@
           "ruler": {
             "description": "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows the range drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while the write granularity stays a day at every unit.",
             "type": "object"
+          },
+          "tree": {
+            "description": "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
           },
           "truncated": {
             "description": "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so.",
@@ -352,17 +385,17 @@
             "type": "array"
           },
           "unmanaged": {
-            "description": "Issues with no bar, each with the reason and a suggested action. An issue ccpm does not manage has no start to draw and is listed rather than given a fabricated bar.",
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "zoom": {
-            "description": "The depth the chart is read at. At epic or milestone only rollup rows are listed and no bar is drawn.",
+            "description": "The depth the chart is read at. At parent or milestone only rollup rows are listed and no bar is drawn.",
             "enum": [
               "issue",
-              "epic",
+              "parent",
               "milestone"
             ],
             "type": "string"
@@ -377,6 +410,7 @@
           "repo_id",
           "rollups",
           "ruler",
+          "tree",
           "truncated",
           "types",
           "unmanaged",
@@ -590,7 +624,7 @@
     },
     "/board/cards/{issue_id}/group": {
       "post": {
-        "description": "The second and last of the board's writes. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, the epic: label, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "The second and last of the board's writes. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, its recorded parent, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "moveBoardCardGroup",
         "parameters": [
           {
@@ -609,7 +643,7 @@
               "schema": {
                 "properties": {
                   "group": {
-                    "description": "The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.",
+                    "description": "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the card into the empty-value group, clearing the field.",
                     "type": "string"
                   },
                   "group_by": {
@@ -617,7 +651,7 @@
                     "enum": [
                       "type",
                       "assignee",
-                      "epic",
+                      "parent",
                       "none"
                     ],
                     "type": "string"
@@ -1154,7 +1188,7 @@
     },
     "/issues": {
       "post": {
-        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "createIssue",
         "parameters": [],
         "requestBody": {
@@ -1166,12 +1200,12 @@
                     "description": "Issue body.",
                     "type": "string"
                   },
-                  "epic": {
-                    "description": "Epic name; the issue is labelled epic:<name> so the chart draws it.",
-                    "type": "string"
-                  },
                   "milestone_id": {
                     "description": "Milestone row to file it under.",
+                    "type": "integer"
+                  },
+                  "parent_issue_id": {
+                    "description": "A parent in the same repository; needs type_id, and the parent's own type must outrank it.",
                     "type": "integer"
                   },
                   "repo": {
@@ -1181,6 +1215,10 @@
                   "title": {
                     "description": "Issue title.",
                     "type": "string"
+                  },
+                  "type_id": {
+                    "description": "A type visible from the repository, assigned to the new issue.",
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -1483,7 +1521,7 @@
     },
     "/issues/{issue_id}/group": {
       "post": {
-        "description": "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, the epic: label, or the assignee. It goes through the same PlanGroupMove the board's group move goes through, so a vertical drag on the chart and a group move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, its recorded parent, or the assignee. It goes through the same PlanGroupMove the board's group move goes through, so a vertical drag on the chart and a group move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "moveIssueGroup",
         "parameters": [
           {
@@ -1502,7 +1540,7 @@
               "schema": {
                 "properties": {
                   "group": {
-                    "description": "The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.",
+                    "description": "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the bar into the empty-value group, clearing the field.",
                     "type": "string"
                   },
                   "group_by": {
@@ -1510,7 +1548,7 @@
                     "enum": [
                       "type",
                       "assignee",
-                      "epic",
+                      "parent",
                       "none"
                     ],
                     "type": "string"
@@ -1661,6 +1699,173 @@
         "summary": "Move an issue between the chart's milestone rows",
         "tags": [
           "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/parent": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearIssueParent",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Remove an issue's parent",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the parent in plan_issue_parent, replacing the retired label convention. Refused same_issue, cross_repo, pull_request (either side), untyped_issue (either side, naming which), rank_mismatch (naming both type names and ranks), cycle (the parent sits in the child's own subtree) or too_deep (past 8 levels). Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueParent",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "parent_issue_id": {
+                    "description": "The parent to link.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "parent_issue_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's parent",
+        "tags": [
+          "issues"
         ]
       }
     },
@@ -2252,7 +2457,7 @@
     },
     "/roadmap": {
       "get": {
-        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from the recorded schedule this API's own PUT /issues/{issue_id}/schedule writes, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the issues assigned the type named epic, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /planning/roadmap page is a client of this endpoint.",
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from the recorded schedule this API's own PUT /issues/{issue_id}/schedule writes, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue with no type, no parent and no start date has no start to draw: it is listed with that reason rather than given a fabricated bar. Parent and milestone rows span earliest start to latest end of their children, and their progress is the same task-close percentage every other view uses; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so a parent whose declared window ends before the work filed under it is still flagged at zoom=parent where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — parent over every issue that is itself a recorded parent, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. parent_issue_id narrows the chart to one issue's subtree. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. tree carries every recorded parent edge. Scoped by Gitea's own permission check on the Issues unit. The /planning/roadmap page is a client of this endpoint.",
         "operationId": "getRoadmap",
         "parameters": [
           {
@@ -2265,12 +2470,12 @@
             }
           },
           {
-            "description": "Filter on epic. Bare form means the eq operator.",
+            "description": "Filter on parent_issue_id. Bare form means the eq operator.",
             "in": "query",
-            "name": "epic",
+            "name": "parent_issue_id",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           },
           {

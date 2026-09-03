@@ -6,6 +6,7 @@ package planning
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,7 +118,6 @@ type BarInput struct {
 	Number  int64
 	Title   string
 	URL     string
-	Epic    string
 	// TypeID, TypeName, TypeColor and TypeIcon are the issue's assigned type, empty/zero
 	// when none. Managed reads TypeID rather than a label.
 	TypeID    int64
@@ -138,6 +138,14 @@ type BarInput struct {
 	IsClosed      bool
 	MilestoneID   int64
 	Milestone     string
+	// ParentIssueID is the issue's own recorded plan_issue_parent row, 0 when it has none.
+	// RootIssueID is the top of its chain — itself when it has no parent. Depth is its
+	// distance from that root. HasChildren says whether this issue itself has a recorded
+	// child.
+	ParentIssueID int64
+	RootIssueID   int64
+	Depth         int
+	HasChildren   bool
 }
 
 // Bar is one row of the chart.
@@ -146,7 +154,6 @@ type Bar struct {
 	Number      int64  `json:"number"`
 	Title       string `json:"title"`
 	URL         string `json:"url"`
-	Epic        string `json:"epic,omitempty"`
 	Type        string `json:"type,omitempty"`
 	TypeID      int64  `json:"type_id,omitempty"`
 	TypeColor   string `json:"type_color,omitempty"`
@@ -167,6 +174,12 @@ type Bar struct {
 	// without knowing the enumeration.
 	EndInferred bool `json:"end_inferred"`
 	IsClosed    bool `json:"is_closed"`
+	// ParentIssueID, RootIssueID, Depth and HasChildren are the issue's own place in
+	// plan_issue_parent, carried onto the bar the way Labels and Assignees already are.
+	ParentIssueID int64 `json:"parent_issue_id,omitempty"`
+	RootIssueID   int64 `json:"root_issue_id,omitempty"`
+	Depth         int   `json:"depth,omitempty"`
+	HasChildren   bool  `json:"has_children,omitempty"`
 }
 
 // Unmanaged is an issue with no bar, listed beside the chart with the reason.
@@ -180,16 +193,15 @@ type Unmanaged struct {
 	SuggestedAction string `json:"suggested_action"`
 }
 
-// Managed reports whether ccpm manages an issue enough to draw a bar for it: it carries an
-// assigned type, a recorded schedule, or — until hierarchy exists to replace this — an
-// epic:<name> label.
+// Managed reports whether an issue is managed enough to draw a bar for it: it carries an
+// assigned type, a recorded schedule, or a recorded parent.
 func Managed(in BarInput) bool {
-	return in.TypeID > 0 || in.ScheduledStartUnix > 0 || in.Epic != ""
+	return in.TypeID > 0 || in.ScheduledStartUnix > 0 || in.ParentIssueID > 0
 }
 
 // ResolveBar decides one bar's endpoints and names the source of each.
 //
-// It returns ok=false for an issue ccpm does not manage: that issue has no start to draw and
+// It returns ok=false for an issue that is not managed: that issue has no start to draw and
 // is listed with its reason instead of being given a fabricated bar.
 func ResolveBar(in BarInput) (Bar, bool) {
 	if !Managed(in) {
@@ -198,10 +210,12 @@ func ResolveBar(in BarInput) (Bar, bool) {
 
 	bar := Bar{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
-		Epic: in.Epic, Milestone: in.Milestone, MilestoneID: in.MilestoneID,
+		Milestone: in.Milestone, MilestoneID: in.MilestoneID,
 		Type: in.TypeName, TypeID: in.TypeID, TypeColor: in.TypeColor, TypeIcon: in.TypeIcon,
 		Labels: in.Labels, Assignees: in.Assignees,
-		IsClosed: in.IsClosed,
+		IsClosed:      in.IsClosed,
+		ParentIssueID: in.ParentIssueID, RootIssueID: in.RootIssueID,
+		Depth: in.Depth, HasChildren: in.HasChildren,
 	}
 
 	switch {
@@ -239,10 +253,8 @@ func ResolveBar(in BarInput) (Bar, bool) {
 func UnmanagedFor(in BarInput) Unmanaged {
 	return Unmanaged{
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
-		Reason: "ccpm does not manage this issue: it carries no type, no recorded start, and no " +
-			EpicLabelPrefix + "<name> label, so there is no start to draw",
-		SuggestedAction: "Set a type or a start date first, or add an " + EpicLabelPrefix + "<name> label to it. " +
-			"A bar drawn from creation alone would present a guess as a schedule.",
+		Reason:          "this issue has no type, no parent and no start date, so there is no bar to draw",
+		SuggestedAction: "Set a type, a parent or a start date first. A bar drawn from creation alone would present a guess as a schedule.",
 	}
 }
 
@@ -314,13 +326,16 @@ func ParseSequenceRelations(body string) [][2]string {
 	return out
 }
 
-// RollupRow is an epic or milestone row: it rolls up the earliest start to the latest end of its
-// children, and its progress is ccpm's existing task-close percentage. No second definition
-// of progress is introduced.
+// RollupRow is a parent or milestone row: it rolls up the earliest start to the latest end of
+// its children, and its progress is the same task-close percentage every other view uses. No
+// second definition of progress is introduced.
 type RollupRow struct {
-	Kind      string `json:"kind"` // "epic" or "milestone"
-	Key       string `json:"key"`
-	Label     string `json:"label"`
+	Kind  string `json:"kind"` // "parent" or "milestone"
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	// Type is the parent issue's own assigned type name, empty for a milestone or an
+	// untyped parent.
+	Type      string `json:"type,omitempty"`
 	StartUnix int64  `json:"start_unix"`
 	EndUnix   int64  `json:"end_unix"`
 	Children  int    `json:"children"`
@@ -334,10 +349,10 @@ type RollupRow struct {
 	// Partial is true when the fetch behind this row hit its cap, so the row covers a
 	// prefix of the parent's children rather than all of them.
 	Partial bool `json:"partial"`
-	// IssueID is the issue assigned the type named epic the key names, so a bracket can be
-	// opened. 0 for a milestone, which is not an issue.
+	// IssueID is the parent issue the key names, so a bracket can be opened. 0 for a
+	// milestone, which is not an issue.
 	IssueID int64 `json:"issue_id,omitempty"`
-	// DeclaredStartUnix and DeclaredEndUnix are the epic issue's OWN bar, which is a
+	// DeclaredStartUnix and DeclaredEndUnix are the parent issue's OWN bar, which is a
 	// different window from the one its children derive.
 	DeclaredStartUnix int64 `json:"declared_start_unix,omitempty"`
 	DeclaredEndUnix   int64 `json:"declared_end_unix,omitempty"`
@@ -354,18 +369,14 @@ type Zoom string
 const (
 	// ZoomIssue draws one bar per issue, which is the chart's own level.
 	ZoomIssue Zoom = "issue"
-	// ZoomEpic draws only epic rollups.
-	ZoomEpic Zoom = "epic"
+	// ZoomParent draws only parent rollups.
+	ZoomParent Zoom = "parent"
 	// ZoomMilestone draws only milestone rollups.
 	ZoomMilestone Zoom = "milestone"
 )
 
 // Zooms is the accepted set. The API refuses anything else naming this list.
-var Zooms = []string{string(ZoomIssue), string(ZoomEpic), string(ZoomMilestone)}
-
-// TypeEpic is the type name assigned to an epic's own issue, beside the epic:<name> label it
-// also carries.
-const TypeEpic = "epic"
+var Zooms = []string{string(ZoomIssue), string(ZoomParent), string(ZoomMilestone)}
 
 // ParseZoom resolves a caller's word. An empty string means issue, so a chart with no zoom
 // parameter draws bars rather than being refused.
@@ -373,8 +384,8 @@ func ParseZoom(s string) (Zoom, bool) {
 	switch Zoom(strings.TrimSpace(strings.ToLower(s))) {
 	case "", ZoomIssue:
 		return ZoomIssue, true
-	case ZoomEpic:
-		return ZoomEpic, true
+	case ZoomParent:
+		return ZoomParent, true
 	case ZoomMilestone:
 		return ZoomMilestone, true
 	}
@@ -407,23 +418,28 @@ func BuildRollup(kind, key, label string, bars []Bar) (RollupRow, bool) {
 	return row, true
 }
 
-// BuildRollups folds bars into epic and milestone rows, epics first, each set ordered by key.
-// An epic's own issue is its declared window, not one of its children; milestones count it.
+// BuildRollups folds bars into parent and milestone rows, parents first ordered by issue id,
+// each milestone set ordered by key. A bar's own ParentIssueID already excludes it from its
+// own rollup — it points at ITS parent, never at itself — so no separate exclusion is needed
+// the way the retired label convention required. Milestones count every bar filed under
+// them, parent issue included.
 func BuildRollups(bars []Bar) []RollupRow {
-	byEpic := map[string][]Bar{}
-	declared := map[string]Bar{}
+	barByID := make(map[int64]Bar, len(bars))
+	byParent := map[int64][]Bar{}
+	parentOrder := make([]int64, 0, 8)
+	seenParent := map[int64]bool{}
 	byMilestone := map[string][]Bar{}
 	milestoneLabel := map[string]string{}
 	for _, bar := range bars {
-		switch {
-		case bar.Epic == "":
-		case bar.Type == TypeEpic:
-			declared[bar.Epic] = bar
-			if _, seen := byEpic[bar.Epic]; !seen {
-				byEpic[bar.Epic] = nil // an epic with no child is still an epic
+		barByID[bar.IssueID] = bar
+	}
+	for _, bar := range bars {
+		if bar.ParentIssueID != 0 {
+			if !seenParent[bar.ParentIssueID] {
+				seenParent[bar.ParentIssueID] = true
+				parentOrder = append(parentOrder, bar.ParentIssueID)
 			}
-		default:
-			byEpic[bar.Epic] = append(byEpic[bar.Epic], bar)
+			byParent[bar.ParentIssueID] = append(byParent[bar.ParentIssueID], bar)
 		}
 		if bar.MilestoneID > 0 {
 			key := strconv.FormatInt(bar.MilestoneID, 10)
@@ -431,23 +447,22 @@ func BuildRollups(bars []Bar) []RollupRow {
 			milestoneLabel[key] = bar.Milestone
 		}
 	}
+	slices.Sort(parentOrder)
 
-	rows := make([]RollupRow, 0, len(byEpic)+len(byMilestone))
-	for _, key := range sortedKeys(byEpic) {
-		row, ok := BuildRollup("epic", key, key, byEpic[key])
-		if !ok {
-			// A freshly filed epic has a window and no children yet; drawing nothing for
-			// it would say nothing about it.
-			if declared[key].IssueID == 0 {
-				continue
-			}
-			row = RollupRow{
-				Kind: "epic", Key: key, Label: key,
-				StartUnix: declared[key].StartUnix, EndUnix: declared[key].EndUnix,
-				EndInferred: declared[key].EndInferred,
-			}
+	rows := make([]RollupRow, 0, len(parentOrder)+len(byMilestone))
+	for _, parentID := range parentOrder {
+		key := strconv.FormatInt(parentID, 10)
+		declared := barByID[parentID]
+		label := key
+		if declared.Title != "" {
+			label = declared.Title
 		}
-		applyContainment(&row, declared[key], byEpic[key])
+		row, ok := BuildRollup("parent", key, label, byParent[parentID])
+		if !ok {
+			continue // no child of this parent resolved to a bar; nothing to roll up
+		}
+		row.Type = declared.Type
+		applyContainment(&row, declared, byParent[parentID])
 		rows = append(rows, row)
 	}
 	for _, key := range sortedKeys(byMilestone) {
@@ -469,7 +484,7 @@ func (r *RollupRow) MarkPartial() {
 	r.Partial, r.Progress = true, 0
 }
 
-// applyContainment warns when an epic's declared window does not contain its children's.
+// applyContainment warns when a parent's declared window does not contain its children's.
 // Containment, not a sum of effort: children run in parallel, so a sum warns on every plan.
 func applyContainment(row *RollupRow, declared Bar, children []Bar) {
 	row.ContainsChildren = true
@@ -484,15 +499,15 @@ func applyContainment(row *RollupRow, declared Bar, children []Bar) {
 
 	var warnings, actions []string
 	if declared.EndUnix < row.EndUnix {
-		warnings = append(warnings, fmt.Sprintf("epic %s (#%d) ends %s before the work filed under it",
-			row.Key, declared.Number, days(row.EndUnix-declared.EndUnix)))
-		actions = append(actions, fmt.Sprintf("Move the epic's deadline to %s, or move %s earlier.",
+		warnings = append(warnings, fmt.Sprintf("parent %q (#%d) ends %s before the work filed under it",
+			declared.Title, declared.Number, days(row.EndUnix-declared.EndUnix)))
+		actions = append(actions, fmt.Sprintf("Move the parent's deadline to %s, or move %s earlier.",
 			utcDay(row.EndUnix), nameOf(latest(children, func(bar Bar) int64 { return -bar.EndUnix }))))
 	}
 	if declared.StartUnix > row.StartUnix {
-		warnings = append(warnings, fmt.Sprintf("epic %s (#%d) starts %s after the work filed under it",
-			row.Key, declared.Number, days(declared.StartUnix-row.StartUnix)))
-		actions = append(actions, fmt.Sprintf("Move the epic's start to %s, or move %s later.",
+		warnings = append(warnings, fmt.Sprintf("parent %q (#%d) starts %s after the work filed under it",
+			declared.Title, declared.Number, days(declared.StartUnix-row.StartUnix)))
+		actions = append(actions, fmt.Sprintf("Move the parent's start to %s, or move %s later.",
 			utcDay(row.StartUnix), nameOf(latest(children, func(bar Bar) int64 { return bar.StartUnix }))))
 	}
 	if len(warnings) == 0 {

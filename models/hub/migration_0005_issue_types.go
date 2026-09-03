@@ -83,7 +83,7 @@ func convertTypeLabels(e db.Engine) error {
 	if err := e.Table("issue_label").
 		Select("issue_label.issue_id AS issue_id, label.id AS label_id, label.name AS name, label.color AS color").
 		Join("INNER", "label", "label.id = issue_label.label_id").
-		Where(builder.Like{"label.name", "type:%"}).
+		Where(builder.Expr("LOWER(label.name) LIKE ?", "type:%")).
 		OrderBy("issue_label.issue_id ASC, label.id ASC").
 		Find(&rows); err != nil {
 		return err

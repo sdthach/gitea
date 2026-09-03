@@ -145,8 +145,8 @@ func AssignmentsFor(ctx context.Context, issueIDs []int64) (map[int64]int64, err
 	return out, nil
 }
 
-// IssueIDsForType lists every issue currently assigned typeID, for the roadmap's zoom=epic
-// filter: issues whose assigned type is named epic.
+// IssueIDsForType lists every issue currently assigned typeID, for a caller filtering issues
+// by their assigned type — for instance, every issue whose type is named epic.
 func IssueIDsForType(ctx context.Context, typeID int64) ([]int64, error) {
 	ids := make([]int64, 0, 16)
 	err := db.GetEngine(ctx).Table("plan_issue_type_assignment").Where("type_id = ?", typeID).Cols("issue_id").Find(&ids)

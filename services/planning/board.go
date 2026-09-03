@@ -7,6 +7,7 @@ package planning
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	hub_model "gitea.dev/models/hub"
@@ -33,17 +34,15 @@ const (
 	GroupType Grouping = "type"
 	// GroupAssignee groups by the issue's assignee.
 	GroupAssignee Grouping = "assignee"
-	// GroupEpic groups by ccpm's epic:<name> label.
-	GroupEpic Grouping = "epic"
+	// GroupParent groups by root work item — plan_issue_parent — replacing the retired
+	// label convention. A card lands under its root ancestor's own row; a root with no
+	// children of its own has nothing to hold a row open and lands in the empty group.
+	GroupParent Grouping = "parent"
 )
 
 // Groupings is the accepted set, in declaration order. The API rejects anything else
 // naming this list, so an unknown grouping is refused rather than silently treated as none.
-var Groupings = []string{string(GroupType), string(GroupAssignee), string(GroupEpic), string(GroupNone)}
-
-// EpicLabelPrefix is the label namespace ccpm writes for epic grouping, which hierarchy has
-// not yet replaced.
-const EpicLabelPrefix = "epic:"
+var Groupings = []string{string(GroupType), string(GroupAssignee), string(GroupParent), string(GroupNone)}
 
 // Group keys and labels for the explicit empty-value group. An issue with no value for
 // the active grouping lands here; nothing disappears from a board because a field is unset.
@@ -62,8 +61,8 @@ func ParseGrouping(s string) (Grouping, bool) {
 		return GroupType, true
 	case GroupAssignee:
 		return GroupAssignee, true
-	case GroupEpic:
-		return GroupEpic, true
+	case GroupParent:
+		return GroupParent, true
 	}
 	return GroupNone, false
 }
@@ -77,8 +76,8 @@ type Card struct {
 	ColumnID int64  `json:"column_id"`
 	Sorting  int64  `json:"sorting"`
 	// Type is the assigned type's name, empty when none; TypeID, TypeColor and TypeIcon
-	// come from the same assignment. Labels and Assignees are the other grouping fields. A
-	// group move edits whichever field the active grouping names.
+	// come from the same assignment. Assignees is the other grouping field. A group move
+	// edits whichever field the active grouping names.
 	Type      string   `json:"type,omitempty"`
 	TypeID    int64    `json:"type_id,omitempty"`
 	TypeColor string   `json:"type_color,omitempty"`
@@ -87,6 +86,31 @@ type Card struct {
 	Assignees []string `json:"assignees"`
 	IsClosed  bool     `json:"is_closed"`
 	IsPull    bool     `json:"is_pull"`
+	// ParentIssueID is the issue's own recorded parent, 0 when it has none. RootIssueID is
+	// the top of its chain — itself when ParentIssueID is 0. Depth is its distance from that
+	// root. HasChildren says whether this issue itself has any recorded child.
+	ParentIssueID int64 `json:"parent_issue_id,omitempty"`
+	RootIssueID   int64 `json:"root_issue_id,omitempty"`
+	Depth         int   `json:"depth,omitempty"`
+	HasChildren   bool  `json:"has_children,omitempty"`
+}
+
+// TreeEdge is one parent edge, published beside the cards or bars so a client can draw the
+// hierarchy without re-deriving it from every card's own parent_issue_id.
+type TreeEdge struct {
+	IssueID       int64 `json:"issue_id"`
+	ParentIssueID int64 `json:"parent_issue_id"`
+}
+
+// BuildTree renders a repo's parent map as the published edge list, sorted by child issue id
+// so the result is stable across renders of the same data.
+func BuildTree(parents map[int64]int64) []TreeEdge {
+	out := make([]TreeEdge, 0, len(parents))
+	for child, parent := range parents {
+		out = append(out, TreeEdge{IssueID: child, ParentIssueID: parent})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].IssueID < out[j].IssueID })
+	return out
 }
 
 // BoardColumn is one of Gitea's project columns, in the order the Projects API returns it.
@@ -106,8 +130,8 @@ type GroupColumn struct {
 
 // Group is one horizontal row of the board.
 type Group struct {
-	// Key is the grouping value itself — the text a group move writes. Empty is the
-	// empty-value group.
+	// Key is the grouping value itself — the text a group move writes, or the root issue's
+	// id (as a string) under parent grouping. Empty is the empty-value group.
 	Key   string `json:"key"`
 	Label string `json:"label"`
 	// IsEmptyValue marks the issues with no value for the active
@@ -115,6 +139,8 @@ type Group struct {
 	IsEmptyValue bool          `json:"is_empty_value"`
 	Columns      []GroupColumn `json:"columns"`
 	Cards        int           `json:"cards"`
+	// RootIssueID is the row's own root work item, 0 outside parent grouping.
+	RootIssueID int64 `json:"root_issue_id,omitempty"`
 }
 
 // emptyGroupLabel names the empty-value group per grouping, so it reads as a fact about the
@@ -125,37 +151,25 @@ func emptyGroupLabel(g Grouping) string {
 		return "no type assigned"
 	case GroupAssignee:
 		return "unassigned"
-	case GroupEpic:
-		return "no epic label"
+	case GroupParent:
+		return "no parent"
 	}
 	return singleGroupLabel
 }
 
-// labelValue returns the text after prefix on the first matching label, sorted so a card
-// carrying two lands in the same group on every render. Matching is case-insensitive on the
-// prefix because Gitea does not case-fold label names.
-func labelValue(labels []string, prefix string) string {
-	matched := make([]string, 0, 1)
-	for _, l := range labels {
-		if len(l) > len(prefix) && strings.EqualFold(l[:len(prefix)], prefix) {
-			matched = append(matched, l[len(prefix):])
-		}
-	}
-	if len(matched) == 0 {
-		return ""
-	}
-	sort.Strings(matched)
-	return matched[0]
-}
-
 // GroupInput is one row reduced to what group assignment depends on: the issue's assigned
-// type name, its labels (which epic grouping still reads), and its assignees. It takes a
-// struct rather than positional slices so the chart's bars and the board's cards reach one
-// definition of a group without either side guessing which field is which.
+// type name, its assignees, and — for parent grouping — its root ancestor, already resolved
+// by the caller. It takes a struct rather than positional slices so the chart's bars and the
+// board's cards reach one definition of a group without either side guessing which field is
+// which.
 type GroupInput struct {
-	TypeName  string
-	Labels    []string
-	Assignees []string
+	TypeName    string
+	Assignees   []string
+	RootIssueID int64
+	// HasChildren is whether the ROOT WORK ITEM (RootIssueID) itself has any recorded child —
+	// not whether this particular card does. A root with no children of its own has nothing
+	// to hold a row open under parent grouping.
+	HasChildren bool
 }
 
 // GroupKeyFor is the whole of group assignment. A row with no value for the active grouping
@@ -167,8 +181,11 @@ func GroupKeyFor(in GroupInput, grouping Grouping) string {
 	switch grouping {
 	case GroupType:
 		return strings.TrimSpace(in.TypeName)
-	case GroupEpic:
-		return labelValue(in.Labels, EpicLabelPrefix)
+	case GroupParent:
+		if !in.HasChildren {
+			return emptyGroupKey
+		}
+		return strconv.FormatInt(in.RootIssueID, 10)
 	case GroupAssignee:
 		if len(in.Assignees) == 0 {
 			return emptyGroupKey
@@ -180,20 +197,44 @@ func GroupKeyFor(in GroupInput, grouping Grouping) string {
 	return emptyGroupKey
 }
 
+// groupInputFor reduces one card to the GroupInput every grouping reads, resolving the
+// parent-grouping fields from the card's own hierarchy fields: a card that is not its own
+// root proves its root has at least one child (itself), with no second lookup needed.
+func groupInputFor(card Card) GroupInput {
+	return GroupInput{
+		TypeName: card.Type, Assignees: card.Assignees,
+		RootIssueID: card.RootIssueID,
+		HasChildren: card.HasChildren || (card.RootIssueID != 0 && card.RootIssueID != card.IssueID),
+	}
+}
+
 // BuildGroups renders the board: every group carries every column, in the Projects API's own
 // order, so the result is a rectangle a template can lay out without knowing the grouping.
 //
 // The empty-value group is always last and is emitted only when it holds a card — except
 // under GroupNone, where the single group IS the board and is always emitted.
 func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group {
+	titleByIssue := make(map[int64]string, len(cards))
+	for _, card := range cards {
+		titleByIssue[card.IssueID] = card.Title
+	}
+
 	byGroup := map[string][]Card{}
 	order := make([]string, 0, 8)
+	labelForKey := map[string]string{}
+	rootForKey := map[string]int64{}
 	for _, card := range cards {
-		key := GroupKeyFor(GroupInput{TypeName: card.Type, Labels: card.Labels, Assignees: card.Assignees}, grouping)
+		key := GroupKeyFor(groupInputFor(card), grouping)
 		if _, seen := byGroup[key]; !seen {
 			order = append(order, key)
 		}
 		byGroup[key] = append(byGroup[key], card)
+		if grouping == GroupParent && key != emptyGroupKey {
+			if _, ok := labelForKey[key]; !ok {
+				labelForKey[key] = titleByIssue[card.RootIssueID]
+				rootForKey[key] = card.RootIssueID
+			}
+		}
 	}
 	if grouping == GroupNone {
 		byGroup = map[string][]Card{emptyGroupKey: cards}
@@ -216,8 +257,12 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 	groups := make([]Group, 0, len(order))
 	for _, key := range order {
 		group := Group{Key: key, Label: key, IsEmptyValue: key == emptyGroupKey}
-		if group.IsEmptyValue {
+		switch {
+		case group.IsEmptyValue:
 			group.Label = emptyGroupLabel(grouping)
+		case grouping == GroupParent:
+			group.Label = labelForKey[key]
+			group.RootIssueID = rootForKey[key]
 		}
 		group.Columns = make([]GroupColumn, 0, len(columns))
 		for _, col := range columns {
@@ -241,6 +286,29 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 	return groups
 }
 
+// GroupsMissingRootTitle lists the RootIssueID of every parent-grouped row BuildGroups left
+// unlabelled: its root was not among the cards it saw, so a caller with database access must
+// fetch the title itself.
+func GroupsMissingRootTitle(groups []Group) []int64 {
+	ids := make([]int64, 0, 2)
+	for _, g := range groups {
+		if g.RootIssueID != 0 && g.Label == "" {
+			ids = append(ids, g.RootIssueID)
+		}
+	}
+	return ids
+}
+
+// ApplyRootTitles fills in the label of every parent-grouped row GroupsMissingRootTitle named,
+// from a caller's own fetch of those roots.
+func ApplyRootTitles(groups []Group, titles map[int64]string) {
+	for i := range groups {
+		if groups[i].RootIssueID != 0 && groups[i].Label == "" {
+			groups[i].Label = titles[groups[i].RootIssueID]
+		}
+	}
+}
+
 // roadmapGroupColumn is the one column the chart's groups carry. A chart has no columns of its
 // own, so BuildGroups lays every bar of a group into a single cell and the result is still the
 // rectangle a template can walk.
@@ -255,6 +323,8 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 			IssueID: bar.IssueID, Number: bar.Number, Title: bar.Title, URL: bar.URL,
 			Type: bar.Type, TypeID: bar.TypeID, TypeColor: bar.TypeColor, TypeIcon: bar.TypeIcon,
 			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
+			ParentIssueID: bar.ParentIssueID, RootIssueID: bar.RootIssueID,
+			Depth: bar.Depth, HasChildren: bar.HasChildren,
 		})
 	}
 	return BuildGroups([]BoardColumn{{Title: roadmapGroupColumn}}, cards, grouping)
@@ -264,30 +334,28 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 type GroupWriteKind string
 
 const (
-	// GroupWriteLabel replaces the card's epic: label.
-	GroupWriteLabel GroupWriteKind = "label"
 	// GroupWriteAssignee replaces the card's assignee.
 	GroupWriteAssignee GroupWriteKind = "assignee"
 	// GroupWriteType assigns the card the type named TypeName, resolved to a visible type
 	// by the handler — PlanGroupMove itself knows nothing of what types exist.
 	GroupWriteType GroupWriteKind = "type"
+	// GroupWriteParent sets or removes the card's recorded parent — resolved and enforced by
+	// the handler through SetIssueParent, which is where every hierarchy refusal lives.
+	GroupWriteParent GroupWriteKind = "parent"
 )
 
 // GroupWrite is the single edit a group move performs. It names the field itself — the
 // grouping value is not stored anywhere else, so moving between groups IS editing it.
 type GroupWrite struct {
 	Kind GroupWriteKind
-	// Prefix is the label namespace to clear before adding, so a card never carries two
-	// epic: labels. Empty for an assignee or type move.
-	Prefix string
-	// Label is the label to apply; empty means the card is moving into the empty-value
-	// group, so the namespace is cleared and nothing is added.
-	Label string
 	// Assignee is the login to assign; empty means clear the assignees.
 	Assignee string
 	// TypeName is the target type's name for a GroupWriteType move, lower-cased; empty
 	// clears the issue's type.
 	TypeName string
+	// ParentIssueID is the target root's issue id for a GroupWriteParent move; 0 means the
+	// card is moving into the empty group, so its parent is removed rather than set.
+	ParentIssueID int64
 }
 
 // PlanGroupMove resolves a group move into the one field edit it performs, or refuses it.
@@ -298,22 +366,25 @@ func PlanGroupMove(grouping Grouping, groupKey string) (GroupWrite, error) {
 	switch grouping {
 	case GroupType:
 		return GroupWrite{Kind: GroupWriteType, TypeName: strings.ToLower(strings.TrimSpace(groupKey))}, nil
-	case GroupEpic:
-		return GroupWrite{Kind: GroupWriteLabel, Prefix: EpicLabelPrefix, Label: prefixedLabel(EpicLabelPrefix, groupKey)}, nil
+	case GroupParent:
+		key := strings.TrimSpace(groupKey)
+		if key == "" {
+			return GroupWrite{Kind: GroupWriteParent}, nil
+		}
+		id, err := strconv.ParseInt(key, 10, 64)
+		if err != nil {
+			return GroupWrite{}, &hub_model.Error{
+				Message:         "the parent group's key must be a root issue id",
+				SuggestedAction: "Move to one of the group keys the board or roadmap itself publishes.",
+			}
+		}
+		return GroupWrite{Kind: GroupWriteParent, ParentIssueID: id}, nil
 	case GroupAssignee:
 		return GroupWrite{Kind: GroupWriteAssignee, Assignee: strings.TrimSpace(groupKey)}, nil
 	}
 	return GroupWrite{}, &hub_model.Error{
 		Message: "the board is not grouped, so a group move has no field to write",
-		SuggestedAction: "Group the board by type, assignee or epic first — a group is the grouping value, and with grouping off there is only one group. " +
+		SuggestedAction: "Group the board by type, assignee or parent first — a group is the grouping value, and with grouping off there is only one group. " +
 			"Moving a card between COLUMNS works with grouping off.",
 	}
-}
-
-func prefixedLabel(prefix, key string) string {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return ""
-	}
-	return prefix + key
 }

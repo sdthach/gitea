@@ -433,7 +433,7 @@ func ClearIssueTypeHandler(ctx *context.APIContext) {
 		return
 	}
 	if err := planning_service.ClearIssueType(ctx, issue.ID); err != nil {
-		ctx.APIErrorInternal(err)
+		hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
 		return
 	}
 	renderIssueFacets(ctx, issue)

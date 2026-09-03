@@ -5,6 +5,7 @@ package integration
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
@@ -17,7 +18,6 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
 	planningv1 "gitea.dev/routers/api/planning/v1"
-	issue_service "gitea.dev/services/issue"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -50,6 +50,10 @@ type boardPayload struct {
 			} `json:"cards"`
 		} `json:"columns"`
 	} `json:"groups"`
+	Tree []struct {
+		IssueID       int64 `json:"issue_id"`
+		ParentIssueID int64 `json:"parent_issue_id"`
+	} `json:"tree"`
 	CanWrite     bool `json:"can_write"`
 	CanEditIssue bool `json:"can_edit_issue"`
 }
@@ -59,15 +63,6 @@ type hubRefusal struct {
 	Message         string   `json:"message"`
 	SuggestedAction string   `json:"suggested_action"`
 	Accepted        []string `json:"accepted"`
-}
-
-// labelForGroup creates a group label in the repository, which is what ccpm's init.sh does
-// before an epic sync. The board's group move applies an existing label; it never invents one.
-func labelForGroup(t *testing.T, repoID int64, name string) *issues_model.Label {
-	t.Helper()
-	label := &issues_model.Label{RepoID: repoID, Name: name, Color: "#112233"}
-	require.NoError(t, issues_model.NewLabel(t.Context(), label))
-	return label
 }
 
 func groupOf(t *testing.T, board boardPayload, issueID int64) string {
@@ -134,29 +129,65 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 		"a card with no column lands in the default column, not off the board")
 }
 
-// TestAPIPlanningBoardGroupsByTypeAssigneeAndEpic covers the three groupings over the wire.
-func TestAPIPlanningBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
+// TestAPIPlanningBoardGroupsByTypeAssigneeAndParent covers the three groupings over the wire.
+// Issue 5 (feature, rank 2) is issue 1's (bug, rank 3) parent; both are on project 1's board.
+func TestAPIPlanningBoardGroupsByTypeAssigneeAndParent(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
-	epic := labelForGroup(t, 1, "epic:checkout")
-	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, epic))
+	feature := issueType(t, 1, "feature", "#0969da", "octicon-light-bulb", 2)
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 	setIssueType(t, token, "user2/repo1", 1, bug.ID)
+	setIssueType(t, token, "user2/repo1", 5, feature.ID)
+	setIssueParent(t, token, "user2/repo1", 1, 5)
 
 	byType := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, "bug", groupOf(t, byType, 1))
 
-	byEpic := getBoard(t, token, "repo_id=1&project_id=1&group_by=epic")
-	assert.Equal(t, "checkout", groupOf(t, byEpic, 1))
+	byParent := getBoard(t, token, "repo_id=1&project_id=1&group_by=parent")
+	assert.Equal(t, "5", groupOf(t, byParent, 1), "grouped under its root ancestor's own row")
+	assert.Equal(t, "5", groupOf(t, byParent, 5), "the root itself lands in its own row")
 
 	// issue 1 is assigned to user1 in the fixtures, so assignee grouping names a group too.
 	byAssignee := getBoard(t, token, "repo_id=1&project_id=1&group_by=assignee")
 	assert.Equal(t, "user1", groupOf(t, byAssignee, 1))
+}
+
+// TestPlanningBoardLabelsAParentGroupWhoseRootIsNotOnTheBoard: a group's label comes from
+// its root issue's own title, fetched even when that root is not one of the board's own cards.
+func TestPlanningBoardLabelsAParentGroupWhoseRootIsNotOnTheBoard(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	epic := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+
+	// The root is in repo1 — readable, so its title resolves — but carries no project_issue
+	// row, so it is not one of project 1's own cards.
+	now := timeutil.TimeStamp(1700000000)
+	root := &issues_model.Issue{
+		ID: 9900, RepoID: 1, Index: 9900, PosterID: 2, Title: "root not on the board",
+		CreatedUnix: now, UpdatedUnix: now,
+	}
+	require.NoError(t, db.Insert(t.Context(), root))
+	require.NoError(t, planning_model.UpsertAssignment(t.Context(), root.ID, epic.ID))
+
+	setIssueType(t, token, "user2/repo1", 1, bug.ID)
+	setIssueParent(t, token, "user2/repo1", 1, root.ID)
+
+	board := getBoard(t, token, "repo_id=1&project_id=1&group_by=parent")
+	key := strconv.FormatInt(root.ID, 10)
+	assert.Equal(t, key, groupOf(t, board, 1))
+	found := false
+	for _, group := range board.Groups {
+		if group.Key == key {
+			found = true
+			assert.Equal(t, root.Title, group.Label, "the group's title comes from the root, even off the board")
+		}
+	}
+	assert.True(t, found, "the group for the root's row exists")
 }
 
 // TestAPIPlanningBoardKeepsAnUnsetValueInAnExplicitGroup: nothing disappears from
@@ -370,6 +401,10 @@ type roadmapPayload struct {
 		StartUnix   int64  `json:"start_unix"`
 		EndUnix     int64  `json:"end_unix"`
 	} `json:"milestones"`
+	Tree []struct {
+		IssueID       int64 `json:"issue_id"`
+		ParentIssueID int64 `json:"parent_issue_id"`
+	} `json:"tree"`
 	GroupBy string `json:"group_by"`
 	Zoom    string `json:"zoom"`
 	Groups  []struct {
@@ -401,12 +436,9 @@ type roadmapPayload struct {
 func TestAPIPlanningRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForGroup(t, 1, "epic:checkout")
-	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-
 	// Issue 1 is managed, has a recorded start, and is closed: actuals.
+	manageIssue(t, 1)
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, epic))
 	require.NoError(t, planning_model.UpsertIssueStart(t.Context(), issue1.ID, 978307200))
 	issue1.IsClosed = true
 	issue1.ClosedUnix = timeutil.TimeStamp(1_000_000_000)
@@ -414,13 +446,12 @@ func TestAPIPlanningRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	require.NoError(t, err)
 
 	// Issue 5 is managed and states nothing: created plus estimate, inferred.
-	issue5 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 5})
-	require.NoError(t, issue_service.AddLabel(t.Context(), issue5, doer, epic))
+	manageIssue(t, 5)
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)
@@ -444,10 +475,6 @@ func TestAPIPlanningRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	assert.Equal(t, "issue_created", guess.StartSource)
 	assert.Equal(t, "effort_estimate", guess.EndSource)
 	assert.True(t, guess.EndInferred, "an inferred end is distinguishable from a recorded one")
-
-	require.NotEmpty(t, payload.Rollups)
-	assert.Equal(t, "epic", payload.Rollups[0].Kind)
-	assert.Equal(t, "checkout", payload.Rollups[0].Key)
 }
 
 // TestAPIPlanningRoadmapListsAnUnmanagedIssueWithItsReason: never a fabricated bar.
@@ -462,10 +489,10 @@ func TestAPIPlanningRoadmapListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)
 
-	assert.Empty(t, payload.Bars, "no fixture issue carries an epic label, so nothing is drawn")
+	assert.Empty(t, payload.Bars, "no fixture issue carries a type, a parent or a start, so nothing is drawn")
 	require.NotEmpty(t, payload.Unmanaged, "the issues are listed rather than dropped")
 	for _, item := range payload.Unmanaged {
-		assert.Contains(t, item.Reason, "ccpm does not manage this issue")
+		assert.Contains(t, item.Reason, "no type, no parent and no start date")
 		assert.NotEmpty(t, item.SuggestedAction, "every error carries a suggested next action")
 	}
 }
@@ -475,15 +502,9 @@ func TestAPIPlanningRoadmapListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 func TestAPIPlanningRoadmapDistinguishesAGateFromASequencingHint(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForGroup(t, 1, "epic:checkout")
+	manageIssue(t, 1)
+	manageIssue(t, 5)
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	for _, id := range []int64{1, 4, 5} {
-		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: id})
-		if issue.RepoID != 1 {
-			continue
-		}
-		require.NoError(t, issue_service.AddLabel(t.Context(), issue, doer, epic))
-	}
 
 	// The enforced edge lives in issue_dependency: issue 1 blocks issue 5.
 	require.NoError(t, db.Insert(t.Context(), &issues_model.IssueDependency{
@@ -498,7 +519,7 @@ func TestAPIPlanningRoadmapDistinguishesAGateFromASequencingHint(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)

@@ -34,6 +34,8 @@ func endpoints() []*hubapi.Endpoint {
 		setMilestoneScheduleEndpoint(),
 		clearMilestoneScheduleEndpoint(),
 		setIssueEstimateEndpoint(),
+		setIssueParentEndpoint(),
+		clearIssueParentEndpoint(),
 		getIssueTypesEndpoint(),
 		createIssueTypeEndpoint(),
 		updateIssueTypeEndpoint(),

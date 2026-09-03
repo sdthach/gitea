@@ -114,7 +114,6 @@ func TestPlanningIssueTypeSetShowsOnBoardGroupAndRoadmapBar(t *testing.T) {
 	board := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, "bug", groupOf(t, board, 1))
 
-	manageIssue(t, 1, "checkout")
 	roadmap := getRoadmap(t, token, "repo_id=1&limit=200")
 	found := false
 	for _, bar := range roadmap.Bars {

@@ -14,24 +14,51 @@ async function apiRepoID(request: APIRequestContext, owner: string, name: string
   return (await response.json()).id;
 }
 
-async function apiCreateLabel(request: APIRequestContext, owner: string, name: string, label: string): Promise<number> {
-  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/labels`, {
-    headers: apiHeaders(),
-    data: {name: label, color: '#00aabb'},
-  });
-  expect(response.ok(), `create label ${label}: ${await response.text()}`).toBe(true);
-  return (await response.json()).id;
-}
-
-// The chart draws an issue ccpm manages: one carrying an epic: label, with a deadline for its
-// end. The epic's own issue carries type:epic beside that label, exactly as epic-sync leaves it.
-async function apiCreateManagedIssue(request: APIRequestContext, owner: string, name: string, title: string, labels: number[], due: string): Promise<number> {
+// The chart draws an issue that is managed: one carrying an assigned type, with a deadline for
+// its end.
+async function apiCreateManagedIssue(request: APIRequestContext, owner: string, name: string, title: string, due: string): Promise<number> {
   const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues`, {
     headers: apiHeaders(),
-    data: {title, labels, due_date: due},
+    data: {title, due_date: due},
   });
   expect(response.ok(), `create issue ${title}: ${await response.text()}`).toBe(true);
   return (await response.json()).number;
+}
+
+async function apiIssueGlobalID(request: APIRequestContext, owner: string, name: string, number: number): Promise<number> {
+  const response = await request.get(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues/${number}`, {headers: apiHeaders()});
+  expect(response.ok()).toBe(true);
+  return (await response.json()).id;
+}
+
+// The instance seeds a fixed set of types on first boot (epic, story, task, ...), so a fresh
+// e2e repository already has one visible without creating it first.
+async function apiIssueTypeID(request: APIRequestContext, repoID: number, name: string): Promise<number> {
+  const response = await request.get(`${baseUrl()}/api/planning/v1/issue-types?repo_id=${repoID}`, {headers: apiHeaders()});
+  expect(response.ok(), `list issue types: ${await response.text()}`).toBe(true);
+  const types = await response.json() as Array<{id: number, name: string}>;
+  const found = types.find((t) => t.name === name);
+  expect(found, `type ${name} is seeded on every instance`).toBeTruthy();
+  return found!.id;
+}
+
+async function apiSetIssueType(request: APIRequestContext, owner: string, name: string, issueNumber: number, typeID: number) {
+  const issueID = await apiIssueGlobalID(request, owner, name, issueNumber);
+  const response = await request.put(`${baseUrl()}/api/planning/v1/issues/${issueID}/type`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, type_id: typeID},
+  });
+  expect(response.ok(), `set issue type: ${await response.text()}`).toBe(true);
+}
+
+async function apiSetIssueParent(request: APIRequestContext, owner: string, name: string, childNumber: number, parentNumber: number) {
+  const childID = await apiIssueGlobalID(request, owner, name, childNumber);
+  const parentID = await apiIssueGlobalID(request, owner, name, parentNumber);
+  const response = await request.put(`${baseUrl()}/api/planning/v1/issues/${childID}/parent`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, parent_issue_id: parentID},
+  });
+  expect(response.ok(), `set issue parent: ${await response.text()}`).toBe(true);
 }
 
 // A reader has to be able to see the repository at all, so it is made public explicitly
@@ -44,32 +71,36 @@ async function apiMakeRepoPublic(request: APIRequestContext, owner: string, name
   expect(response.ok(), `publish repo ${name}: ${await response.text()}`).toBe(true);
 }
 
-test('planning roadmap reads an epic as a bracket and its children as bars', async ({page}) => {
+test('planning roadmap reads a parent as a bracket and its children as bars', async ({page}) => {
   const repoName = `e2e-planning-${randomString(8)}`;
   const owner = env.GITEA_TEST_E2E_USER;
 
   await login(page);
   await apiCreateRepo(page.request, {name: repoName});
   const repoID = await apiRepoID(page.request, owner, repoName);
-  const epicLabel = await apiCreateLabel(page.request, owner, repoName, 'epic:checkout');
-  const typeLabel = await apiCreateLabel(page.request, owner, repoName, 'type:epic');
+  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
 
-  // The epic declares a window that ends a fortnight before the work filed under it, which is
-  // the contradiction the chart is the only place to see.
-  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic',
-    [epicLabel, typeLabel], '2030-03-11T00:00:00Z');
-  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', [epicLabel], '2030-03-20T00:00:00Z');
-  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story two', [epicLabel], '2030-03-25T00:00:00Z');
+  // The parent declares a window that ends a fortnight before the work filed under it, which
+  // is the contradiction the chart is the only place to see.
+  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic', '2030-03-11T00:00:00Z');
+  const storyOne = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', '2030-03-20T00:00:00Z');
+  const storyTwo = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story two', '2030-03-25T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, epicNumber, epicTypeID);
+  await apiSetIssueType(page.request, owner, repoName, storyOne, storyTypeID);
+  await apiSetIssueType(page.request, owner, repoName, storyTwo, storyTypeID);
+  await apiSetIssueParent(page.request, owner, repoName, storyOne, epicNumber);
+  await apiSetIssueParent(page.request, owner, repoName, storyTwo, epicNumber);
 
   await page.goto('/planning/roadmap');
   await expect(page.locator('#planning-token-box')).toBeHidden();
 
   await page.getByLabel('Repository id').fill(String(repoID));
-  await page.getByLabel('Zoom').selectOption('epic');
+  await page.getByLabel('Zoom').selectOption('parent');
 
   const chart = page.locator('#planning-roadmap-body');
-  await expect(chart).toContainText(`epic checkout (#${epicNumber}) ends 14 days before the work filed under it`);
-  await expect(chart).toContainText('epic: checkout');
+  await expect(chart).toContainText(`parent "checkout epic" (#${epicNumber}) ends 14 days before the work filed under it`);
+  await expect(chart).toContainText('parent: checkout epic');
   await expect(chart.locator('tr')).toHaveCount(1);
   await expect(chart.locator('tr.warning')).toHaveCount(1);
 
@@ -100,11 +131,13 @@ test('planning roadmap offers a reader no handle and no drop target', async ({pa
   await apiCreateRepo(page.request, {name: repoName});
   await apiMakeRepoPublic(page.request, owner, repoName);
   const repoID = await apiRepoID(page.request, owner, repoName);
-  const epicLabel = await apiCreateLabel(page.request, owner, repoName, 'epic:checkout');
-  const typeLabel = await apiCreateLabel(page.request, owner, repoName, 'type:epic');
-  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic',
-    [epicLabel, typeLabel], '2030-03-11T00:00:00Z');
-  await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', [epicLabel], '2030-03-20T00:00:00Z');
+  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic', '2030-03-11T00:00:00Z');
+  const storyOne = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', '2030-03-20T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, epicNumber, epicTypeID);
+  await apiSetIssueType(page.request, owner, repoName, storyOne, storyTypeID);
+  await apiSetIssueParent(page.request, owner, repoName, storyOne, epicNumber);
   await apiCreateUser(page.request, reader);
 
   try {

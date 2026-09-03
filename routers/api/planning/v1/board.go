@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -56,6 +55,9 @@ type Board struct {
 	GroupBy      string                         `json:"group_by"`
 	Columns      []planning_service.BoardColumn `json:"columns"`
 	Groups       []planning_service.Group       `json:"groups"`
+	// Tree is every recorded parent edge among this board's cards' repository, so a client
+	// can draw the hierarchy without re-deriving it from each card's own parent_issue_id.
+	Tree []planning_service.TreeEdge `json:"tree"`
 	// Types are the types visible from this repository, what a card's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
 	// CanWrite is whether the calling user may perform either of the two writes, resolved
@@ -108,7 +110,7 @@ var boardGroupMoveParams = []hubapi.Param{
 	},
 	{
 		Name: "group", In: "body", Type: "string",
-		Description: "The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.",
+		Description: "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the card into the empty-value group, clearing the field.",
 	},
 }
 
@@ -134,7 +136,7 @@ func moveBoardCardGroupEndpoint() *hubapi.Endpoint {
 			ID: "moveBoardCardGroup", Method: http.MethodPost, Path: "/board/cards/{issue_id}/group",
 			Summary: "Move a card between the board's groups",
 			Description: "The second and last of the board's writes. A group IS the grouping value, so moving between " +
-				"groups edits the field itself: the issue's assigned type, the epic: label, or the assignee. " +
+				"groups edits the field itself: the issue's assigned type, its recorded parent, or the assignee. " +
 				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "board", PathParams: boardCardParams, Body: boardGroupMoveParams,
@@ -309,6 +311,17 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		return nil, false
 	}
 
+	parents, err := planning_service.ParentMap(ctx, repo.ID)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	depths := planning_service.Depths(parents)
+	hasChildren := make(map[int64]bool, len(parents))
+	for _, parentID := range parents {
+		hasChildren[parentID] = true
+	}
+
 	cards := make([]planning_service.Card, 0, len(issues))
 	for _, issue := range issues {
 		row := placement[issue.ID]
@@ -326,6 +339,8 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 			URL:      issue.Link(),
 			ColumnID: columnID, Sorting: row.Sorting,
 			IsClosed: issue.IsClosed, IsPull: issue.IsPull,
+			ParentIssueID: parents[issue.ID], RootIssueID: planning_service.RootOf(parents, issue.ID),
+			Depth: depths[issue.ID], HasChildren: hasChildren[issue.ID],
 		}
 		if at, ok := assigned[issue.ID]; ok {
 			card.Type, card.TypeID, card.TypeColor, card.TypeIcon = at.Name, at.TypeID, at.Color, at.Icon
@@ -345,11 +360,29 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		return nil, false
 	}
 
+	groups := planning_service.BuildGroups(out, cards, grouping)
+	// A parent-grouped row's root may not be one of this board's own cards — off the board
+	// entirely, or on it under a column this fetch already saw but with no title resolved yet
+	// — so its title is fetched here, the one place this projection touches the database for it.
+	if missing := planning_service.GroupsMissingRootTitle(groups); len(missing) > 0 {
+		roots, err := issues_model.GetIssuesByIDs(ctx, missing)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return nil, false
+		}
+		titles := make(map[int64]string, len(roots))
+		for _, root := range roots {
+			titles[root.ID] = root.Title
+		}
+		planning_service.ApplyRootTitles(groups, titles)
+	}
+
 	return &Board{
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		ProjectID: project.ID, Title: project.Title, GroupBy: string(grouping),
 		Columns:      out,
-		Groups:       planning_service.BuildGroups(out, cards, grouping),
+		Groups:       groups,
+		Tree:         planning_service.BuildTree(parents),
 		Types:        types,
 		CanWrite:     perm.CanWrite(unit.TypeProjects),
 		CanEditIssue: perm.CanWrite(unit.TypeIssues),
@@ -523,8 +556,8 @@ func MoveBoardCardColumn(ctx *context.APIContext) {
 }
 
 // MoveBoardCardGroup answers POST /board/cards/{issue_id}/group — the second and last write.
-// A group is the grouping value itself, so this edits the issue's assigned type, the epic: label or the
-// assignee, and is refused outright when grouping is off.
+// A group is the grouping value itself, so this edits the issue's assigned type, its recorded
+// parent, or the assignee, and is refused outright when grouping is off.
 func MoveBoardCardGroup(ctx *context.APIContext) {
 	body, repo, perm, project, issue, ok := boardMoveTarget(ctx, unit.TypeIssues)
 	if !ok {
@@ -551,8 +584,8 @@ func MoveBoardCardGroup(ctx *context.APIContext) {
 		if !applyGroupType(ctx, issue, write) {
 			return
 		}
-	case planning_service.GroupWriteLabel:
-		if !applyGroupLabel(ctx, repo, issue, write) {
+	case planning_service.GroupWriteParent:
+		if !applyGroupParent(ctx, issue, write) {
 			return
 		}
 	case planning_service.GroupWriteAssignee:
@@ -563,70 +596,29 @@ func MoveBoardCardGroup(ctx *context.APIContext) {
 	renderBoardAfterWrite(ctx, repo, perm, project, body.GroupBy)
 }
 
-// applyGroupLabel clears the grouping's label namespace and applies the target group's label,
-// so a card never ends up in two groups of the same grouping.
-func applyGroupLabel(ctx *context.APIContext, repo *repo_model.Repository, issue *issues_model.Issue, write planning_service.GroupWrite) bool {
-	if err := issue.LoadLabels(ctx); err != nil {
-		ctx.APIErrorInternal(err)
-		return false
-	}
-	for _, label := range issue.Labels {
-		if len(label.Name) > len(write.Prefix) && strings.EqualFold(label.Name[:len(write.Prefix)], write.Prefix) {
-			if label.Name == write.Label {
-				return true // already in the target group; the move is a no-op, not an error
-			}
-			if err := issue_service.RemoveLabel(ctx, issue, ctx.Doer, label); err != nil {
-				ctx.APIErrorInternal(err)
-				return false
-			}
+// applyGroupParent sets or removes the card's recorded parent through SetIssueParent, which is
+// where every hierarchy refusal — same_issue, cross_repo, rank_mismatch, cycle and the rest —
+// lives; the board itself enforces none of them a second time.
+func applyGroupParent(ctx *context.APIContext, issue *issues_model.Issue, write planning_service.GroupWrite) bool {
+	if write.ParentIssueID == 0 {
+		if err := planning_service.RemoveIssueParent(ctx, issue.ID); err != nil {
+			ctx.APIErrorInternal(err)
+			return false
 		}
+		return true
 	}
-	if write.Label == "" {
-		return true // moved into the empty-value group: the namespace is cleared, nothing added
-	}
-
-	label, err := findRepoOrOrgLabel(ctx, repo, write.Label)
-	switch {
-	case errors.Is(err, errGroupLabelMissing):
-		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "label_not_found",
-			"no label named "+write.Label+" exists in "+repo.FullName()+" or its organization",
-			"Create the label first — ccpm's init.sh creates one epic:<name> label per epic — then move the card again.")
-		return false
-	case err != nil:
-		ctx.APIErrorInternal(err)
+	parent, err := issues_model.GetIssueByID(ctx, write.ParentIssueID)
+	if err != nil {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "parent_not_found",
+			"no issue with that id exists to be the group's root",
+			"Move to one of the group keys the board itself publishes.")
 		return false
 	}
-	if err := issue_service.AddLabel(ctx, issue, ctx.Doer, label); err != nil {
-		ctx.APIErrorInternal(err)
+	if err := planning_service.SetIssueParent(ctx, issue, parent); err != nil {
+		hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
 		return false
 	}
 	return true
-}
-
-// errGroupLabelMissing is the sentinel for a group whose label does not exist yet. It is a
-// distinct outcome from a lookup failure: the caller answers it with what to create.
-var errGroupLabelMissing = errors.New("no label of that name exists in the repository or its organization")
-
-// findRepoOrOrgLabel looks a label up by name in the repository and then in its organization,
-// which is where Gitea's own label picker looks.
-func findRepoOrOrgLabel(ctx *context.APIContext, repo *repo_model.Repository, name string) (*issues_model.Label, error) {
-	labels, err := issues_model.GetLabelsByRepoID(ctx, repo.ID, "", db.ListOptions{ListAll: true})
-	if err != nil {
-		return nil, err
-	}
-	if repo.Owner != nil && repo.Owner.IsOrganization() {
-		orgLabels, err := issues_model.GetLabelsByOrgID(ctx, repo.OwnerID, "", db.ListOptions{ListAll: true})
-		if err != nil {
-			return nil, err
-		}
-		labels = append(labels, orgLabels...)
-	}
-	for _, label := range labels {
-		if label.Name == name {
-			return label, nil
-		}
-	}
-	return nil, errGroupLabelMissing
 }
 
 // applyGroupAssignee makes the target group's user the issue's only assignee, because the group

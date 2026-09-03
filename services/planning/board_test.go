@@ -18,12 +18,19 @@ var boardColumns = []BoardColumn{
 	{ID: 13, Title: "Done"},
 }
 
-// card builds a test card. typeName is the assigned type's name (empty for none), labels
-// carries only what epic grouping still reads.
+// card builds a test card. typeName is the assigned type's name (empty for none).
 func card(number, columnID int64, typeName string, labels, assignees []string) Card {
 	return Card{
 		IssueID: 9000 + number, Number: number, Title: "issue", ColumnID: columnID,
 		Type: typeName, Labels: labels, Assignees: assignees,
+	}
+}
+
+// parentCard builds a card carrying hierarchy fields, for GroupParent's own tests.
+func parentCard(issueID, columnID, parentID, rootID int64, hasChildren bool, title string) Card {
+	return Card{
+		IssueID: issueID, Number: issueID, Title: title, ColumnID: columnID,
+		ParentIssueID: parentID, RootIssueID: rootID, HasChildren: hasChildren,
 	}
 }
 
@@ -54,14 +61,17 @@ func TestPlanningParseGroupingAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.
 
 	_, ok = ParseGrouping("milestone")
 	assert.False(t, ok, "an unknown grouping is refused, never silently treated as none")
+
+	_, ok = ParseGrouping("epic")
+	assert.False(t, ok, "the retired epic grouping is refused rather than silently accepted")
 }
 
-// By type, by assignee and by epic.
+// By type and by assignee.
 func TestPlanningBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 	cards := []Card{
-		card(1, 11, "bug", []string{"epic:checkout"}, []string{"alice"}),
-		card(2, 12, "task", []string{"epic:checkout"}, []string{"bob"}),
-		card(3, 13, "bug", []string{"epic:billing"}, []string{"alice"}),
+		card(1, 11, "bug", nil, []string{"alice"}),
+		card(2, 12, "task", nil, []string{"bob"}),
+		card(3, 13, "bug", nil, []string{"alice"}),
 	}
 
 	byType := BuildGroups(boardColumns, cards, GroupType)
@@ -70,13 +80,33 @@ func TestPlanningBuildGroupsGroupsByEveryDeclaredDimension(t *testing.T) {
 	byAssignee := BuildGroups(boardColumns, cards, GroupAssignee)
 	assert.Equal(t, [][3]any{{"alice", "alice", false}, {"bob", "bob", false}}, groupKeys(byAssignee))
 
-	byEpic := BuildGroups(boardColumns, cards, GroupEpic)
-	assert.Equal(t, [][3]any{{"billing", "billing", false}, {"checkout", "checkout", false}}, groupKeys(byEpic))
-
 	none := BuildGroups(boardColumns, cards, GroupNone)
 	require.Len(t, none, 1, "grouping off is Gitea's own board: one group")
 	assert.Equal(t, singleGroupLabel, none[0].Label)
 	assert.Equal(t, 3, none[0].Cards)
+}
+
+// A root with children gets its own row, labelled with the root's own title; a childless root
+// has nothing to hold a row open and lands in the empty group.
+func TestPlanningBuildGroupsByParentRowsUnderTheRootAndEmptiesTheChildless(t *testing.T) {
+	cards := []Card{
+		parentCard(1, 11, 0, 1, true, "checkout epic"),     // the root itself
+		parentCard(2, 12, 1, 1, false, "story one"),        // direct child of the root
+		parentCard(3, 13, 2, 1, false, "task under story"), // grandchild, same root
+		parentCard(4, 11, 0, 4, false, "standalone"),       // its own root, no children
+	}
+
+	groups := BuildGroups(boardColumns, cards, GroupParent)
+	require.Len(t, groups, 2)
+	assert.Equal(t, "1", groups[0].Key)
+	assert.Equal(t, "checkout epic", groups[0].Label, "the row is labelled with the root's own title")
+	assert.EqualValues(t, 1, groups[0].RootIssueID)
+	assert.Equal(t, 3, groups[0].Cards, "the root plus its whole subtree")
+
+	last := groups[len(groups)-1]
+	assert.True(t, last.IsEmptyValue)
+	assert.Equal(t, "no parent", last.Label)
+	assert.Equal(t, 1, last.Cards, "the childless standalone issue")
 }
 
 func TestPlanningBuildGroupsCarriesEveryColumnInOrderInEveryGroup(t *testing.T) {
@@ -107,7 +137,6 @@ func TestPlanningBuildGroupsPutsAnUnsetValueInAnExplicitEmptyGroup(t *testing.T)
 	}{
 		{GroupType, "no type assigned"},
 		{GroupAssignee, "unassigned"},
-		{GroupEpic, "no epic label"},
 	} {
 		t.Run(string(tc.grouping), func(t *testing.T) {
 			groups := BuildGroups(boardColumns, cards, tc.grouping)
@@ -148,13 +177,22 @@ func TestPlanningPlanGroupMoveEditsTheGroupingFieldItself(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, GroupWrite{Kind: GroupWriteType, TypeName: "bug"}, write, "the type name is lower-cased, matching storage")
 
-	write, err = PlanGroupMove(GroupEpic, "checkout")
+	write, err = PlanGroupMove(GroupParent, "3")
 	require.NoError(t, err)
-	assert.Equal(t, GroupWrite{Kind: GroupWriteLabel, Prefix: EpicLabelPrefix, Label: "epic:checkout"}, write)
+	assert.Equal(t, GroupWrite{Kind: GroupWriteParent, ParentIssueID: 3}, write, "the group key is the root issue id")
 
 	write, err = PlanGroupMove(GroupAssignee, "alice")
 	require.NoError(t, err)
 	assert.Equal(t, GroupWrite{Kind: GroupWriteAssignee, Assignee: "alice"}, write)
+}
+
+// A group key that is not a plausible issue id is refused rather than silently ignored.
+func TestPlanningPlanGroupMoveByParentRefusesANonNumericKey(t *testing.T) {
+	_, err := PlanGroupMove(GroupParent, "checkout")
+	require.Error(t, err)
+	var hubErr *hub_model.Error
+	require.ErrorAs(t, err, &hubErr)
+	assert.NotEmpty(t, hubErr.SuggestedAction)
 }
 
 // Moving INTO the empty-value group clears the field rather than being refused: the group is
@@ -169,6 +207,11 @@ func TestPlanningPlanGroupMoveIntoTheEmptyGroupClearsTheField(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, GroupWriteAssignee, write.Kind)
 	assert.Empty(t, write.Assignee)
+
+	write, err = PlanGroupMove(GroupParent, "")
+	require.NoError(t, err)
+	assert.Equal(t, GroupWriteParent, write.Kind)
+	assert.Zero(t, write.ParentIssueID, "moving to the empty group removes the parent")
 }
 
 // A group move is refused when grouping is off, because there is nothing to write.
@@ -181,4 +224,9 @@ func TestPlanningPlanGroupMoveIsRefusedWhenGroupingIsOff(t *testing.T) {
 	assert.Contains(t, hubErr.Message, "not grouped")
 	assert.NotEmpty(t, hubErr.SuggestedAction, "every error carries a suggested next action")
 	assert.Contains(t, hubErr.SuggestedAction, "COLUMNS", "the refusal names the write that does still work")
+}
+
+func TestBuildTreeIsSortedByChildIssueID(t *testing.T) {
+	tree := BuildTree(map[int64]int64{3: 1, 2: 1})
+	assert.Equal(t, []TreeEdge{{IssueID: 2, ParentIssueID: 1}, {IssueID: 3, ParentIssueID: 1}}, tree)
 }

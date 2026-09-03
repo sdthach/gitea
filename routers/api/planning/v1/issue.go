@@ -48,6 +48,26 @@ type IssueFacets struct {
 	// repository, what a type picker offers.
 	Type  *planning_service.AssignedType `json:"type"`
 	Types []planning_service.VisibleType `json:"types"`
+	// Parent is the issue's own recorded parent, or null; Children are every issue recorded
+	// under this one; Progress rolls the children up to a close count.
+	Parent   *ParentFacet              `json:"parent"`
+	Children []ChildFacet              `json:"children"`
+	Progress planning_service.Progress `json:"progress"`
+}
+
+// ParentFacet is an issue's parent, reduced to what a client renders as a breadcrumb.
+type ParentFacet struct {
+	IssueID int64  `json:"issue_id"`
+	Number  int64  `json:"number"`
+	Title   string `json:"title"`
+}
+
+// ChildFacet is one of an issue's recorded children.
+type ChildFacet struct {
+	IssueID  int64  `json:"issue_id"`
+	Number   int64  `json:"number"`
+	Title    string `json:"title"`
+	IsClosed bool   `json:"is_closed"`
 }
 
 // MilestoneSchedule is a milestone reduced to its own schedule, the response a milestone
@@ -373,6 +393,52 @@ func issueFacets(ctx *context.APIContext, issue *issues_model.Issue, canWrite bo
 			StartUnix: milestoneStarts[issue.Milestone.ID], DueUnix: int64(issue.Milestone.DeadlineUnix),
 		}
 	}
+
+	parents, err := planning_service.ParentsOf(ctx, []int64{issue.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	childrenByParent, err := planning_service.ChildrenOf(ctx, []int64{issue.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	relatedIDs := make([]int64, 0, 1+len(childrenByParent[issue.ID]))
+	if parentID, ok := parents[issue.ID]; ok {
+		relatedIDs = append(relatedIDs, parentID)
+	}
+	relatedIDs = append(relatedIDs, childrenByParent[issue.ID]...)
+	related, err := issues_model.GetIssuesByIDs(ctx, relatedIDs)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	relatedByID := make(map[int64]*issues_model.Issue, len(related))
+	for _, r := range related {
+		relatedByID[r.ID] = r
+	}
+	// Only an edge to another issue of THIS repository is reported: a parent or child row can
+	// name an issue in a different repository — a foreign key with no repo check of its own —
+	// and publishing it would leak that issue's existence to anyone who can read this one.
+	if parentID, ok := parents[issue.ID]; ok {
+		if p, ok := relatedByID[parentID]; ok && p.RepoID == issue.RepoID {
+			facets.Parent = &ParentFacet{IssueID: p.ID, Number: p.Index, Title: p.Title}
+		}
+	}
+	facets.Children = make([]ChildFacet, 0, len(childrenByParent[issue.ID]))
+	for _, childID := range childrenByParent[issue.ID] {
+		if c, ok := relatedByID[childID]; ok && c.RepoID == issue.RepoID {
+			facets.Children = append(facets.Children, ChildFacet{IssueID: c.ID, Number: c.Index, Title: c.Title, IsClosed: c.IsClosed})
+		}
+	}
+	progress, err := planning_service.ChildProgress(ctx, []int64{issue.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+	facets.Progress = progress[issue.ID]
+
 	return facets, true
 }
 

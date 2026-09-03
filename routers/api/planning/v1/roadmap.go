@@ -29,7 +29,7 @@ var roadmapSpec = query.Spec{
 	Resource: "roadmap",
 	Fields: []query.Field{
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
-		{Name: "epic", Column: "epic", Kind: query.KindString, Ops: []query.Op{query.OpEq}},
+		{Name: "parent_issue_id", Column: "parent_issue_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
 		{Name: "milestone_id", Column: "milestone_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
 		{Name: "state", Column: "state", Kind: query.KindString, Ops: []query.Op{query.OpEq}},
 		{Name: "group_by", Column: "group_by", Kind: query.KindString, Ops: []query.Op{query.OpEq}},
@@ -44,9 +44,6 @@ var roadmapSpec = query.Spec{
 type roadmapView struct {
 	grouping planning_service.Grouping
 	zoom     planning_service.Zoom
-	// epic narrows the chart to one epic. At zoom=epic the fetch selects epic issues
-	// rather than one epic's issues, so it is applied to the bars instead of in SQL.
-	epic string
 }
 
 // RoadmapRuler is the chart's time axis: the unit follows the span being drawn, and every
@@ -77,6 +74,9 @@ type Roadmap struct {
 	// under. A milestone holding no issue has no rollup, so the chart could not otherwise
 	// name it as a destination.
 	Milestones []RoadmapMilestone `json:"milestones"`
+	// Tree is every recorded parent edge among this repository's issues, so a client can
+	// draw the hierarchy without re-deriving it from each bar's own parent_issue_id.
+	Tree []planning_service.TreeEdge `json:"tree"`
 	// Types are the types visible from this repository, nearest scope shadowing by name —
 	// what a bar's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
@@ -112,18 +112,20 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 				"an estimate as a measurement is this view's characteristic failure. " +
 				"Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a " +
 				"sequencing hint enforced by nothing. " +
-				"An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a " +
-				"fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and " +
-				"their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are " +
-				"computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared " +
-				"window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup " +
-				"whose fetch hit its cap is marked partial and publishes no progress percentage. " +
-				"zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. " +
-				"A rolled-up zoom pages over its own rows rather than over issues — epic over the issues assigned the type " +
-				"named epic, milestone " +
-				"over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the " +
-				"page holds. An epic with no children yet is still listed, over its own declared window. " +
+				"An issue with no type, no parent and no start date has no start to draw: it is listed with that reason " +
+				"rather than given a fabricated bar. Parent and milestone rows span earliest start to latest end of " +
+				"their children, and their progress is the same task-close percentage every other view uses; no second " +
+				"definition is introduced. Those rows are computed from their own fetch of every child, not from the " +
+				"bars that got drawn, so a parent whose declared window ends before the work filed under it is still " +
+				"flagged at zoom=parent where no child is drawn; a rollup whose fetch hit its cap is marked partial and " +
+				"publishes no progress percentage. " +
+				"zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own " +
+				"groups. A rolled-up zoom pages over its own rows rather than over issues — parent over every issue that " +
+				"is itself a recorded parent, milestone over the repository's milestones — so a page of N holds N rollups " +
+				"and truncated means more of THOSE than the page holds. parent_issue_id narrows the chart to one issue's " +
+				"subtree. " +
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
+				"tree carries every recorded parent edge. " +
 				"Scoped by Gitea's own permission check on the Issues unit. " +
 				"The /planning/roadmap page is a client of this endpoint.",
 			Tag: "roadmap", Query: &roadmapSpec, Response: "Roadmap", ResponseIs: "object",
@@ -163,52 +165,69 @@ func GetRoadmap(ctx *context.APIContext) {
 		Paginator: &db.ListOptions{Page: q.Page, PageSize: q.Limit},
 		SortType:  "oldest",
 	}
-	epic := hubapi.EqualityFilterString(q, "epic")
+	parents, err := planning_service.ParentMap(ctx, repo.ID)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	parentFilter := hubapi.EqualityFilterInt(q, "parent_issue_id")
 	switch {
-	case zoom == planning_service.ZoomEpic:
-		// An issue assigned the type named epic seeds its own rollup: a page of epics is a
-		// page of rollups rather than a prefix of the issues filed under them, and
-		// truncated then means more EPICS than the page holds.
-		ids, ok := epicTypeIssueIDs(ctx, repo)
-		if !ok {
-			return
+	case zoom == planning_service.ZoomParent:
+		// Every issue that is itself a recorded parent seeds its own rollup: a page of
+		// parents is a page of rollups rather than a prefix of the issues filed under them,
+		// and truncated then means more PARENTS than the page holds. parent_issue_id still
+		// narrows this to one parent's own subtree of parents.
+		ids := distinctParentIDs(parents)
+		if parentFilter > 0 {
+			allowed := map[int64]bool{parentFilter: true}
+			for _, id := range planning_service.Subtree(parents, parentFilter) {
+				allowed[id] = true
+			}
+			narrowed := ids[:0]
+			for _, id := range ids {
+				if allowed[id] {
+					narrowed = append(narrowed, id)
+				}
+			}
+			ids = narrowed
+		}
+		if len(ids) == 0 {
+			ids = []int64{0}
 		}
 		opts.IssueIDs = ids
-	case epic != "":
-		opts.IncludedLabelNames = []string{planning_service.EpicLabelPrefix + epic}
+	case parentFilter > 0:
+		ids := planning_service.Subtree(parents, parentFilter)
+		if len(ids) == 0 {
+			// An id no issue ever has: IssuesOptions reads this as a real filter matching
+			// nothing, never as no filter at all.
+			ids = []int64{0}
+		}
+		opts.IssueIDs = ids
 	}
 	if milestoneID := hubapi.EqualityFilterInt(q, "milestone_id"); milestoneID > 0 {
 		opts.MilestoneIDs = []int64{milestoneID}
 	}
 
 	renderRoadmap(ctx, repo, opts, q.Limit, perm.CanWrite(unit.TypeIssues),
-		roadmapView{grouping: grouping, zoom: zoom, epic: epic})
+		roadmapView{grouping: grouping, zoom: zoom})
 }
 
-// epicTypeIssueIDs resolves the issues zoom=epic seeds its rollups from: those assigned the
-// type named epic, visible from repo. []int64{0} — an id no issue ever has — stands for "no
-// such type is visible, so nothing matches", which IssuesOptions reads as a real filter rather
-// than as no filter at all when the slice is empty.
-func epicTypeIssueIDs(ctx *context.APIContext, repo *repo_model.Repository) ([]int64, bool) {
-	types, err := planning_service.TypesFor(ctx, repo)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return nil, false
-	}
-	for _, t := range types {
-		if t.Name == planning_service.TypeEpic {
-			ids, err := planning_service.IssueIDsForType(ctx, t.ID)
-			if err != nil {
-				ctx.APIErrorInternal(err)
-				return nil, false
-			}
-			if len(ids) == 0 {
-				return []int64{0}, true
-			}
-			return ids, true
+// distinctParentIDs lists every id appearing as a value in parents — every issue that is
+// itself a recorded parent, regardless of depth. []int64{0} stands for "nothing is a parent
+// here", which IssuesOptions reads as a real filter rather than as no filter at all.
+func distinctParentIDs(parents map[int64]int64) []int64 {
+	seen := make(map[int64]bool, len(parents))
+	ids := make([]int64, 0, len(parents))
+	for _, parentID := range parents {
+		if !seen[parentID] {
+			seen[parentID] = true
+			ids = append(ids, parentID)
 		}
 	}
-	return []int64{0}, true
+	if len(ids) == 0 {
+		return []int64{0}
+	}
+	return ids
 }
 
 // parseZoom refuses an unknown depth naming what is accepted, exactly as the board refuses an
@@ -257,6 +276,18 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	}
 	out.Types = types
 
+	parents, err := planning_service.ParentMap(ctx, repo.ID)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	out.Tree = planning_service.BuildTree(parents)
+	hasChildren := make(map[int64]bool, len(parents))
+	for _, parentID := range parents {
+		hasChildren[parentID] = true
+	}
+	hier := hierarchyMaps{parents: parents, depths: planning_service.Depths(parents), hasChildren: hasChildren}
+
 	milestones, err := db.Find[issues_model.Milestone](ctx, issues_model.FindMilestoneOptions{RepoID: repo.ID})
 	if err != nil {
 		ctx.APIErrorInternal(err)
@@ -280,7 +311,7 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 
 	if view.zoom == planning_service.ZoomMilestone {
 		children := newRolledChildren("milestone")
-		if out.Rollups, out.Truncated, err = roadmapMilestoneRollups(ctx, repo, opts, limit, children); err != nil {
+		if out.Rollups, out.Truncated, err = roadmapMilestoneRollups(ctx, repo, opts, limit, children, hier); err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
@@ -318,7 +349,7 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	bars := make([]planning_service.Bar, 0, len(issues))
 	drawn := make(map[int64]bool, len(issues))
 	for _, issue := range issues {
-		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID])
+		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)
 		if bar, ok := planning_service.ResolveBar(in); ok {
 			bars = append(bars, bar)
 			drawn[issue.ID] = true
@@ -328,22 +359,25 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		out.Unmanaged = append(out.Unmanaged, planning_service.UnmanagedFor(in))
 	}
 
-	if view.zoom == planning_service.ZoomEpic && view.epic != "" {
-		bars = slices.DeleteFunc(bars, func(bar planning_service.Bar) bool { return bar.Epic != view.epic })
+	// At zoom=parent the fetch already narrowed to exactly the structural parent set
+	// (distinctParentIDs), so that IS the seed rather than something to re-derive from the
+	// fetched issues' OWN parent link — which, for a root parent, is zero.
+	var seedParentIDs []int64
+	if view.zoom == planning_service.ZoomParent {
+		seedParentIDs = issueIDsOf(issues)
 	}
-
-	children := newRolledChildren("epic")
-	rollups, err := roadmapRollups(ctx, repo, bars, opts.IsClosed, children)
+	children := newRolledChildren("parent")
+	rollups, err := roadmapRollups(ctx, repo, bars, opts.IsClosed, children, hier, seedParentIDs)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 
-	// A rolled-up row is a bracket over a set its children define, so epic zoom lists the
+	// A rolled-up row is a bracket over a set its children define, so parent zoom lists the
 	// brackets alone: drawing the children beside them is the issue zoom. Its arrows are the
 	// children's edges re-keyed onto the brackets, so an edge does not vanish with the bar.
-	if view.zoom == planning_service.ZoomEpic {
-		out.Rollups = rollupsOfKind(rollups, "epic")
+	if view.zoom == planning_service.ZoomParent {
+		out.Rollups = rollupsOfKind(rollups, "parent")
 		out.Arrows, err = roadmapRolledArrows(ctx, children)
 	} else {
 		out.Bars, out.Rollups = bars, rollups
@@ -400,29 +434,39 @@ func rulerOver(bars []planning_service.Bar, rollups []planning_service.RollupRow
 }
 
 // roadmapRollups folds each parent from its own fetch: over the drawn bars the containment
-// check goes vacuous at zoom=epic, where no child is drawn at all.
-func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []planning_service.Bar, state optional.Option[bool], children *rolledChildren) ([]planning_service.RollupRow, error) {
-	epics := make([]string, 0, 8)
-	milestones := make([]int64, 0, 8)
-	seenEpic, seenMilestone := map[string]bool{}, map[int64]bool{}
-	for _, bar := range bars {
-		if bar.Epic != "" && !seenEpic[bar.Epic] {
-			seenEpic[bar.Epic] = true
-			epics = append(epics, bar.Epic)
+// check goes vacuous at zoom=parent, where no child is drawn at all.
+//
+// seedParentIDs, when non-nil, IS the candidate set — used at zoom=parent, where the fetch
+// already narrowed to exactly the structural parent set and a root parent's own bar carries
+// ParentIssueID 0. nil falls back to discovering candidates from the drawn bars' own
+// ParentIssueID, which is what a plain issue-zoom fetch needs.
+func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []planning_service.Bar, state optional.Option[bool], children *rolledChildren, hier hierarchyMaps, seedParentIDs []int64) ([]planning_service.RollupRow, error) {
+	var parentIDs []int64
+	if seedParentIDs != nil {
+		parentIDs = append([]int64(nil), seedParentIDs...)
+	} else {
+		seenParent := map[int64]bool{}
+		for _, bar := range bars {
+			if bar.ParentIssueID != 0 && !seenParent[bar.ParentIssueID] {
+				seenParent[bar.ParentIssueID] = true
+				parentIDs = append(parentIDs, bar.ParentIssueID)
+			}
 		}
+	}
+	milestones := make([]int64, 0, 8)
+	seenMilestone := map[int64]bool{}
+	for _, bar := range bars {
 		if bar.MilestoneID > 0 && !seenMilestone[bar.MilestoneID] {
 			seenMilestone[bar.MilestoneID] = true
 			milestones = append(milestones, bar.MilestoneID)
 		}
 	}
-	slices.Sort(epics)
+	slices.Sort(parentIDs)
 	slices.Sort(milestones)
 
-	rows := make([]planning_service.RollupRow, 0, len(epics)+len(milestones))
-	for _, epic := range epics {
-		row, held, ok, err := roadmapRollup(ctx, repo, state, "epic", epic, func(opts *issues_model.IssuesOptions) {
-			opts.IncludedLabelNames = []string{planning_service.EpicLabelPrefix + epic}
-		})
+	rows := make([]planning_service.RollupRow, 0, len(parentIDs)+len(milestones))
+	for _, parentID := range parentIDs {
+		row, held, ok, err := roadmapParentRollup(ctx, state, parentID, hier)
 		if err != nil {
 			return nil, err
 		}
@@ -433,7 +477,7 @@ func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars [
 	}
 	for _, milestoneID := range milestones {
 		row, held, ok, err := roadmapRollup(ctx, repo, state, "milestone", strconv.FormatInt(milestoneID, 10),
-			func(opts *issues_model.IssuesOptions) { opts.MilestoneIDs = []int64{milestoneID} })
+			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestoneID} }, hier)
 		if err != nil {
 			return nil, err
 		}
@@ -445,9 +489,86 @@ func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars [
 	return rows, nil
 }
 
+// directChildIDs lists every issue whose recorded parent is exactly parentID, read from the
+// repository's own full parent map rather than a query — the map already holds every edge —
+// and sorted so a capped fetch keeps the same prefix on every call.
+func directChildIDs(parents map[int64]int64, parentID int64) []int64 {
+	ids := make([]int64, 0, 4)
+	for child, p := range parents {
+		if p == parentID {
+			ids = append(ids, child)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// roadmapParentRollup folds one parent's DIRECT children into its row. The repository's whole
+// parent map is already in memory, so every child is found there rather than queried — but a
+// parent with more children than query.MaxLimit is still capped and marked partial, the same
+// safety a milestone rollup's own paginated fetch gets.
+func roadmapParentRollup(ctx *context.APIContext, state optional.Option[bool], parentID int64, hier hierarchyMaps) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
+	childIDs := directChildIDs(hier.parents, parentID)
+	capped := len(childIDs) > query.MaxLimit
+	if capped {
+		childIDs = childIDs[:query.MaxLimit]
+	}
+	ids := make([]int64, 0, len(childIDs)+1)
+	ids = append(ids, childIDs...)
+	ids = append(ids, parentID)
+	issues, err := issues_model.GetIssuesByIDs(ctx, ids)
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
+	if err := issues.LoadAttributes(ctx); err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
+	var parentIssue *issues_model.Issue
+	for _, iss := range issues {
+		if iss.ID == parentID {
+			parentIssue = iss
+			break
+		}
+	}
+	starts, err := planning_service.IssueStarts(ctx, issueIDsOf(issues))
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
+	assigned, err := planning_service.Assignments(ctx, issueIDsOf(issues))
+	if err != nil {
+		return planning_service.RollupRow{}, nil, false, err
+	}
+	bars := make([]planning_service.Bar, 0, len(issues))
+	held := make(issues_model.IssueList, 0, len(issues))
+	for _, issue := range issues {
+		if state.Has() && issue.IsClosed != state.Value() {
+			continue
+		}
+		held = append(held, issue)
+		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)); ok {
+			bars = append(bars, bar)
+		}
+	}
+	key := strconv.FormatInt(parentID, 10)
+	for _, row := range planning_service.BuildRollups(bars) {
+		if row.Kind == "parent" && row.Key == key {
+			// The parent's own title, from the fetch above — not from the bar the fold built,
+			// which is empty whenever the parent itself is unmanaged or filtered out by state.
+			if parentIssue != nil {
+				row.Label = parentIssue.Title
+			}
+			if capped {
+				row.MarkPartial()
+			}
+			return row, held, true, nil
+		}
+	}
+	return planning_service.RollupRow{}, nil, false, nil
+}
+
 // roadmapMilestoneRollups pages over the repository's milestones rather than its issues, so a
 // page of N holds N milestone rows and truncated means more milestones than the page holds.
-func roadmapMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, children *rolledChildren) ([]planning_service.RollupRow, bool, error) {
+func roadmapMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, children *rolledChildren, hier hierarchyMaps) ([]planning_service.RollupRow, bool, error) {
 	// The milestone's OWN open/closed state is not the state filter: state narrows the
 	// ISSUES, here as everywhere else, so an open milestone holding closed work is listed
 	// at state=closed and a milestone whose children all fall outside it yields no row.
@@ -467,7 +588,7 @@ func roadmapMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repositor
 			continue
 		}
 		row, held, ok, err := roadmapRollup(ctx, repo, opts.IsClosed, "milestone", strconv.FormatInt(milestone.ID, 10),
-			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestone.ID} })
+			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestone.ID} }, hier)
 		if err != nil {
 			return nil, false, err
 		}
@@ -481,7 +602,7 @@ func roadmapMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repositor
 
 // roadmapRollup folds one parent's children into its row, one query per parent because a
 // child's window cannot be resolved in SQL. ok=false for a parent whose children draw no bar.
-func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], kind, key string, narrow func(*issues_model.IssuesOptions)) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
+func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], kind, key string, narrow func(*issues_model.IssuesOptions), hier hierarchyMaps) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
 	opts := &issues_model.IssuesOptions{
 		RepoIDs:   []int64{repo.ID},
 		IsPull:    optional.Some(false),
@@ -508,7 +629,7 @@ func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state o
 	}
 	children := make([]planning_service.Bar, 0, len(issues))
 	for _, issue := range issues {
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID])); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier)); ok {
 			children = append(children, bar)
 		}
 	}
@@ -577,9 +698,17 @@ func parseRoadmapState(ctx *context.APIContext, raw string) (optional.Option[boo
 	return optional.None[bool](), false
 }
 
+// hierarchyMaps is one repository's whole plan_issue_parent table, read once per request and
+// threaded through every bar and rollup computation rather than re-queried per issue.
+type hierarchyMaps struct {
+	parents     map[int64]int64
+	depths      map[int64]int
+	hasChildren map[int64]bool
+}
+
 // barInputFor reduces one issue to what bar resolution depends on. assigned is the issue's own
 // type assignment, zero when it has none.
-func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType) planning_service.BarInput {
+func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType, hier hierarchyMaps) planning_service.BarInput {
 	in := planning_service.BarInput{
 		IssueID: issue.ID, Number: issue.Index, Title: issue.Title, URL: issue.Link(),
 		ScheduledStartUnix: startedUnix,
@@ -591,13 +720,13 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning
 		IsClosed:      issue.IsClosed,
 		Labels:        make([]string, 0, len(issue.Labels)),
 		Assignees:     make([]string, 0, len(issue.Assignees)),
+		ParentIssueID: hier.parents[issue.ID],
+		RootIssueID:   planning_service.RootOf(hier.parents, issue.ID),
+		Depth:         hier.depths[issue.ID],
+		HasChildren:   hier.hasChildren[issue.ID],
 	}
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)
-		if in.Epic == "" && strings.HasPrefix(label.Name, planning_service.EpicLabelPrefix) &&
-			len(label.Name) > len(planning_service.EpicLabelPrefix) {
-			in.Epic = label.Name[len(planning_service.EpicLabelPrefix):]
-		}
 	}
 	for _, assignee := range issue.Assignees {
 		in.Assignees = append(in.Assignees, assignee.Name)

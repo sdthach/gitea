@@ -9,7 +9,7 @@
 			the close time, then the deadline, then the effort estimate applied to the start. Every bar
 			names both sources, and an <strong>inferred</strong> end is drawn as an open outline rather
 			than a solid bar — presenting an estimate as a measurement is this view's characteristic
-			failure. Zoom reads the same plan at epic or milestone depth, where a row is a bracket over
+			failure. Zoom reads the same plan at parent or milestone depth, where a row is a bracket over
 			the work filed under it rather than a bar. Every figure is fetched from
 			<code>{{.APIBase}}/roadmap</code>; this page is a client of that endpoint and reads
 			nothing the API does not serve, including the time axis and every rollup.
@@ -25,7 +25,7 @@
 					<label for="planning-zoom">Zoom</label>
 					<select id="planning-zoom">
 						<option value="issue">issue</option>
-						<option value="epic">epic</option>
+						<option value="parent">parent</option>
 						<option value="milestone">milestone</option>
 					</select>
 				</div>
@@ -34,13 +34,13 @@
 					<select id="planning-group">
 						<option value="none">none</option>
 						<option value="type">type</option>
-						<option value="epic">epic</option>
+						<option value="parent">parent</option>
 						<option value="assignee">assignee</option>
 					</select>
 				</div>
 				<div class="field">
-					<label for="planning-epic">Epic (optional)</label>
-					<input id="planning-epic" type="text" size="18">
+					<label for="planning-parent">Parent issue id (optional)</label>
+					<input id="planning-parent" type="number" min="1" size="10">
 				</div>
 				<div class="field">
 					<label for="planning-milestone">Milestone</label>
@@ -99,8 +99,12 @@
 						<input id="planning-new-issue" type="text" size="18" placeholder="Title">
 					</div>
 					<div class="field">
-						<label for="planning-new-issue-epic">Epic</label>
-						<input id="planning-new-issue-epic" type="text" size="10" placeholder="checkout">
+						<label for="planning-new-issue-parent">Parent issue id</label>
+						<input id="planning-new-issue-parent" type="number" min="1" size="10">
+					</div>
+					<div class="field">
+						<label for="planning-new-issue-type">Type id</label>
+						<input id="planning-new-issue-type" type="number" min="1" size="6">
 					</div>
 					<div class="field">
 						<label for="planning-new-issue-row">On row</label>
@@ -116,7 +120,7 @@
 				Start and End cells show the day the release will write while you drag, because at a
 				coarse ruler one pixel is several days. When the chart is grouped, drag a bar up or down
 				onto a group heading to move it between groups, which edits the grouping field itself —
-				the <code>type:</code> label, the <code>epic:</code> label or the assignee. A drag
+				the <code>type:</code> label, an issue's parent or the assignee. A drag
 				writes the day it lands on at every zoom — the end to the issue's deadline, the start
 				to its recorded schedule, because Gitea has nowhere else to keep one.
 			</p>
@@ -182,7 +186,7 @@ const unmanagedBody = document.querySelector('#planning-unmanaged');
 const tokenBox = document.querySelector('#planning-token-box');
 const tokenInput = document.querySelector('#planning-token');
 const repoInput = document.querySelector('#planning-repo');
-const epicInput = document.querySelector('#planning-epic');
+const parentInput = document.querySelector('#planning-parent');
 const stateSelect = document.querySelector('#planning-state');
 const zoomSelect = document.querySelector('#planning-zoom');
 const groupSelect = document.querySelector('#planning-group');
@@ -324,12 +328,12 @@ function bracket(container, span, row) {
 // descend opens a bracket: it narrows to what the bracket covers and drops to the level the
 // children live at.
 function descend(row) {
-	if (row.kind === 'epic') {
-		epicInput.value = row.key;
+	if (row.kind === 'parent') {
+		parentInput.value = row.key;
 		milestoneSelect.value = '0';
 	} else {
 		milestoneSelect.value = row.key;
-		epicInput.value = '';
+		parentInput.value = '';
 	}
 	zoomSelect.value = 'issue';
 	load();
@@ -590,7 +594,7 @@ function statement(payload) {
 	const count = payload.zoom === 'issue' ? payload.bars.length : payload.rollups.length;
 	const what = payload.zoom === 'issue' ? 'issues' : `${payload.zoom} rollups`;
 	document.querySelector('#planning-truncated-message').textContent =
-		`This chart is the first ${count} ${what}; narrow by epic or state to see the rest.`;
+		`This chart is the first ${count} ${what}; narrow by parent or state to see the rest.`;
 	truncatedBox.classList.remove('tw-hidden');
 }
 
@@ -629,7 +633,7 @@ function render(payload) {
 		// An epic's derived window belongs beside its own bar, keyed by the issue the
 		// rollup names.
 		const derived = new Map(payload.rollups
-			.filter((row) => row.kind === 'epic' && row.issue_id)
+			.filter((row) => row.kind === 'parent' && row.issue_id)
 			.map((row) => [row.issue_id, row]));
 		const groupOf = new Map();
 		for (const group of payload.groups) {
@@ -639,7 +643,7 @@ function render(payload) {
 		}
 
 		if (!payload.bars.length) {
-			body.replaceChildren(emptyRow('no issue in this repository carries an epic label, so there is nothing to draw'));
+			body.replaceChildren(emptyRow('no issue in this repository has a type, a parent or a start date, so there is nothing to draw'));
 		} else if (payload.groups.length) {
 			const grouped = [];
 			for (const group of payload.groups) {
@@ -699,7 +703,7 @@ async function load() {
 		repo_id: repoID, state: stateSelect.value, limit: '200',
 		zoom: zoomSelect.value, group_by: groupSelect.value,
 	});
-	if (epicInput.value.trim()) params.set('epic', epicInput.value.trim());
+	if (parentInput.value.trim()) params.set('parent_issue_id', parentInput.value.trim());
 	if (milestoneSelect.value !== '0') params.set('milestone_id', milestoneSelect.value);
 
 	let payload;
@@ -749,7 +753,7 @@ async function write(path, patch) {
 	}
 	clearError();
 	if (payload.zoom !== zoomSelect.value || payload.group_by !== groupSelect.value ||
-		epicInput.value.trim() || milestoneSelect.value !== '0') {
+		parentInput.value.trim() || milestoneSelect.value !== '0') {
 		load();
 		return;
 	}
@@ -777,7 +781,8 @@ document.querySelector('#planning-add-issue').addEventListener('click', () => {
 	}
 	write('/issues', {
 		repo: repoFullName, title,
-		epic: document.querySelector('#planning-new-issue-epic').value.trim(),
+		parent_issue_id: Number(document.querySelector('#planning-new-issue-parent').value.trim()),
+		type_id: Number(document.querySelector('#planning-new-issue-type').value.trim()),
 		milestone_id: Number(document.querySelector('#planning-new-issue-row').value),
 	}).then(() => {
 		document.querySelector('#planning-new-issue').value = '';

@@ -390,31 +390,95 @@ func typeLookupError(err error) error {
 }
 
 // SetIssueType assigns issue the type named by typeID, refusing one not visible from the
-// issue's own repository — issue.Repo must already be loaded.
+// issue's own repository — issue.Repo must already be loaded — or one whose rank would break
+// an existing parent or child edge.
 func SetIssueType(ctx context.Context, issue *issues_model.Issue, typeID int64) error {
 	types, err := TypesFor(ctx, issue.Repo)
 	if err != nil {
 		return err
 	}
-	for _, t := range types {
-		if t.ID == typeID {
-			return planning_model.UpsertAssignment(ctx, issue.ID, typeID)
+	var target *VisibleType
+	for i := range types {
+		if types[i].ID == typeID {
+			target = &types[i]
+			break
 		}
 	}
+	if target == nil {
+		return &hub_model.Error{
+			Code: "type_not_visible", Status: http.StatusUnprocessableEntity,
+			Message:         "that type is not visible from this issue's repository",
+			SuggestedAction: "Use one of the ids GET /issue-types?repo_id=<repo_id> returns for this repository.",
+		}
+	}
+	if err := rankAllowedAgainstLinks(ctx, issue.ID, target.Name, target.Rank); err != nil {
+		return err
+	}
+	return planning_model.UpsertAssignment(ctx, issue.ID, typeID)
+}
+
+// rankAllowedAgainstLinks refuses a type change that would break RankAllows on issueID's
+// recorded parent edge or any recorded child edge — hierarchy needs both sides to keep
+// satisfying the rule, not just the side being changed.
+func rankAllowedAgainstLinks(ctx context.Context, issueID int64, newName string, newRank int) error {
+	parents, err := planning_model.ParentsOf(ctx, []int64{issueID})
+	if err != nil {
+		return err
+	}
+	if parentID, ok := parents[issueID]; ok {
+		linked, err := typesOf(ctx, []int64{parentID})
+		if err != nil {
+			return err
+		}
+		if parentType, ok := linked[parentID]; ok && !RankAllows(parentType.Rank, newRank) {
+			return rankMismatchError(parentType.Name, parentType.Rank, newName, newRank)
+		}
+	}
+	children, err := planning_model.ChildrenOf(ctx, []int64{issueID})
+	if err != nil {
+		return err
+	}
+	if childIDs := children[issueID]; len(childIDs) > 0 {
+		linked, err := typesOf(ctx, childIDs)
+		if err != nil {
+			return err
+		}
+		for _, childID := range childIDs {
+			if childType, ok := linked[childID]; ok && !RankAllows(newRank, childType.Rank) {
+				return rankMismatchError(newName, newRank, childType.Name, childType.Rank)
+			}
+		}
+	}
+	return nil
+}
+
+func rankMismatchError(parentName string, parentRank int, childName string, childRank int) error {
 	return &hub_model.Error{
-		Code: "type_not_visible", Status: http.StatusUnprocessableEntity,
-		Message:         "that type is not visible from this issue's repository",
-		SuggestedAction: "Use one of the ids GET /issue-types?repo_id=<repo_id> returns for this repository.",
+		Code: "rank_mismatch", Status: http.StatusUnprocessableEntity,
+		Message:         fmt.Sprintf("%s (rank %d) does not outrank %s (rank %d)", parentName, parentRank, childName, childRank),
+		SuggestedAction: "Choose a type that keeps the parent outranking the child, or update the linked issue's type first.",
 	}
 }
 
-// ClearIssueType removes issueID's recorded type, if any.
+// ClearIssueType removes issueID's recorded type, if any, refusing one still linked as a
+// parent or a child: hierarchy needs a type on both sides of every edge to rank them.
 func ClearIssueType(ctx context.Context, issueID int64) error {
+	has, err := planning_model.HasLinks(ctx, issueID)
+	if err != nil {
+		return err
+	}
+	if has {
+		return &hub_model.Error{
+			Code: "has_links", Status: http.StatusUnprocessableEntity,
+			Message:         "this issue has a parent or children; hierarchy needs a type on both sides to rank them",
+			SuggestedAction: "Remove the parent link and every child link first, then clear the type.",
+		}
+	}
 	return planning_model.DeleteAssignment(ctx, issueID)
 }
 
-// IssueIDsForType lists every issue currently assigned typeID — the roadmap's zoom=epic
-// reading: issues whose assigned type is named epic.
+// IssueIDsForType lists every issue currently assigned typeID, for a caller filtering issues
+// by their assigned type — for instance, every issue whose type is named epic.
 func IssueIDsForType(ctx context.Context, typeID int64) ([]int64, error) {
 	return planning_model.IssueIDsForType(ctx, typeID)
 }

@@ -46,7 +46,7 @@ type milestoneSchedulePayload struct {
 func TestPlanningScheduleSetAndClearReflectsOnTheRoadmap(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	issue := manageIssue(t, 1, "checkout")
+	issue := manageIssue(t, 1)
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
 	req := NewRequestWithJSON(t, "PUT", planningv1.BasePath+"/issues/1/schedule",
@@ -75,7 +75,7 @@ func TestPlanningScheduleSetAndClearReflectsOnTheRoadmap(t *testing.T) {
 func TestPlanningScheduleRefusesAStartAfterTheIssuesDeadline(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	manageIssue(t, 1, "checkout")
+	manageIssue(t, 1)
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
 	roadmapWrite(t, token, "/issues/1/dates", map[string]any{"repo": "user2/repo1", "end": "2026-01-01"})
@@ -94,7 +94,7 @@ func TestPlanningScheduleRefusesAStartAfterTheIssuesDeadline(t *testing.T) {
 func TestPlanningScheduleAcceptsAStartEqualToTheDeadline(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	manageIssue(t, 1, "checkout")
+	manageIssue(t, 1)
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
 	roadmapWrite(t, token, "/issues/1/dates", map[string]any{"repo": "user2/repo1", "end": "2026-02-01"})

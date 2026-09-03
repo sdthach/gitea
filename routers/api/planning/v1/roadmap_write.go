@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,12 +13,12 @@ import (
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/perm/access"
+	planning_model "gitea.dev/models/planning"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/optional"
 	"gitea.dev/modules/timeutil"
-	"gitea.dev/modules/util"
 	hubapi "gitea.dev/routers/api/hub"
 	"gitea.dev/services/context"
 	issue_service "gitea.dev/services/issue"
@@ -38,17 +37,17 @@ const maxWriteBody = 16 << 10
 // writeBody is every field the four writes take between them. One shape keeps the
 // repository resolution and the permission check in one place.
 type writeBody struct {
-	Repo         string `json:"repo"`
-	MilestoneID  int64  `json:"milestone_id"`
-	Start        string `json:"start"`
-	End          string `json:"end"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	Epic         string `json:"epic"`
-	GroupBy      string `json:"group_by"`
-	Group        string `json:"group"`
-	TimeEstimate string `json:"time_estimate"`
-	TypeID       int64  `json:"type_id"`
+	Repo          string `json:"repo"`
+	MilestoneID   int64  `json:"milestone_id"`
+	Start         string `json:"start"`
+	End           string `json:"end"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	ParentIssueID int64  `json:"parent_issue_id"`
+	GroupBy       string `json:"group_by"`
+	Group         string `json:"group"`
+	TimeEstimate  string `json:"time_estimate"`
+	TypeID        int64  `json:"type_id"`
 }
 
 var repoParam = []hubapi.Param{
@@ -103,7 +102,7 @@ func moveIssueGroupEndpoint() *hubapi.Endpoint {
 			ID: "moveIssueGroup", Method: http.MethodPost, Path: "/issues/{issue_id}/group",
 			Summary: "Move a bar between the chart's groups",
 			Description: "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the " +
-				"field itself: the issue's assigned type, the epic: label, or the assignee. It goes through the same PlanGroupMove " +
+				"field itself: the issue's assigned type, its recorded parent, or the assignee. It goes through the same PlanGroupMove " +
 				"the board's group move goes through, so a vertical drag on the chart and a group move on the board are one " +
 				"operation with one definition rather than two that can drift. Dragging vertically writes the grouping " +
 				"field and dragging horizontally writes dates; the two are independent. " +
@@ -117,7 +116,7 @@ func moveIssueGroupEndpoint() *hubapi.Endpoint {
 				},
 				hubapi.Param{
 					Name: "group", In: "body", Type: "string",
-					Description: "The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.",
+					Description: "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the bar into the empty-value group, clearing the field.",
 				}),
 			CLINames: []string{"issue-move-group"},
 			Response: "Roadmap", ResponseIs: "object",
@@ -149,15 +148,19 @@ func createIssueEndpoint() *hubapi.Endpoint {
 		Op: &hubapi.Operation{
 			ID: "createIssue", Method: http.MethodPost, Path: "/issues",
 			Summary: "Create an issue on a row",
-			Description: "Creates the issue and files it under the milestone row and, when epic is given, the epic: label " +
-				"the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. " +
+			Description: "Creates the issue and files it under the milestone row. type_id and parent_issue_id are " +
+				"both optional and both validated before anything is created: the type must be visible from the " +
+				"repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a " +
+				"type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is " +
+				"refused untyped_issue, naming the new issue. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "roadmap",
 			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Issue title."},
 				hubapi.Param{Name: "description", In: "body", Type: "string", Description: "Issue body."},
 				hubapi.Param{Name: "milestone_id", In: "body", Type: "integer", Description: "Milestone row to file it under."},
-				hubapi.Param{Name: "epic", In: "body", Type: "string", Description: "Epic name; the issue is labelled epic:<name> so the chart draws it."}),
+				hubapi.Param{Name: "type_id", In: "body", Type: "integer", Description: "A type visible from the repository, assigned to the new issue."},
+				hubapi.Param{Name: "parent_issue_id", In: "body", Type: "integer", Description: "A parent in the same repository; needs type_id, and the parent's own type must outrank it."}),
 			CLINames: []string{"issue-create"},
 			Response: "Roadmap", ResponseIs: "object",
 		},
@@ -247,8 +250,8 @@ func MoveIssueGroup(ctx *context.APIContext) {
 		if !applyGroupType(ctx, issue, write) {
 			return
 		}
-	case planning_service.GroupWriteLabel:
-		if !applyGroupLabel(ctx, repo, issue, write) {
+	case planning_service.GroupWriteParent:
+		if !applyGroupParent(ctx, issue, write) {
 			return
 		}
 	case planning_service.GroupWriteAssignee:
@@ -301,44 +304,115 @@ func CreateIssue(ctx *context.APIContext) {
 	if body.MilestoneID != 0 && !milestoneBelongs(ctx, repo, body.MilestoneID) {
 		return
 	}
-
-	var labelIDs []int64
-	if epic := strings.TrimSpace(body.Epic); epic != "" {
-		label, err := epicLabel(ctx, repo, epic)
-		if err != nil {
-			ctx.APIErrorInternal(err)
-			return
-		}
-		labelIDs = []int64{label.ID}
+	if !validateNewIssueHierarchy(ctx, repo, body) {
+		return
 	}
 
 	issue := &issues_model.Issue{
 		RepoID: repo.ID, Repo: repo, Title: title, Content: body.Description,
 		PosterID: ctx.Doer.ID, Poster: ctx.Doer, MilestoneID: body.MilestoneID,
 	}
-	if err := issue_service.NewIssue(ctx, repo, issue, labelIDs, nil, nil, nil); err != nil {
+	if err := issue_service.NewIssue(ctx, repo, issue, nil, nil, nil, nil); err != nil {
 		ctx.APIErrorInternal(err)
 		return
+	}
+	if body.TypeID != 0 {
+		if err := planning_service.SetIssueType(ctx, issue, body.TypeID); err != nil {
+			hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
+			return
+		}
+	}
+	if body.ParentIssueID != 0 {
+		parent, err := issues_model.GetIssueByID(ctx, body.ParentIssueID)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		if err := planning_service.SetIssueParent(ctx, issue, parent); err != nil {
+			hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
+			return
+		}
 	}
 	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
-// epicLabel finds or creates the epic:<name> label the chart groups by, so creating
-// an issue on an epic row does not silently produce an unmanaged one.
-func epicLabel(ctx *context.APIContext, repo *repo_model.Repository, epic string) (*issues_model.Label, error) {
-	name := planning_service.EpicLabelPrefix + epic
-	existing, err := issues_model.GetLabelInRepoByName(ctx, repo.ID, name)
-	if err == nil {
-		return existing, nil
+// visibleType resolves typeID to the type visible from repo, the same lookup SetIssueType
+// makes after an issue already exists — done here first so a refused create leaves no row.
+func visibleType(ctx *context.APIContext, repo *repo_model.Repository, typeID int64) (*planning_service.VisibleType, bool) {
+	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
 	}
-	if !errors.Is(err, util.ErrNotExist) {
-		return nil, err
+	for i := range types {
+		if types[i].ID == typeID {
+			return &types[i], true
+		}
 	}
-	label := &issues_model.Label{RepoID: repo.ID, Name: name, Color: "#ededed"}
-	if err := issues_model.NewLabel(ctx, label); err != nil {
-		return nil, err
+	hubapi.APIError(ctx, http.StatusUnprocessableEntity, "type_not_visible",
+		"that type is not visible from this repository",
+		"Use one of the ids GET "+BasePath+"/issue-types?repo_id=<repo_id> returns for this repository.")
+	return nil, false
+}
+
+// validateNewIssueHierarchy validates type_id and parent_issue_id before anything is created:
+// the type must be visible from repo, the parent must exist in repo, and the two ranks must
+// satisfy RankAllows — the same rule SetIssueType and SetIssueParent enforce once an issue
+// already exists, checked here first so a refused create leaves no row behind.
+func validateNewIssueHierarchy(ctx *context.APIContext, repo *repo_model.Repository, body *writeBody) bool {
+	var newType *planning_service.VisibleType
+	if body.TypeID != 0 {
+		var ok bool
+		newType, ok = visibleType(ctx, repo, body.TypeID)
+		if !ok {
+			return false
+		}
 	}
-	return label, nil
+	if body.ParentIssueID == 0 {
+		return true
+	}
+	parent, err := issues_model.GetIssueByID(ctx, body.ParentIssueID)
+	if err != nil || parent.RepoID != repo.ID {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "parent_not_found",
+			"no issue with that id belongs to "+repo.FullName(),
+			"Read the chart's rows from "+BasePath+"/roadmap and use one of their issue_id values.")
+		return false
+	}
+
+	parentAssignment, err := planning_model.AssignmentsFor(ctx, []int64{parent.ID})
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return false
+	}
+	parentTypeID, parentTyped := parentAssignment[parent.ID]
+	var parentType *planning_model.IssueType
+	if parentTyped {
+		types, err := planning_model.GetIssueTypesByIDs(ctx, []int64{parentTypeID})
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return false
+		}
+		parentType, parentTyped = types[parentTypeID]
+	}
+	if !parentTyped {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "untyped_issue",
+			"the parent carries no type, and hierarchy needs one on both sides to rank them",
+			"Assign a type to the parent first.")
+		return false
+	}
+	if newType == nil {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "untyped_issue",
+			"the new issue carries no type, and hierarchy needs one on both sides to rank them",
+			"Send type_id with the request.")
+		return false
+	}
+	if !planning_service.RankAllows(parentType.Rank, newType.Rank) {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "rank_mismatch",
+			fmt.Sprintf("%s (rank %d) does not outrank %s (rank %d)", parentType.Name, parentType.Rank, newType.Name, newType.Rank),
+			"Choose a parent whose type outranks the new issue's, or change one of the two types.")
+		return false
+	}
+	return true
 }
 
 // writeTarget reads the body, resolves the repository and applies Gitea's own write
