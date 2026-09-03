@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	delivery_service "gitea.dev/services/deployments"
+	"gitea.dev/services/hub/query"
 )
 
 // gridSpec is the grid projection's whitelist declaration.

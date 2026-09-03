@@ -21,7 +21,7 @@ import (
 )
 
 // defaultPin is the upstream commit the fork branches from.
-const defaultPin = "ee8f2b4039ef"
+const defaultPin = "5ec9714dde"
 
 // spoke is one permitted upstream edit. Budget counts inserted lines; a delegation needs
 // its import line as well as its call, which is why some budgets are above one.
@@ -93,7 +93,7 @@ func main() {
 		if !ok {
 			problems = append(problems, fmt.Sprintf(
 				"%s is an upstream file the fork edited but did not declare as a spoke (+%d/-%d).\n"+
-					"  Suggested action: move the logic into models/delivery, services/delivery or routers/*/delivery and leave a one-line delegation, or add the file to the spoke table with its reason.",
+					"  Suggested action: move the logic into models/hub, models/deployments, services/hub, services/planning, services/deployments or routers/*/delivery and leave a one-line delegation, or add the file to the spoke table with its reason.",
 				path, added, deleted))
 			continue
 		}

@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	"gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	delivery_service "gitea.dev/services/deployments"
+	"gitea.dev/services/hub/query"
 
 	"xorm.io/builder"
 )

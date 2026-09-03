@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"gitea.dev/modules/json"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

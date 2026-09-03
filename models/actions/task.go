@@ -13,7 +13,7 @@ import (
 	runnerv1 "gitea.dev/actionslib/runner/v1"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	"gitea.dev/models/delivery/approvalgate" // delivery fork spoke
+	"gitea.dev/models/deployments/approvalgate" // delivery fork spoke
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/actions/jobparser"
 	"gitea.dev/modules/globallock"

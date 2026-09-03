@@ -15,7 +15,7 @@ import (
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/json"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
+	delivery_service "gitea.dev/services/deployments"
 )
 
 // maxPromotionBody caps the request body. An override reason is a sentence, not an upload.
@@ -65,7 +65,7 @@ func createDeploymentEndpoint() *endpoint {
 }
 
 // CreateDeployment answers POST /deployments. It is the only write path the API exposes onto
-// the deployment tables, and it reaches the dispatch through services/delivery.Promote, the
+// the deployment tables, and it reaches the dispatch through services/deployments.Promote, the
 // same call the page and the CLI make — there is no path around the sequence rule.
 func CreateDeployment(ctx *context.APIContext) {
 	body, ok := readPromotionBody(ctx)

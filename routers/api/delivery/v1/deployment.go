@@ -6,11 +6,11 @@ package v1
 import (
 	"net/http"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/services/context"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 
 	"xorm.io/builder"
 )

@@ -18,8 +18,8 @@ import (
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/optional"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
+	delivery_service "gitea.dev/services/planning"
 
 	"xorm.io/builder"
 )

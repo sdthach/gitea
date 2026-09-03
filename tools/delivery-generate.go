@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
-	"gitea.dev/services/delivery/cligen"
+	"gitea.dev/services/hub/cligen"
 )
 
 func main() {

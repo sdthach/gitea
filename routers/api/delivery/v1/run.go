@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	actions_model "gitea.dev/models/actions"
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	delivery_service "gitea.dev/services/deployments"
+	"gitea.dev/services/hub/query"
 
 	"xorm.io/builder"
 )

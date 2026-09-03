@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
-	delivery_service "gitea.dev/services/delivery"
+	delivery_service "gitea.dev/services/deployments"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

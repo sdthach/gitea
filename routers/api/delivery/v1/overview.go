@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	delivery_service "gitea.dev/services/deployments"
+	"gitea.dev/services/hub/query"
 )
 
 // overviewSpec is the composite's whitelist declaration. The composite is not a list, so it
@@ -241,7 +241,7 @@ func matchesFilters[T any](row T, q *query.Query, value func(T, string) (any, bo
 }
 
 // matchFilter is the in-process spelling of one parsed filter, matching what
-// services/delivery/query renders into SQL for a table-backed resource.
+// services/hub/query renders into SQL for a table-backed resource.
 func matchFilter(f query.Filter, got any) bool {
 	switch f.Op {
 	case query.OpIn:

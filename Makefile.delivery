@@ -4,7 +4,7 @@
 # The delivery fork's own make targets. The upstream Makefile carries one line including
 # this file, so the fork adds no target to it.
 
-DELIVERY_TEST_PACKAGES := gitea.dev/models/delivery/... gitea.dev/services/delivery/... gitea.dev/routers/api/delivery/... gitea.dev/routers/web/delivery/... gitea.dev/cmd/gitea-delivery/...
+DELIVERY_TEST_PACKAGES := gitea.dev/models/hub/... gitea.dev/models/deployments/... gitea.dev/services/hub/... gitea.dev/services/planning/... gitea.dev/services/deployments/... gitea.dev/routers/api/delivery/... gitea.dev/routers/web/delivery/... gitea.dev/cmd/gitea-delivery/...
 
 .PHONY: delivery-generate
 delivery-generate: ## regenerate the delivery OpenAPI document, CLI request layer and command reference

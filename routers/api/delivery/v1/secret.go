@@ -7,10 +7,10 @@ import (
 	"net/http"
 
 	"gitea.dev/models/db"
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	secret_model "gitea.dev/models/secret"
 	"gitea.dev/services/context"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 
 	"xorm.io/builder"
 )

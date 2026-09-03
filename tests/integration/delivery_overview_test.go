@@ -12,7 +12,7 @@ import (
 	actions_model "gitea.dev/models/actions"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	"gitea.dev/modules/timeutil"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
 	"gitea.dev/tests"

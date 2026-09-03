@@ -15,7 +15,7 @@ import (
 	"gitea.dev/modules/templates"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
+	delivery_service "gitea.dev/services/hub"
 )
 
 const (

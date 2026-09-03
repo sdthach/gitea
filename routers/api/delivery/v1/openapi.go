@@ -9,10 +9,11 @@ import (
 	"sort"
 	"strings"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	"gitea.dev/modules/json"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	deployments_service "gitea.dev/services/deployments"
+	"gitea.dev/services/hub/query"
+	delivery_service "gitea.dev/services/planning"
 )
 
 // APIVersion is the fork's own API version. Gitea's swagger group at routers/api/v1 is
@@ -59,7 +60,7 @@ type Operation struct {
 }
 
 // GrammarParams renders the section I grammar for the operation's resource. The grammar is
-// declared once, in services/delivery/query; a resource restates only its whitelists.
+// declared once, in services/hub/query; a resource restates only its whitelists.
 func (op *Operation) GrammarParams() []Param {
 	if op.Query == nil {
 		return nil
@@ -256,7 +257,7 @@ var componentSchemas = map[string]any{
 		"event":            prop("string", "The webhook event that caused the run."),
 		"ref":              prop("string", "The commit, branch or tag that caused the run."),
 		"commit_sha":       prop("string", "Commit the run built."),
-		"status":           enumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer.", delivery_service.RunStateNames()),
+		"status":           enumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer.", deployments_service.RunStateNames()),
 		"run_url":          prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page."),
 		"created_unix":     prop("integer", "When the run was created, unix seconds."),
 		"started_unix":     prop("integer", "When the run started, unix seconds; 0 if it has not."),
@@ -286,7 +287,7 @@ var componentSchemas = map[string]any{
 	"Summary": objectSchema(map[string]any{
 		"window":                 prop("object", "The half-open window the figures cover: from_unix, to_unix and days."),
 		"total_runs":             prop("integer", "Runs in the window."),
-		"runs":                   prop("object", "Run count per state: "+strings.Join(delivery_service.RunStateNames(), ", ")+"."),
+		"runs":                   prop("object", "Run count per state: "+strings.Join(deployments_service.RunStateNames(), ", ")+"."),
 		"success_rate":           prop("number", "Successes over runs that reached a result."),
 		"total_duration_seconds": prop("integer", "Summed run duration."),
 		"active_repositories":    prop("integer", "Repositories with at least one run in the window."),

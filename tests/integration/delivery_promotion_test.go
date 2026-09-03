@@ -9,7 +9,7 @@ import (
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"

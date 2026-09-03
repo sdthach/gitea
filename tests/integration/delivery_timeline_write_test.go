@@ -15,8 +15,8 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
 	deliveryv1 "gitea.dev/routers/api/delivery/v1"
-	delivery_service "gitea.dev/services/delivery"
 	issue_service "gitea.dev/services/issue"
+	delivery_service "gitea.dev/services/planning"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"

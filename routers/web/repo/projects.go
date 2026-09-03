@@ -25,8 +25,8 @@ import (
 	"gitea.dev/routers/web/shared/issue"
 	shared_user "gitea.dev/routers/web/shared/user"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
 	"gitea.dev/services/forms"
+	delivery_service "gitea.dev/services/hub"
 	project_service "gitea.dev/services/projects"
 )
 

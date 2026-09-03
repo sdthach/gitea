@@ -10,7 +10,7 @@ import (
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/services/context"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 )
 
 // Repository is the delivery view of a repository: the identity the grid, the environment

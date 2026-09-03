@@ -21,8 +21,8 @@ import (
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/modules/util"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
 	issue_service "gitea.dev/services/issue"
+	delivery_service "gitea.dev/services/planning"
 )
 
 // The timeline's writes. Every one goes through Gitea's own service layer as the calling

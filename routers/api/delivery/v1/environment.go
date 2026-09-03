@@ -9,12 +9,13 @@ import (
 	"slices"
 	"strconv"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
+	hub_model "gitea.dev/models/hub"
 	"gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/services/context"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 
 	"xorm.io/builder"
 )
@@ -181,7 +182,7 @@ func GetEnvironment(ctx *context.APIContext) {
 		return
 	}
 	env, err := delivery.GetEnvironmentByID(ctx, id)
-	var hubErr *delivery.Error
+	var hubErr *hub_model.Error
 	if err != nil && !errors.As(err, &hubErr) {
 		ctx.APIErrorInternal(err)
 		return

@@ -18,9 +18,9 @@ import (
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/optional"
 	"gitea.dev/services/context"
-	delivery_service "gitea.dev/services/delivery"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 	issue_service "gitea.dev/services/issue"
+	delivery_service "gitea.dev/services/planning"
 	project_service "gitea.dev/services/projects"
 )
 

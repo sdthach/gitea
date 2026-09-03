@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/hub"
 	"gitea.dev/services/context"
-	"gitea.dev/services/delivery/query"
+	"gitea.dev/services/hub/query"
 )
 
 // apiError renders a rejection. Every rejection carries a suggested next action.

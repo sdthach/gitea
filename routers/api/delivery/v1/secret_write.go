@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"gitea.dev/models/delivery"
+	delivery "gitea.dev/models/deployments"
 	"gitea.dev/modules/json"
 	"gitea.dev/services/context"
 )
