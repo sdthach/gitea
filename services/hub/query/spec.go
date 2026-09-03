@@ -1,7 +1,7 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Package query implements the one query grammar every /api/delivery/v1 list endpoint
+// Package query implements the one query grammar every list endpoint across the hub APIs
 // answers. A resource declares its own whitelists in a Spec; it never restates
 // the grammar.
 package query

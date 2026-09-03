@@ -10,11 +10,11 @@ import (
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	unit_model "gitea.dev/models/unit"
 	"gitea.dev/modules/setting"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -35,17 +35,17 @@ func TestAPIDeliveryEnvironmentsAreListed(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/environments").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var envs []*delivery.Environment
+	var envs []*deployments_model.Environment
 	DecodeJSON(t, resp, &envs)
 	require.Len(t, envs, deliveryFixtureEnvironments, "the instance-wide set is listed whatever it is called")
 
 	names := make([]string, len(envs))
 	for i, env := range envs {
 		names[i] = env.Name
-		assert.Equal(t, delivery.PolicyNone, env.ApprovalPolicy, "adding the fork gates nothing until a policy is set")
+		assert.Equal(t, deployments_model.PolicyNone, env.ApprovalPolicy, "adding the fork gates nothing until a policy is set")
 	}
 	assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, names, "environments render in configured order")
 
@@ -58,7 +58,7 @@ func TestAPIDeliveryRejectsAnUnknownFilterField(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments?colour=red").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/environments?colour=red").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusBadRequest)
 
 	var payload struct {
@@ -80,24 +80,24 @@ func TestAPIDeliveryAppliesFiltersSortAndPaging(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments?sort_order[gte]=40&sort_by=name&order=asc").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/environments?sort_order[gte]=40&sort_by=name&order=asc").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var filtered []*delivery.Environment
+	var filtered []*deployments_model.Environment
 	DecodeJSON(t, resp, &filtered)
 	require.Len(t, filtered, 2)
 	assert.Equal(t, "prod", filtered[0].Name)
 	assert.Equal(t, "staging", filtered[1].Name)
 
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/environments?q=prod").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/environments?q=prod").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
-	var searched []*delivery.Environment
+	var searched []*deployments_model.Environment
 	DecodeJSON(t, resp, &searched)
 	require.Len(t, searched, 1)
 	assert.Equal(t, "prod", searched[0].Name)
 
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/environments?limit=2&page=2").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/environments?limit=2&page=2").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
-	var paged []*delivery.Environment
+	var paged []*deployments_model.Environment
 	DecodeJSON(t, resp, &paged)
 	require.Len(t, paged, 2)
 	assert.Equal(t, "uat", paged[0].Name, "page 2 of the sort-order sequence starts at the third environment")
@@ -107,7 +107,7 @@ func TestAPIDeliveryAppliesFiltersSortAndPaging(t *testing.T) {
 func TestAPIDeliveryRequiresSignIn(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments")
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/environments")
 	resp := MakeRequest(t, req, http.StatusForbidden)
 	assert.Contains(t, resp.Body.String(), "suggested_action")
 }
@@ -124,7 +124,7 @@ func TestDeliveryPageIsBehindSignIn(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/environments/prod")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint")
+	assert.Contains(t, body, deploymentsv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint")
 }
 
 // TestDeliveryEnvironmentPagesAreClientsOfTheAPI covers the editor's two screens: the list
@@ -140,7 +140,7 @@ func TestDeliveryEnvironmentPagesAreClientsOfTheAPI(t *testing.T) {
 
 	resp := session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments"), http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/environments", "the list is a client of the documented endpoint")
+	assert.Contains(t, body, deploymentsv1.BasePath+"/environments", "the list is a client of the documented endpoint")
 	assert.Contains(t, body, `const envID = "";`, "the list screen names no single row")
 
 	resp = session.MakeRequest(t, NewRequest(t, "GET", "/delivery/environments/1/edit"), http.StatusOK)
@@ -159,14 +159,14 @@ func TestAPIDeliveryRepoEnvironmentsFallBackToTheDefaultSet(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var envs []*delivery.Environment
+	var envs []*deployments_model.Environment
 	DecodeJSON(t, resp, &envs)
 	require.Len(t, envs, deliveryFixtureEnvironments,
 		"a repository that has declared no environment of its own renders the instance-wide default set")
-	assert.Equal(t, delivery.DefaultsRepoID, envs[0].RepoID)
+	assert.Equal(t, deployments_model.DefaultsRepoID, envs[0].RepoID)
 }
 
 func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
@@ -175,16 +175,16 @@ func TestAPIDeliveryGetRepoEnvironment(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments/PROD").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments/PROD").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var env delivery.Environment
+	var env deployments_model.Environment
 	DecodeJSON(t, resp, &env)
 	assert.Equal(t, "prod", env.Name, "environment names are identifiers, matched case-insensitively")
-	assert.Equal(t, delivery.PolicyNone, env.ApprovalPolicy)
+	assert.Equal(t, deployments_model.PolicyNone, env.ApprovalPolicy)
 
 	// An unknown name is a hub error rendered through renderHubError, which carries a
 	// suggested next action.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments/nowhere").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments/nowhere").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusNotFound)
 	var failure struct {
 		Code            string `json:"code"`
@@ -213,15 +213,15 @@ func TestAPIDeliveryEnvironmentCanWrite(t *testing.T) {
 
 	// user5 owns repo4, so it is repository administrator there; user4 is a collaborator
 	// with write on it, which the gate refuses.
-	repoEnv := &delivery.Environment{
+	repoEnv := &deployments_model.Environment{
 		RepoID: 4, Name: "prod", SortOrder: 50,
-		ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+		ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
 	}
 	require.NoError(t, db.Insert(t.Context(), repoEnv))
 
 	canWrite := func(login string, envID int64) bool {
 		t.Helper()
-		req := NewRequest(t, "GET", deliveryv1.BasePath+"/environments?limit=50").
+		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/environments?limit=50").
 			AddTokenAuth(deliveryEnvironmentToken(t, login))
 		var rows []deliveryEnvironmentRow
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
@@ -251,11 +251,11 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 	require.NoError(t, db.Insert(t.Context(), &repo_model.RepoUnit{
 		RepoID: 2, Type: unit_model.TypeActions, Config: &repo_model.ActionsConfig{},
 	}))
-	envs := map[int64]*delivery.Environment{}
+	envs := map[int64]*deployments_model.Environment{}
 	for _, repoID := range []int64{1, 2, 4} {
-		env := &delivery.Environment{
+		env := &deployments_model.Environment{
 			RepoID: repoID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+			ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
 		}
 		require.NoError(t, db.Insert(t.Context(), env))
 		envs[repoID] = env
@@ -263,7 +263,7 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 
 	read := func(login string, id int64, status int) deliveryEnvironmentRow {
 		t.Helper()
-		req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, id)).
+		req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, id)).
 			AddTokenAuth(deliveryEnvironmentToken(t, login))
 		var row deliveryEnvironmentRow
 		resp := MakeRequest(t, req, status)
@@ -285,11 +285,11 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 	writeToken := getTokenForLoggedInUser(t, loginUser(t, "user5"), auth_model.AccessTokenScopeAll)
 	body := map[string]any{"repo_id": 4, "name": "qa", "sort_order": 20, "approval_policy": "none", "required_approvals": 1}
 	var written deliveryEnvironmentRow
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/environments", body).AddTokenAuth(writeToken)
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/environments", body).AddTokenAuth(writeToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &written)
 	assert.True(t, written.CanWrite)
 	body["sort_order"] = 30
-	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, written.ID), body).AddTokenAuth(writeToken)
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, written.ID), body).AddTokenAuth(writeToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &written)
 	assert.True(t, written.CanWrite)
 
@@ -305,7 +305,7 @@ func TestAPIDeliveryEnvironmentByID(t *testing.T) {
 func deliveryEnvironmentRefusal(t *testing.T, login string, id int64) deliveryRefusal {
 	t.Helper()
 	var refusal deliveryRefusal
-	req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, id)).
+	req := NewRequest(t, "GET", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, id)).
 		AddTokenAuth(deliveryEnvironmentToken(t, login))
 	DecodeJSON(t, MakeRequest(t, req, http.StatusNotFound), &refusal)
 	return refusal
@@ -317,10 +317,10 @@ func TestAPIDeliveryRepos(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos?q=repo1&sort_by=id&order=asc").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos?q=repo1&sort_by=id&order=asc").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var repos []*deliveryv1.Repository
+	var repos []*deploymentsv1.Repository
 	DecodeJSON(t, resp, &repos)
 	require.NotEmpty(t, repos)
 	found := false
@@ -339,13 +339,13 @@ func TestAPIDeliveryRepos(t *testing.T) {
 func TestAPIDeliverySecretNamesNeverCarryAValue(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	require.NoError(t, db.Insert(t.Context(), &delivery.SecretScope{RepoID: 1, SecretName: "PROD_DB_PASS", Environment: "prod"}))
-	require.NoError(t, db.Insert(t.Context(), &delivery.SecretScope{RepoID: 1, SecretName: "QA_DB_PASS", Environment: "qa"}))
+	require.NoError(t, db.Insert(t.Context(), &deployments_model.SecretScope{RepoID: 1, SecretName: "PROD_DB_PASS", Environment: "prod"}))
+	require.NoError(t, db.Insert(t.Context(), &deployments_model.SecretScope{RepoID: 1, SecretName: "QA_DB_PASS", Environment: "qa"}))
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
 	var names []map[string]any
@@ -371,11 +371,11 @@ func TestAPIDeliveryAuthorizesThroughGiteasOwnCheck(t *testing.T) {
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository, auth_model.AccessTokenScopeWriteRepository)
 
 	// user4 can read user2/repo1, which is public with the Actions unit enabled.
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 
 	// user4 has no write on its Actions unit, so secret metadata is refused.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusForbidden)
 	var refusal struct {
 		Code            string `json:"code"`
@@ -388,7 +388,7 @@ func TestAPIDeliveryAuthorizesThroughGiteasOwnCheck(t *testing.T) {
 	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	// A repository the caller cannot see is a 404, not a 403 that would confirm it exists.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/no-such-repo/environments").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/no-such-repo/environments").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusNotFound)
 	DecodeJSON(t, resp, &refusal)
 	assert.Equal(t, "repo_not_found", refusal.Code)
@@ -415,6 +415,6 @@ func TestDeliveryPagesCanBeSwitchedOff(t *testing.T) {
 
 	// The API namespace is unaffected: the gate is on the pages, not on the contract.
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/environments").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/environments").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 }

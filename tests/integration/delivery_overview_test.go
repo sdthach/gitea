@@ -12,9 +12,9 @@ import (
 	actions_model "gitea.dev/models/actions"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	"gitea.dev/modules/timeutil"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +77,7 @@ func (rows runRows) repoIDs() map[int64]bool {
 
 func getDeliveryJSON(t *testing.T, token, path string, into any) {
 	t.Helper()
-	req := NewRequest(t, "GET", deliveryv1.BasePath+path).AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+path).AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	DecodeJSON(t, resp, into)
 }
@@ -244,7 +244,7 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 	}
 
 	var ascending runRows
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/runs?limit=2&sort_by=id&order=asc").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/runs?limit=2&sort_by=id&order=asc").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	DecodeJSON(t, resp, &ascending)
 	require.Len(t, ascending, 2)
@@ -253,7 +253,7 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 
 	// An unknown state names the offender rather than returning an empty page a caller would
 	// read as "nothing failed".
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/runs?status[eq]=exploded").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/runs?status[eq]=exploded").AddTokenAuth(token)
 	rejected := MakeRequest(t, req, http.StatusBadRequest)
 	var payload struct {
 		Code            string   `json:"code"`
@@ -274,10 +274,10 @@ func TestAPIDeliveryRunsAnswerFiltersSortingAndPaging(t *testing.T) {
 func TestAPIDeliveryCITrendMatchesTheDeliveryTables(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	require.NoError(t, delivery.AppendDeployment(t.Context(), &delivery.Deployment{
+	require.NoError(t, deployments_model.AppendDeployment(t.Context(), &deployments_model.Deployment{
 		RepoID: ciPublicRepoID, Environment: "qa", ReleaseTag: "v1", RunID: 9301, Status: "success",
 	}))
-	require.NoError(t, delivery.AppendDeployment(t.Context(), &delivery.Deployment{
+	require.NoError(t, deployments_model.AppendDeployment(t.Context(), &deployments_model.Deployment{
 		RepoID: ciPrivateRepoID, Environment: "prod", ReleaseTag: "v1", RunID: 9302, Status: "success",
 	}))
 
@@ -328,7 +328,7 @@ func TestDeliveryCIPageIsAClientOfItsAPI(t *testing.T) {
 	for _, path := range []string{"/overview", "/overview/trends", "/overview/repos", "/runs"} {
 		assert.Contains(t, body, path, "the page reads %s over the documented API", path)
 	}
-	assert.Contains(t, body, `const base = "`+deliveryv1.BasePath+`"`,
+	assert.Contains(t, body, `const base = "`+deploymentsv1.BasePath+`"`,
 		"the handler hands the page the namespace's own base, so the page reaches the documented API and nothing else")
 	assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action")
 }

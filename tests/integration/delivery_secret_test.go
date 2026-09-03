@@ -12,11 +12,11 @@ import (
 	actions_model "gitea.dev/models/actions"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -80,7 +80,7 @@ func TestDeliveryJobEnvironmentReadsTheWorkflowFile(t *testing.T) {
 
 		for jobID, want := range map[string]string{"to-prod": "prod", "to-qa": "qa", "build": ""} {
 			t.Run(jobID, func(t *testing.T) {
-				got, err := delivery.JobEnvironment(t.Context(), deployJob(repo, sha, jobID))
+				got, err := deployments_model.JobEnvironment(t.Context(), deployJob(repo, sha, jobID))
 				require.NoError(t, err)
 				assert.Equal(t, want, got)
 			})
@@ -89,15 +89,15 @@ func TestDeliveryJobEnvironmentReadsTheWorkflowFile(t *testing.T) {
 		t.Run("a run recording no workflow source is refused", func(t *testing.T) {
 			job := deployJob(repo, sha, "to-prod")
 			job.Run.WorkflowCommitSHA = ""
-			_, err := delivery.JobEnvironment(t.Context(), job)
-			require.ErrorIs(t, err, delivery.ErrNoWorkflowSource)
+			_, err := deployments_model.JobEnvironment(t.Context(), job)
+			require.ErrorIs(t, err, deployments_model.ErrNoWorkflowSource)
 		})
 
 		t.Run("a workflow the commit does not carry is refused", func(t *testing.T) {
 			job := deployJob(repo, sha, "to-prod")
 			job.Run.WorkflowID = "absent.yaml"
-			_, err := delivery.JobEnvironment(t.Context(), job)
-			require.ErrorIs(t, err, delivery.ErrNoWorkflowSource)
+			_, err := deployments_model.JobEnvironment(t.Context(), job)
+			require.ErrorIs(t, err, deployments_model.ErrNoWorkflowSource)
 		})
 	})
 }
@@ -110,8 +110,8 @@ func TestDeliverySecretNarrowingEndToEnd(t *testing.T) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
 
-		require.NoError(t, db.Insert(ctx, &delivery.SecretScope{RepoID: repo.ID, SecretName: "PROD_DB_PASS", Environment: "prod"}))
-		require.NoError(t, db.Insert(ctx, &delivery.SecretScope{RepoID: repo.ID, SecretName: "QA_DB_PASS", Environment: "qa"}))
+		require.NoError(t, db.Insert(ctx, &deployments_model.SecretScope{RepoID: repo.ID, SecretName: "PROD_DB_PASS", Environment: "prod"}))
+		require.NoError(t, db.Insert(ctx, &deployments_model.SecretScope{RepoID: repo.ID, SecretName: "QA_DB_PASS", Environment: "qa"}))
 
 		secrets := func() map[string]string {
 			return map[string]string{
@@ -123,16 +123,16 @@ func TestDeliverySecretNarrowingEndToEnd(t *testing.T) {
 			}
 		}
 
-		prod := delivery.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "to-prod"), secrets())
+		prod := deployments_model.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "to-prod"), secrets())
 		assert.Equal(t, "prod-value", prod["PROD_DB_PASS"], "a job declaring environment: prod resolves the production secret")
 		assert.NotContains(t, prod, "QA_DB_PASS")
 		assert.Contains(t, prod, "SHARED_API_KEY")
 
-		qa := delivery.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "to-qa"), secrets())
+		qa := deployments_model.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "to-qa"), secrets())
 		assert.NotContains(t, qa, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring environment: qa")
 		assert.Equal(t, "qa-value", qa["QA_DB_PASS"])
 
-		none := delivery.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "build"), secrets())
+		none := deployments_model.NarrowSecretsToJobEnvironment(ctx, deployJob(repo, sha, "build"), secrets())
 		assert.NotContains(t, none, "PROD_DB_PASS", "PROD_DB_PASS is absent from a job declaring no environment")
 		assert.NotContains(t, none, "QA_DB_PASS")
 		assert.Contains(t, none, "SHARED_API_KEY", "an unscoped secret is unaffected")
@@ -149,16 +149,16 @@ func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
 
 	// user4 can read user2/repo1, which is public, and does not administer it.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/secret-scopes",
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/secret-scopes",
 		map[string]any{"repo_id": 1, "secret_name": "DEPLOY_KEY", "environment": "prod"}).AddTokenAuth(outsiderToken)
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
 	assert.Equal(t, "forbidden", refusal.Code)
 	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 	// A refused bind writes nothing.
-	unittest.AssertNotExistsBean(t, &delivery.SecretScope{RepoID: 1, SecretName: "DEPLOY_KEY"})
+	unittest.AssertNotExistsBean(t, &deployments_model.SecretScope{RepoID: 1, SecretName: "DEPLOY_KEY"})
 
-	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/secret-scopes",
+	req = NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/secret-scopes",
 		map[string]any{"repo_id": 1, "secret_name": "DEPLOY_KEY", "environment": "prod"}).AddTokenAuth(ownerToken)
 	var created struct {
 		ID          int64  `json:"id"`
@@ -170,7 +170,7 @@ func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	assert.Equal(t, "prod", created.Environment)
 	require.Positive(t, created.ID)
 
-	listing := MakeRequest(t, NewRequest(t, "GET", deliveryv1.BasePath+
+	listing := MakeRequest(t, NewRequest(t, "GET", deploymentsv1.BasePath+
 		"/repos/user2/repo1/environments/prod/secrets").AddTokenAuth(ownerToken), http.StatusOK)
 	var listed []struct {
 		ID   int64  `json:"id"`
@@ -182,14 +182,14 @@ func TestDeliverySecretScopeWritesAreRepoAdminOnly(t *testing.T) {
 	assert.Equal(t, created.ID, listed[0].ID,
 		"the listing carries the id the unbind endpoint takes, so a page can offer Unbind after a reload")
 
-	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deliveryv1.BasePath, created.ID)).
+	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deploymentsv1.BasePath, created.ID)).
 		AddTokenAuth(outsiderToken)
 	MakeRequest(t, req, http.StatusForbidden)
 	// A refused unbind removes nothing.
-	unittest.AssertExistsAndLoadBean(t, &delivery.SecretScope{ID: created.ID})
+	unittest.AssertExistsAndLoadBean(t, &deployments_model.SecretScope{ID: created.ID})
 
-	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deliveryv1.BasePath, created.ID)).
+	req = NewRequest(t, "DELETE", fmt.Sprintf("%s/secret-scopes/%d", deploymentsv1.BasePath, created.ID)).
 		AddTokenAuth(ownerToken)
 	MakeRequest(t, req, http.StatusNoContent)
-	unittest.AssertNotExistsBean(t, &delivery.SecretScope{ID: created.ID})
+	unittest.AssertNotExistsBean(t, &deployments_model.SecretScope{ID: created.ID})
 }

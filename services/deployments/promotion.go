@@ -203,7 +203,7 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 	if environment == "" {
 		return nil, &hub_model.Error{
 			Message:         "no environment was named",
-			SuggestedAction: "Send environment, for example \"prod\". List /api/delivery/v1/environments to see what exists.",
+			SuggestedAction: "Send environment, for example \"prod\". List /api/deployments/v1/environments to see what exists.",
 		}
 	}
 	if strings.TrimSpace(req.ReleaseTag) == "" {
@@ -224,7 +224,7 @@ func PlanPromotion(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion,
 	if err != nil {
 		return nil, &ErrPromotionNotFound{Err: &hub_model.Error{
 			Message:         fmt.Sprintf("%s has no release tagged %q", req.Repo.FullName(), req.ReleaseTag),
-			SuggestedAction: "List /api/delivery/v1/repos/{owner}/{repo}/releases to see the tags this repository can deploy.",
+			SuggestedAction: "List /api/deployments/v1/repos/{owner}/{repo}/releases to see the tags this repository can deploy.",
 		}}
 	}
 

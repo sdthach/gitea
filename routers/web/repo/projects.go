@@ -26,7 +26,7 @@ import (
 	shared_user "gitea.dev/routers/web/shared/user"
 	"gitea.dev/services/context"
 	"gitea.dev/services/forms"
-	delivery_service "gitea.dev/services/hub"
+	hub_service "gitea.dev/services/hub"
 	project_service "gitea.dev/services/projects"
 )
 
@@ -426,7 +426,7 @@ func ViewProject(ctx *context.Context) {
 	ctx.Data["Project"] = project
 	ctx.Data["IssuesMap"] = issuesMap
 	ctx.Data["Columns"] = columns
-	ctx.Data["EnableDeliverySwimlanes"] = delivery_service.SwimlanesEnabled() // delivery fork spoke
+	ctx.Data["EnableDeliverySwimlanes"] = hub_service.SwimlanesEnabled() // hub fork spoke
 
 	ctx.HTML(http.StatusOK, tplProjectsView)
 }

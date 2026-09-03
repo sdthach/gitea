@@ -9,11 +9,11 @@ import (
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -52,18 +52,18 @@ type promotionPayload struct {
 // setEnvironmentPolicy writes one repository-scoped environment with the sequence policy the
 // case needs. It goes through ValidateEnvironment, so a fixture the API would refuse to
 // persist cannot be smuggled into a test.
-func setEnvironmentPolicy(t *testing.T, env *delivery.Environment) {
+func setEnvironmentPolicy(t *testing.T, env *deployments_model.Environment) {
 	t.Helper()
-	env.ApprovalPolicy = delivery.PolicyNone
+	env.ApprovalPolicy = deployments_model.PolicyNone
 	env.RequiredApprovals = 1
-	require.NoError(t, delivery.ValidateEnvironment(env))
+	require.NoError(t, deployments_model.ValidateEnvironment(env))
 	require.NoError(t, db.Insert(t.Context(), env))
 }
 
 // promote posts one deploy request and returns the status and the decoded payload.
 func promote(t *testing.T, token string, body map[string]any) (int, promotionPayload) {
 	t.Helper()
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/deployments", body).AddTokenAuth(token)
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", body).AddTokenAuth(token)
 	resp := MakeRequest(t, req, NoExpectedStatus)
 	var payload promotionPayload
 	DecodeJSON(t, resp, &payload)
@@ -76,9 +76,9 @@ func deliveryWriteToken(t *testing.T, user string) string {
 		auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeReadRepository)
 }
 
-func deliveryAuditEvents(t *testing.T, event string) []*delivery.AuditEvent {
+func deliveryAuditEvents(t *testing.T, event string) []*deployments_model.AuditEvent {
 	t.Helper()
-	rows, err := delivery.FindAuditEvents(t.Context(), builder.Eq{"event": event}, "id ASC", 0)
+	rows, err := deployments_model.FindAuditEvents(t.Context(), builder.Eq{"event": event}, "id ASC", 0)
 	require.NoError(t, err)
 	return rows
 }
@@ -95,8 +95,8 @@ func TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching(t *testing.T) 
 	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	deployThroughTheNotifier(t, repo, sender, "prod", promotionPrerelease, 9101, 1000)
 
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50})
-	before := len(deliveryAuditEvents(t, delivery.AuditRequested))
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50})
+	before := len(deliveryAuditEvents(t, deployments_model.AuditRequested))
 
 	status, plan := promote(t, deliveryWriteToken(t, "user2"), map[string]any{
 		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
@@ -112,7 +112,7 @@ func TestAPIDeliveryPromotionPlanNamesWhatIsLiveBeforeDispatching(t *testing.T) 
 	assert.False(t, plan.Confirmed)
 	assert.Equal(t, "proceed", plan.Outcome, "no predecessor is declared, so there is no sequence to warn about")
 
-	assert.Len(t, deliveryAuditEvents(t, delivery.AuditRequested), before,
+	assert.Len(t, deliveryAuditEvents(t, deployments_model.AuditRequested), before,
 		"the first step appends nothing and dispatches nothing")
 }
 
@@ -123,7 +123,7 @@ func TestAPIDeliveryPromotionWarnsWhenThePredecessorNeverHeldIt(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50, Predecessor: "staging"})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50, Predecessor: "staging"})
 
 	status, plan := promote(t, deliveryWriteToken(t, "user2"), map[string]any{
 		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
@@ -146,7 +146,7 @@ func TestAPIDeliveryPromotionProceedsOnceThePredecessorHasHeldIt(t *testing.T) {
 	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	deployThroughTheNotifier(t, repo, sender, "staging", promotionFullRelease, 9201, 1000)
 
-	setEnvironmentPolicy(t, &delivery.Environment{
+	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
 		Predecessor: "staging", RequirePredecessor: true,
 	})
@@ -166,7 +166,7 @@ func TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{
+	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
 		Predecessor: "staging", RequirePredecessor: true, BlockAdminOverride: true,
 	})
@@ -180,7 +180,7 @@ func TestAPIDeliveryPromotionBlockAdminOverrideRefusesTheAdmin(t *testing.T) {
 	assert.Equal(t, "refuse", plan.Outcome)
 	assert.False(t, plan.Confirmed)
 	assert.Contains(t, plan.SuggestedAction, "bypass allowlist")
-	assert.Empty(t, deliveryAuditEvents(t, delivery.AuditOverridden),
+	assert.Empty(t, deliveryAuditEvents(t, deployments_model.AuditOverridden),
 		"a refused deploy overrides nothing, whatever reason it sent")
 }
 
@@ -194,7 +194,7 @@ func TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{
+	setEnvironmentPolicy(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
 		Predecessor: "staging", RequirePredecessor: true,
 	})
@@ -215,22 +215,22 @@ func TestAPIDeliveryPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 	})
 	require.Equal(t, http.StatusBadRequest, status)
 	assert.False(t, plan.Confirmed)
-	require.Empty(t, deliveryAuditEvents(t, delivery.AuditOverridden), "no reason, no override")
+	require.Empty(t, deliveryAuditEvents(t, deployments_model.AuditOverridden), "no reason, no override")
 
 	// With a reason, the override is recorded before anything else happens.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/deployments", map[string]any{
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", map[string]any{
 		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
 		"confirm": true, "override_reason": "hotfix; staging is down",
 	}).AddTokenAuth(token)
 	MakeRequest(t, req, NoExpectedStatus)
 
-	overrides := deliveryAuditEvents(t, delivery.AuditOverridden)
+	overrides := deliveryAuditEvents(t, deployments_model.AuditOverridden)
 	require.Len(t, overrides, 1)
 	assert.Equal(t, "hotfix; staging is down", overrides[0].Reason)
 	assert.Equal(t, "user2", overrides[0].ActorLogin, "the log names the human who bypassed the gate")
 	assert.Equal(t, "prod", overrides[0].Environment)
 	assert.Equal(t, promotionFullRelease, overrides[0].ReleaseTag)
-	assert.Equal(t, delivery.SourceUI, overrides[0].Source)
+	assert.Equal(t, deployments_model.SourceUI, overrides[0].Source)
 }
 
 // TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired covers the offer
@@ -241,8 +241,8 @@ func TestAPIDeliveryPromotionRefusesAPrereleaseWhereFullReleasesAreRequired(t *t
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "live", SortOrder: 50, RequireFullRelease: true})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "sandbox", SortOrder: 20})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "live", SortOrder: 50, RequireFullRelease: true})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "sandbox", SortOrder: 20})
 	token := deliveryWriteToken(t, "user2")
 
 	status, plan := promote(t, token, map[string]any{
@@ -266,9 +266,9 @@ func TestAPIDeliveryPromotionIsRefusedWithoutWriteOnActions(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
-	setEnvironmentPolicy(t, &delivery.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50})
+	setEnvironmentPolicy(t, &deployments_model.Environment{RepoID: repo.ID, Name: "prod", SortOrder: 50})
 
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/deployments", map[string]any{
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", map[string]any{
 		"repo": repo.FullName(), "environment": "prod",
 		"release_tag": promotionFullRelease, "confirm": true,
 	}).AddTokenAuth(deliveryWriteToken(t, "user4"))
@@ -312,7 +312,7 @@ func TestAPIDeliveryPromotionNamesWhatItCannotFind(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/deployments", tc.body).AddTokenAuth(token)
+			req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", tc.body).AddTokenAuth(token)
 			resp := MakeRequest(t, req, tc.status)
 			var err struct {
 				Message         string `json:"message"`
@@ -335,7 +335,7 @@ func TestDeliveryPromotePageIsAClientOfTheAPI(t *testing.T) {
 		NewRequest(t, "GET", "/delivery/promote?repo=user2%2Frepo1&environment=prod&release_tag=v1.1"),
 		http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/deployments",
+	assert.Contains(t, body, deploymentsv1.BasePath+"/deployments",
 		"the page names the endpoint it is a client of")
 	assert.Contains(t, body, "confirm")
 }

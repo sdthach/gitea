@@ -86,7 +86,7 @@ type ApprovalDecision struct {
 func Decide(ctx context.Context, req ApprovalRequest) (*ApprovalDecision, error) {
 	if req.Approval == nil || req.Environment == nil || req.Actor == nil {
 		return nil, refuse("the approval, its environment or the acting user is missing",
-			"Call POST /api/delivery/v1/approvals/{id}/approve with a signed-in token.")
+			"Call POST /api/deployments/v1/approvals/{id}/approve with a signed-in token.")
 	}
 	if req.Event != deployments_model.AuditApproved && req.Event != deployments_model.AuditRejected {
 		return nil, refuse(fmt.Sprintf("%q is neither an approval nor a rejection", req.Event),

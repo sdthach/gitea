@@ -1,6 +1,6 @@
 {{if and .IsSigned .Repository}}
 <script type="module" nonce="{{ctx.CspScriptNonce}}" data-delivery-release-environments data-repo-id="{{.Repository.ID}}"
-	data-api-base="{{AppSubUrl}}/api/delivery/v1">
+	data-api-base="{{AppSubUrl}}/api/deployments/v1">
 // A release says where it is running. The badges are drawn from the grid endpoint —
 // the same projection /delivery/grid renders — so the release page introduces no second
 // answer to "what is live where". Tags come from the release entries the page already drew,
@@ -34,7 +34,7 @@ if (entries.size) {
 				for (const cell of live) {
 					const badge = document.createElement('a');
 					badge.className = 'ui label tw-text-12';
-					badge.href = `${base.replace('/api/delivery/v1', '')}/delivery/grid`;
+					badge.href = `${base.replace('/api/deployments/v1', '')}/delivery/grid`;
 					badge.textContent = `${cell.symbol} ${cell.environment}`;
 					badge.title = `${row.release_tag} is live in ${cell.environment}`;
 					holder.append(badge);

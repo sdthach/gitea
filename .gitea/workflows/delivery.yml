@@ -30,7 +30,7 @@ jobs:
       # Units run on SQLite, Gitea's own default for test-backend, with no network and no
       # server (J10, J11, M9).
       - name: unit tests
-        run: make delivery-test
+        run: make hub-test
 
   integration:
     runs-on: ubuntu-latest
@@ -42,7 +42,7 @@ jobs:
       # Runs under Gitea's own tests/integration harness, so the fork's tests execute the
       # way upstream's do and survive a rebase (J8). Sub-2s locally (J11).
       - name: integration tests
-        run: make delivery-integration
+        run: make hub-integration
 
   contract:
     runs-on: ubuntu-latest
@@ -55,17 +55,17 @@ jobs:
           go-version-file: go.mod
       # Regenerating proves nothing about what is committed, so the gate is the diff (I16, J14).
       - name: generated artifacts match their source
-        run: make delivery-generate-check
+        run: make hub-generate-check
       - name: git diff gate
         run: |
-          make delivery-generate
+          make hub-generate
           git diff --exit-code
       # Every published endpoint has a CLI command (K7).
       - name: API and CLI parity
-        run: make delivery-parity
+        run: make hub-parity
       # Every upstream file the fork touches is a declared single-line spoke (F2, SC 16).
       - name: spoke count against the upstream pin
-        run: make delivery-spoke-check
+        run: make hub-spoke-check
 
   lint:
     runs-on: ubuntu-latest
@@ -75,10 +75,10 @@ jobs:
         with:
           go-version-file: go.mod
       - name: go vet
-        run: go vet ./models/delivery/... ./services/delivery/... ./routers/api/delivery/... ./routers/web/delivery/... ./cmd/gitea-delivery/...
+        run: go vet ./models/hub/... ./models/deployments/... ./services/hub/... ./services/planning/... ./services/deployments/... ./routers/api/hub/... ./routers/api/planning/... ./routers/api/deployments/... ./routers/web/hub/... ./routers/web/planning/... ./routers/web/deployments/... ./cmd/hubcli/... ./cmd/gitea-planning/... ./cmd/gitea-deployments/...
       - name: gofmt
         run: |
-          unformatted=$(gofmt -l models/delivery services/delivery routers/api/delivery routers/web/delivery cmd/gitea-delivery)
+          unformatted=$(gofmt -l models/hub models/deployments services/hub services/planning services/deployments routers/api/hub routers/api/planning routers/api/deployments routers/web/hub routers/web/planning routers/web/deployments cmd/hubcli cmd/gitea-planning cmd/gitea-deployments)
           if [ -n "$unformatted" ]; then
             echo "These files are not gofmt-clean:"
             echo "$unformatted"

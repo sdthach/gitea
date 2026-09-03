@@ -14,10 +14,10 @@ import (
 	actions_model "gitea.dev/models/actions"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -78,7 +78,7 @@ func gridCell(t *testing.T, token string, repoID int64, releaseTag, environment 
 			Symbol      string `json:"symbol"`
 		} `json:"cells"`
 	}
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/grid?repo_id="+strconv.FormatInt(repoID, 10)).AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id="+strconv.FormatInt(repoID, 10)).AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
 	for _, row := range rows {
 		if row.ReleaseTag != releaseTag {
@@ -104,13 +104,13 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		ctx := t.Context()
 
 		// prod is gated; nothing else is, so an ordinary job is unaffected.
-		require.NoError(t, db.Insert(ctx, &delivery.Environment{
+		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: delivery.PolicyAnyApprover, RequiredApprovals: 1,
+			ApprovalPolicy: deployments_model.PolicyAnyApprover, RequiredApprovals: 1,
 		}))
-		require.NoError(t, db.Insert(ctx, &delivery.Environment{
+		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "qa", SortOrder: 20,
-			ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+			ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
 		}))
 
 		session := loginUser(t, "user2")
@@ -205,7 +205,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			CanApprove        bool   `json:"can_approve"`
 			AgeSeconds        int64  `json:"age_seconds"`
 		}
-		req := NewRequest(t, "GET", deliveryv1.BasePath+"/approvals?environment=prod").AddTokenAuth(token)
+		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals?environment=prod").AddTokenAuth(token)
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &listed)
 		require.Len(t, listed, 1, "one held job, one hold row")
 		hold := listed[0]
@@ -219,18 +219,18 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		assert.Equal(t, int64(1), hold.RequiredApprovals)
 		assert.True(t, hold.CanApprove, "user2 owns the repository, so the forge permits them to approve")
 		assert.GreaterOrEqual(t, hold.AgeSeconds, int64(0))
-		assert.Equal(t, delivery.PolicyAnyApprover, hold.ApprovalPolicy,
+		assert.Equal(t, deployments_model.PolicyAnyApprover, hold.ApprovalPolicy,
 			"the row says why it is held, so a client need not fetch the environment separately")
 
 		t.Run("a hold expands its deployment", func(t *testing.T) {
-			require.NoError(t, delivery.AppendDeployment(ctx, &delivery.Deployment{
+			require.NoError(t, deployments_model.AppendDeployment(ctx, &deployments_model.Deployment{
 				RepoID: repo.ID, Environment: "prod", ReleaseTag: "v1.1",
 				RunID: run.ID, Status: actions_model.StatusWaiting.String(),
 			}))
 			var expanded []struct {
-				Deployment *delivery.Deployment `json:"deployment"`
+				Deployment *deployments_model.Deployment `json:"deployment"`
 			}
-			req := NewRequest(t, "GET", deliveryv1.BasePath+"/approvals?expand=deployment").AddTokenAuth(token)
+			req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals?expand=deployment").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &expanded)
 			require.Len(t, expanded, 1)
 			require.NotNil(t, expanded[0].Deployment, "?expand=deployment resolves the run's deployment")
@@ -243,10 +243,10 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			// `started` — which makes the projection over the log alone say "in progress".
 			// The deploy job is nonetheless held, and the approvals table is what knows it.
 			// A grid reading the log alone renders ⟳ here and is wrong.
-			for _, event := range []string{delivery.AuditRequested, delivery.AuditStarted} {
-				require.NoError(t, delivery.AppendAuditEvent(ctx, &delivery.AuditEvent{
+			for _, event := range []string{deployments_model.AuditRequested, deployments_model.AuditStarted} {
+				require.NoError(t, deployments_model.AppendAuditEvent(ctx, &deployments_model.AuditEvent{
 					Event: event, RepoID: repo.ID, Environment: "prod",
-					ReleaseTag: "v1.1", RunID: run.ID, Source: delivery.SourceNotifier,
+					ReleaseTag: "v1.1", RunID: run.ID, Source: deployments_model.SourceNotifier,
 				}))
 			}
 			state, symbol := gridCell(t, token, repo.ID, "v1.1", "prod")
@@ -260,7 +260,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			otherSession := loginUser(t, "user4")
 			otherToken := getTokenForLoggedInUser(t, otherSession, auth_model.AccessTokenScopeWriteRepository)
 			req := NewRequest(t, "POST",
-				fmt.Sprintf("%s/approvals/%d/approve", deliveryv1.BasePath, hold.ID)).AddTokenAuth(otherToken)
+				fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(otherToken)
 			resp := MakeRequest(t, req, http.StatusForbidden)
 			var refusal struct {
 				Message         string `json:"message"`
@@ -278,7 +278,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 
 		t.Run("approving releases the job and lands in the audit log", func(t *testing.T) {
 			req := NewRequest(t, "POST",
-				fmt.Sprintf("%s/approvals/%d/approve", deliveryv1.BasePath, hold.ID)).AddTokenAuth(token)
+				fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(token)
 			var decided struct {
 				State          string `json:"state"`
 				ApprovalsCount int64  `json:"approvals_count"`
@@ -287,8 +287,8 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			assert.Equal(t, "approved", decided.State)
 			assert.Equal(t, int64(1), decided.ApprovalsCount)
 
-			var events []*delivery.AuditEvent
-			req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?event=approved&sort_by=id&order=asc").AddTokenAuth(token)
+			var events []*deployments_model.AuditEvent
+			req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?event=approved&sort_by=id&order=asc").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &events)
 			require.Len(t, events, 1, "approval is an audit event on the append-only log")
 			assert.Equal(t, "user2", events[0].ActorLogin)
@@ -316,9 +316,9 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
 
-		require.NoError(t, db.Insert(ctx, &delivery.Environment{
+		require.NoError(t, db.Insert(ctx, &deployments_model.Environment{
 			RepoID: repo.ID, Name: "prod", SortOrder: 50,
-			ApprovalPolicy: delivery.PolicyOthersOnly, RequiredApprovals: 1,
+			ApprovalPolicy: deployments_model.PolicyOthersOnly, RequiredApprovals: 1,
 		}))
 
 		runner := approvalRunner(t, repo, "reject")
@@ -336,26 +336,26 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 			ID    int64  `json:"id"`
 			State string `json:"state"`
 		}
-		req := NewRequest(t, "GET", deliveryv1.BasePath+"/approvals").AddTokenAuth(token)
+		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals").AddTokenAuth(token)
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &listed)
 		require.Len(t, listed, 1)
 
 		// user2 triggered the run and the policy is others_only, so their own approval is
 		// refused by the endpoint rather than silently ignored.
 		req = NewRequest(t, "POST",
-			fmt.Sprintf("%s/approvals/%d/approve", deliveryv1.BasePath, listed[0].ID)).AddTokenAuth(token)
+			fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusForbidden)
 
 		req = NewRequest(t, "POST",
-			fmt.Sprintf("%s/approvals/%d/reject?reason=wrong+release", deliveryv1.BasePath, listed[0].ID)).AddTokenAuth(token)
+			fmt.Sprintf("%s/approvals/%d/reject?reason=wrong+release", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
 		var decided struct {
 			State string `json:"state"`
 		}
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &decided)
 		assert.Equal(t, "rejected", decided.State)
 
-		var events []*delivery.AuditEvent
-		req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?event=rejected").AddTokenAuth(token)
+		var events []*deployments_model.AuditEvent
+		req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?event=rejected").AddTokenAuth(token)
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &events)
 		require.Len(t, events, 1)
 		assert.Equal(t, "user2", events[0].ActorLogin)
@@ -386,7 +386,7 @@ func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/approvals")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deliveryv1.BasePath+"/approvals",
+	assert.Contains(t, body, deploymentsv1.BasePath+"/approvals",
 		"the page fetches its rows from the documented endpoint")
 	assert.Contains(t, body, "suggested_action",
 		"the page surfaces the API's suggested next action")
@@ -407,7 +407,7 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
 
-		gated, err := delivery.RepoHasGatedEnvironment(ctx, repo.ID)
+		gated, err := deployments_model.RepoHasGatedEnvironment(ctx, repo.ID)
 		require.NoError(t, err)
 		require.False(t, gated, "the seeded default environments all carry approval_policy none")
 
@@ -420,7 +420,7 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 		require.True(t, ok, "a job declaring environment prod is assigned when nothing gates prod")
 		assert.Equal(t, job.ID, task.JobID)
 
-		count, err := db.GetEngine(ctx).Where("repo_id = ?", repo.ID).Count(new(delivery.Approval))
+		count, err := db.GetEngine(ctx).Where("repo_id = ?", repo.ID).Count(new(deployments_model.Approval))
 		require.NoError(t, err)
 		assert.Zero(t, count, "an ungated repository records no hold at all")
 	})

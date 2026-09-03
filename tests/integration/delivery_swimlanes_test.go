@@ -38,7 +38,7 @@ func TestDeliveryReleasePageBadgesTheEnvironmentsHoldingARelease(t *testing.T) {
 	assert.Contains(t, body, "data-delivery-release-environments",
 		"the release page carries the fork's one delegation")
 	assert.Contains(t, body, `data-repo-id="1"`, "which names the repository the grid is asked about")
-	assert.Contains(t, body, "/api/delivery/v1", "and reads the grid over the documented endpoint")
+	assert.Contains(t, body, "/api/deployments/v1", "and reads the grid over the documented endpoint")
 
 	// Signed out, the page is Gitea's alone: the grid is not readable, so nothing is offered.
 	req = NewRequest(t, "GET", "/user2/repo1/releases")

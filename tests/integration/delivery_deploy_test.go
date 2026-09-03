@@ -10,12 +10,13 @@ import (
 	actions_model "gitea.dev/models/actions"
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
+	hubapi "gitea.dev/routers/api/hub"
 	"gitea.dev/services/notify"
 	"gitea.dev/tests"
 
@@ -60,7 +61,7 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/grid?repo_id=1").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id=1").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
 	var rows []struct {
@@ -110,9 +111,9 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 
 	// The deployments endpoint returns the rows the notifier wrote — three of them,
 	// not one per (release, environment).
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/deployments?environment=qa&sort_by=id&order=asc").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments?environment=qa&sort_by=id&order=asc").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
-	var deployments []*delivery.Deployment
+	var deployments []*deployments_model.Deployment
 	DecodeJSON(t, resp, &deployments)
 	require.Len(t, deployments, 3, "three deploys leave three rows")
 	assert.Equal(t, []string{"v1.0", "v1.1", "v1.0"},
@@ -135,20 +136,20 @@ func TestAPIDeliveryAuditIsReadOnlyOverTheAPI(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/audit?sort_by=id&order=asc").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?sort_by=id&order=asc").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var events []*delivery.AuditEvent
+	var events []*deployments_model.AuditEvent
 	DecodeJSON(t, resp, &events)
 	require.Len(t, events, 2, "each deploy writes requested and a terminal event")
 	require.NotZero(t, events[0].ID)
 
 	for _, method := range []string{"PATCH", "DELETE", "POST", "PUT"} {
-		req = NewRequest(t, method, deliveryv1.BasePath+"/audit").AddTokenAuth(token)
+		req = NewRequest(t, method, deploymentsv1.BasePath+"/audit").AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusMethodNotAllowed)
 	}
 
 	// The table refuses it too, so the guarantee does not depend on the router alone.
-	err := delivery.AppendAuditEvent(t.Context(), events[0])
+	err := deployments_model.AppendAuditEvent(t.Context(), events[0])
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "append-only")
 }
@@ -170,10 +171,10 @@ func TestAPIDeliveryAuditOutlivesTheUserItNames(t *testing.T) {
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/audit?environment=uat").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?environment=uat").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var events []*delivery.AuditEvent
+	var events []*deployments_model.AuditEvent
 	DecodeJSON(t, resp, &events)
 	require.NotEmpty(t, events)
 	for _, e := range events {
@@ -200,18 +201,18 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 	seen := map[int64]int{}
 	cursor := ""
 	for range 10 {
-		url := deliveryv1.BasePath + "/audit?limit=2&sort_by=id&order=asc"
+		url := deploymentsv1.BasePath + "/audit?limit=2&sort_by=id&order=asc"
 		if cursor != "" {
 			url += "&cursor=" + cursor
 		}
 		req := NewRequest(t, "GET", url).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusOK)
-		var page []*delivery.AuditEvent
+		var page []*deployments_model.AuditEvent
 		DecodeJSON(t, resp, &page)
 		for _, e := range page {
 			seen[e.ID]++
 		}
-		cursor = resp.Header().Get(deliveryv1.NextCursorHeader)
+		cursor = resp.Header().Get(hubapi.NextCursorHeader)
 		if cursor == "" {
 			break
 		}
@@ -229,18 +230,18 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 			seenRuns := map[int64]int{}
 			cursor := ""
 			for range 10 {
-				url := deliveryv1.BasePath + "/deployments?limit=2" + sort
+				url := deploymentsv1.BasePath + "/deployments?limit=2" + sort
 				if cursor != "" {
 					url += "&cursor=" + cursor
 				}
 				req := NewRequest(t, "GET", url).AddTokenAuth(token)
 				resp := MakeRequest(t, req, http.StatusOK)
-				var page []*delivery.Deployment
+				var page []*deployments_model.Deployment
 				DecodeJSON(t, resp, &page)
 				for _, d := range page {
 					seenRuns[d.RunID]++
 				}
-				cursor = resp.Header().Get(deliveryv1.NextCursorHeader)
+				cursor = resp.Header().Get(hubapi.NextCursorHeader)
 				if cursor == "" {
 					break
 				}
@@ -252,12 +253,12 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 
 	// A cursor issued under one sort is refused under another rather than silently
 	// skipping and repeating rows.
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/audit?limit=2&sort_by=id&order=asc").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?limit=2&sort_by=id&order=asc").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	issued := resp.Header().Get(deliveryv1.NextCursorHeader)
+	issued := resp.Header().Get(hubapi.NextCursorHeader)
 	require.NotEmpty(t, issued)
 
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?limit=2&sort_by=occurred_unix&order=desc&cursor="+issued).AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?limit=2&sort_by=occurred_unix&order=desc&cursor="+issued).AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusBadRequest)
 	var refusal struct {
 		Code            string `json:"code"`
@@ -268,9 +269,9 @@ func TestAPIDeliveryCursorPagingVisitsEveryRowOnce(t *testing.T) {
 	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
 	// Cursor and page are the only two forms, and a resource accepts exactly one.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/audit?page=2").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?page=2").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusBadRequest)
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/releases?cursor=x").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/releases?cursor=x").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNotFound)
 }
 
@@ -286,10 +287,10 @@ func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/releases?expand=deployments").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/releases?expand=deployments").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var releases []*deliveryv1.Release
+	var releases []*deploymentsv1.Release
 	DecodeJSON(t, resp, &releases)
 	require.NotEmpty(t, releases)
 	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "releases are finite and stable, so they page by page")
@@ -307,13 +308,13 @@ func TestAPIDeliveryReleasesExpandDeployments(t *testing.T) {
 	assert.True(t, found, "v1.1 is a release of user2/repo1")
 
 	// Deeper or unwhitelisted expansion is refused, naming what is accepted.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo1/releases?expand=audit").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/releases?expand=audit").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusBadRequest)
 
 	// deployments expands release and audit.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/deployments?expand=release,audit").AddTokenAuth(token)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments?expand=release,audit").AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
-	var deployments []*deliveryv1.Deployment
+	var deployments []*deploymentsv1.Deployment
 	DecodeJSON(t, resp, &deployments)
 	require.Len(t, deployments, 1)
 	require.NotNil(t, deployments[0].Release)
@@ -332,6 +333,6 @@ func TestDeliveryGridPageIsAClientOfTheAPI(t *testing.T) {
 	session := loginUser(t, "user2")
 	req = NewRequest(t, "GET", "/delivery/grid")
 	resp := session.MakeRequest(t, req, http.StatusOK)
-	assert.Contains(t, resp.Body.String(), deliveryv1.BasePath+"/grid",
+	assert.Contains(t, resp.Body.String(), deploymentsv1.BasePath+"/grid",
 		"the page fetches its rows from the documented endpoint")
 }

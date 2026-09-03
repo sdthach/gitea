@@ -174,7 +174,7 @@ func GetApprovalByID(ctx context.Context, id int64) (*Approval, error) {
 	if !has {
 		return nil, &hub_model.Error{
 			Message:         fmt.Sprintf("no approval %d", id),
-			SuggestedAction: "List /api/delivery/v1/approvals to see the deploys that are currently held.",
+			SuggestedAction: "List /api/deployments/v1/approvals to see the deploys that are currently held.",
 		}
 	}
 	return a, nil

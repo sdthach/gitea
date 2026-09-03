@@ -15,7 +15,7 @@ import (
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	planningv1 "gitea.dev/routers/api/planning/v1"
 	issue_service "gitea.dev/services/issue"
 	"gitea.dev/tests"
 
@@ -101,7 +101,7 @@ func columnOf(t *testing.T, board boardPayload, issueID int64) int64 {
 
 func getBoard(t *testing.T, token, query string) boardPayload {
 	t.Helper()
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/board?"+query).AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/board?"+query).AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var board boardPayload
 	DecodeJSON(t, resp, &board)
@@ -194,7 +194,7 @@ func TestAPIDeliveryBoardRefusesAnUnknownGrouping(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=1&project_id=1&group_by=milestone").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=1&project_id=1&group_by=milestone").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusBadRequest)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -225,7 +225,7 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	assert.Equal(t, int64(1), columnOf(t, before, 1))
 
 	// Write one: between columns.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/board/cards/1/column",
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/column",
 		map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3, "group_by": "type"}).AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var moved boardPayload
@@ -233,7 +233,7 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	assert.Equal(t, int64(3), columnOf(t, moved, 1), "the write answers with the board as it now stands")
 
 	// Write two: between lanes, which edits the grouping field itself.
-	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/board/cards/1/lane",
+	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/lane",
 		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "bug"}).AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
 	DecodeJSON(t, resp, &moved)
@@ -260,7 +260,7 @@ func TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff(t *testing.T) {
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
 	for _, groupBy := range []string{"none", ""} {
-		req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/board/cards/1/lane",
+		req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/lane",
 			map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": groupBy, "lane": "bug"}).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusBadRequest)
 		var refusal deliveryRefusal
@@ -287,7 +287,7 @@ func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=4&project_id=3").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=4&project_id=3").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusNotFound)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -298,7 +298,7 @@ func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
 		"the reason points at the view that still works")
 
 	// Same repository, same moment: the timeline answers.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=4").AddTokenAuth(token)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=4").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 }
 
@@ -318,7 +318,7 @@ func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
 
 		req = NewRequest(t, "GET", path)
 		resp := session.MakeRequest(t, req, http.StatusOK)
-		assert.Contains(t, resp.Body.String(), deliveryv1.BasePath+endpoint,
+		assert.Contains(t, resp.Body.String(), planningv1.BasePath+endpoint,
 			"the page fetches its rows from the documented endpoint")
 	}
 
@@ -428,7 +428,7 @@ func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var payload timelinePayload
 	DecodeJSON(t, resp, &payload)
@@ -465,7 +465,7 @@ func TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var payload timelinePayload
 	DecodeJSON(t, resp, &payload)
@@ -506,7 +506,7 @@ func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var payload timelinePayload
 	DecodeJSON(t, resp, &payload)
@@ -578,7 +578,7 @@ func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+tc.path, tc.body).AddTokenAuth(outsiderToken)
+			req := NewRequestWithJSON(t, "POST", planningv1.BasePath+tc.path, tc.body).AddTokenAuth(outsiderToken)
 			resp := MakeRequest(t, req, http.StatusForbidden)
 			var refusal deliveryRefusal
 			DecodeJSON(t, resp, &refusal)
@@ -624,7 +624,7 @@ func TestAPIDeliveryBoardRefusesAReadOfARepositoryTheCallerCannotSee(t *testing.
 
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user8"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=3&project_id=2").AddTokenAuth(outsiderToken)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=3&project_id=2").AddTokenAuth(outsiderToken)
 	resp := MakeRequest(t, req, http.StatusNotFound)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -637,7 +637,7 @@ func TestAPIDeliveryBoardRefusesAReadOfARepositoryTheCallerCannotSee(t *testing.
 	// The same board, to a member of the org, answers — so the refusal is about the caller
 	// and not about the board being broken.
 	memberToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=3&project_id=2").AddTokenAuth(memberToken)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=3&project_id=2").AddTokenAuth(memberToken)
 	MakeRequest(t, req, http.StatusOK)
 }
 
@@ -651,7 +651,7 @@ func TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead(t *testing.T) 
 
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user8"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(outsiderToken)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(outsiderToken)
 	resp := MakeRequest(t, req, http.StatusForbidden)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -662,7 +662,7 @@ func TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead(t *testing.T) 
 
 	// A member of the org reads the same chart.
 	memberToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(memberToken)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(memberToken)
 	MakeRequest(t, req, http.StatusOK)
 }
 
@@ -679,7 +679,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 		{"/board?repo_id=1", "missing_project_id"},
 		{"/timeline", "missing_repo_id"},
 	} {
-		req := NewRequest(t, "GET", deliveryv1.BasePath+tc.path).AddTokenAuth(token)
+		req := NewRequest(t, "GET", planningv1.BasePath+tc.path).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusBadRequest)
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
@@ -695,7 +695,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 		{"/board?repo_id=1&project_id=2", "board_not_found"},
 		{"/board?repo_id=1&project_id=999999", "board_not_found"},
 	} {
-		req := NewRequest(t, "GET", deliveryv1.BasePath+tc.path).AddTokenAuth(token)
+		req := NewRequest(t, "GET", planningv1.BasePath+tc.path).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusNotFound)
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
@@ -727,7 +727,7 @@ func TestAPIDeliveryBoardWriteRefusesAMalformedRequest(t *testing.T) {
 		{"/board/cards/1/lane", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "assignee", "lane": "nosuchuser"}, http.StatusUnprocessableEntity, "assignee_not_found"},
 		{"/board/cards/1/lane", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "milestone", "lane": "x"}, http.StatusBadRequest, "unknown_grouping"},
 	} {
-		req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+tc.path, tc.body).AddTokenAuth(token)
+		req := NewRequestWithJSON(t, "POST", planningv1.BasePath+tc.path, tc.body).AddTokenAuth(token)
 		resp := MakeRequest(t, req, tc.status)
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
@@ -742,7 +742,7 @@ func TestAPIDeliveryTimelineRefusesAnUnknownState(t *testing.T) {
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&state=archived").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&state=archived").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusBadRequest)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -764,14 +764,14 @@ func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
 	// The board answers while Projects are enabled, so the change below is what moves it.
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=1&project_id=1").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=1&project_id=1").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 
 	before := unit.DisabledRepoUnitsGet()
 	unit.DisabledRepoUnitsSet([]unit.Type{unit.TypeProjects})
 	t.Cleanup(func() { unit.DisabledRepoUnitsSet(before) })
 
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/board?repo_id=1&project_id=1").AddTokenAuth(token)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/board?repo_id=1&project_id=1").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusNotFound)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -783,7 +783,7 @@ func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) 
 
 	// Both writes degrade the same way, and neither is reported as a permission problem.
 	for _, path := range []string{"/board/cards/1/column", "/board/cards/1/lane"} {
-		req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+path,
+		req = NewRequestWithJSON(t, "POST", planningv1.BasePath+path,
 			map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3, "group_by": "type", "lane": "bug"}).AddTokenAuth(token)
 		resp = MakeRequest(t, req, http.StatusNotFound)
 		DecodeJSON(t, resp, &refusal)
@@ -791,7 +791,7 @@ func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) 
 	}
 
 	// Same instant, same dataset: the timeline needs no Projects API and answers.
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1").AddTokenAuth(token)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 
 	req = NewRequest(t, "GET", "/delivery/timeline")

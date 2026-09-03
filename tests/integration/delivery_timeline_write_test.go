@@ -14,9 +14,9 @@ import (
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/timeutil"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	planningv1 "gitea.dev/routers/api/planning/v1"
 	issue_service "gitea.dev/services/issue"
-	delivery_service "gitea.dev/services/planning"
+	planning_service "gitea.dev/services/planning"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +27,7 @@ import (
 // through the read projection, so the assertions read the same shape GET produces.
 func timelineWrite(t *testing.T, token, path string, body map[string]any) timelinePayload {
 	t.Helper()
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+path, body).AddTokenAuth(token)
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+path, body).AddTokenAuth(token)
 	var payload timelinePayload
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &payload)
 	return payload
@@ -49,7 +49,7 @@ func manageIssue(t *testing.T, issueID int64, epicName string) *issues_model.Iss
 	t.Helper()
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: issueID})
-	label := labelForLane(t, issue.RepoID, delivery_service.EpicLabelPrefix+epicName)
+	label := labelForLane(t, issue.RepoID, planning_service.EpicLabelPrefix+epicName)
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue, doer, label))
 	return issue
 }
@@ -105,14 +105,14 @@ func TestDeliveryTimelineSetsABarsStartAndEnd(t *testing.T) {
 	assert.EqualValues(t, 1773187200, reloaded.DeadlineUnix, "the end is Gitea's own deadline field")
 
 	// Sending neither is refused rather than silently doing nothing.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/5/dates",
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/timeline/issues/5/dates",
 		map[string]any{"repo": "user2/repo1"}).AddTokenAuth(token)
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
 	assert.Equal(t, "no_dates", refusal.Code)
 	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
 
-	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/5/dates",
+	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/timeline/issues/5/dates",
 		map[string]any{"repo": "user2/repo1", "start": "last tuesday"}).AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
 	assert.Equal(t, "bad_date", refusal.Code)
@@ -155,7 +155,7 @@ func TestDeliveryTimelineCreatesARowAndAnIssueOnIt(t *testing.T) {
 
 	// A milestone needs a title, and a title-less request is refused rather than creating a
 	// nameless row.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/milestones",
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/timeline/milestones",
 		map[string]any{"repo": "user2/repo1"}).AddTokenAuth(token)
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
@@ -172,9 +172,9 @@ func TestDeliveryTimelineTellsTheClientWhetherItMayEdit(t *testing.T) {
 	readerToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
 
 	var writerView, readerView timelinePayload
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(writerToken)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(writerToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &writerView)
-	req = NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(readerToken)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(readerToken)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &readerView)
 
 	assert.True(t, writerView.CanWrite, "user2 owns the repository")
@@ -220,7 +220,7 @@ func TestDeliveryTimelineRefusesEveryWriteWithoutIssueWrite(t *testing.T) {
 		{"create issue", "/timeline/issues", map[string]any{"repo": "user2/repo1", "title": "Wire it"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+tc.path, tc.body).AddTokenAuth(outsiderToken)
+			req := NewRequestWithJSON(t, "POST", planningv1.BasePath+tc.path, tc.body).AddTokenAuth(outsiderToken)
 			var refusal deliveryRefusal
 			DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
 			assert.Equal(t, "forbidden", refusal.Code)
@@ -273,7 +273,7 @@ func TestDeliveryTimelineStartCanBeDraggedInBothDirections(t *testing.T) {
 // over the published shape rather than over an internal one.
 func getTimeline(t *testing.T, token, query string) timelinePayload {
 	t.Helper()
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/timeline?"+query).AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?"+query).AddTokenAuth(token)
 	var payload timelinePayload
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &payload)
 	return payload
@@ -309,11 +309,11 @@ func spanOf(t *testing.T, payload timelinePayload, kind, key string) int {
 func TestAPIDeliveryTimelineFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"checkout")
+	epic := labelForLane(t, 1, planning_service.EpicLabelPrefix+"checkout")
 	labelIssue(t, 1, epic)
-	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic))
+	labelIssue(t, 1, labelForLane(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic))
 	labelIssue(t, 5, epic)
-	labelIssue(t, 5, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"story"))
+	labelIssue(t, 5, labelForLane(t, 1, planning_service.TypeLabelPrefix+"story"))
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 	// The epic declares 2026-03-01 to 2026-03-11; the story filed under it runs to 2026-03-25.
@@ -361,8 +361,8 @@ func TestAPIDeliveryTimelineFlagsAnEpicThatEndsBeforeItsChildrenAtEveryZoom(t *t
 func TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForLane(t, 1, delivery_service.TypeLabelPrefix+"bug")
-	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"task"))
+	labelForLane(t, 1, planning_service.TypeLabelPrefix+"bug")
+	labelIssue(t, 1, labelForLane(t, 1, planning_service.TypeLabelPrefix+"task"))
 	manageIssue(t, 1, "checkout")
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
@@ -383,7 +383,7 @@ func TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites(t *testing
 
 	// The same request against the board's own lane endpoint reaches the same field, which
 	// is the point of there being one definition rather than two.
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/board/cards/1/lane",
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/lane",
 		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "task"}).AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 	reloaded = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
@@ -396,7 +396,7 @@ func TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites(t *testing
 	assert.NotContains(t, names, "type:bug")
 
 	// Grouping off leaves no field to write, so the move is refused rather than guessed at.
-	req = NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/1/lane",
+	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/timeline/issues/1/lane",
 		map[string]any{"repo": "user2/repo1", "group_by": "none", "lane": "bug"}).AddTokenAuth(token)
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusBadRequest), &refusal)
@@ -410,11 +410,11 @@ func TestAPIDeliveryTimelineLaneMoveWritesWhatTheBoardsLaneMoveWrites(t *testing
 func TestAPIDeliveryTimelineRefusesALaneMoveWithoutIssueWrite(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForLane(t, 1, delivery_service.TypeLabelPrefix+"bug")
-	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+"task"))
+	labelForLane(t, 1, planning_service.TypeLabelPrefix+"bug")
+	labelIssue(t, 1, labelForLane(t, 1, planning_service.TypeLabelPrefix+"task"))
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/timeline/issues/1/lane",
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/timeline/issues/1/lane",
 		map[string]any{"repo": "user2/repo1", "group_by": "type", "lane": "bug"}).AddTokenAuth(outsiderToken)
 	var refusal deliveryRefusal
 	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
@@ -439,7 +439,7 @@ func TestAPIDeliveryTimelineRefusesALaneMoveWithoutIssueWrite(t *testing.T) {
 func TestAPIDeliveryTimelineMarksARollupPartialPastThePageLimit(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	label := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"wide")
+	label := labelForLane(t, 1, planning_service.EpicLabelPrefix+"wide")
 	const children = 205
 	issues := make([]*issues_model.Issue, 0, children)
 	links := make([]*issues_model.IssueLabel, 0, children)
@@ -495,12 +495,12 @@ func insertEpicIssues(t *testing.T, epicLabel, typeLabel *issues_model.Label, fi
 func TestAPIDeliveryTimelineAtEpicZoomPagesOverEpicsNotOverIssues(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	typeEpic := labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic)
+	typeEpic := labelForLane(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic)
 	// Four children created before their epic issue, so oldest-first fills a short page with
 	// them alone; the second epic is created after all of them.
-	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"wideearly"), typeEpic,
+	insertEpicIssues(t, labelForLane(t, 1, planning_service.EpicLabelPrefix+"wideearly"), typeEpic,
 		9100, []int64{1000, 1001, 1002, 1003}, 1004)
-	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"latecomer"), typeEpic,
+	insertEpicIssues(t, labelForLane(t, 1, planning_service.EpicLabelPrefix+"latecomer"), typeEpic,
 		9200, []int64{2001}, 2000)
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
@@ -524,8 +524,8 @@ func TestAPIDeliveryTimelineAtEpicZoomPagesOverEpicsNotOverIssues(t *testing.T) 
 func TestAPIDeliveryTimelineListsAnEpicWithNoChildrenYet(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelIssue(t, 1, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"lonely"))
-	labelIssue(t, 1, labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic))
+	labelIssue(t, 1, labelForLane(t, 1, planning_service.EpicLabelPrefix+"lonely"))
+	labelIssue(t, 1, labelForLane(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic))
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 	payload := getTimeline(t, token, "repo_id=1&zoom=epic&limit=200")
@@ -547,7 +547,7 @@ func TestAPIDeliveryTimelineListsAnEpicWithNoChildrenYet(t *testing.T) {
 func TestAPIDeliveryTimelineAtMilestoneZoomPagesOverMilestonesNotOverIssues(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"paged")
+	epic := labelForLane(t, 1, planning_service.EpicLabelPrefix+"paged")
 	// Four managed issues on no milestone, created before everything else, so oldest-first
 	// fills a short page of ISSUES with them alone.
 	rows := make([]*issues_model.Issue, 0, 5)
@@ -598,10 +598,10 @@ func TestAPIDeliveryTimelineAtMilestoneZoomPagesOverMilestonesNotOverIssues(t *t
 func TestAPIDeliveryTimelineAttachesAnArrowToTheBracketItsEndFallsIn(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	typeEpic := labelForLane(t, 1, delivery_service.TypeLabelPrefix+delivery_service.TypeEpic)
-	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"checkout"), typeEpic,
+	typeEpic := labelForLane(t, 1, planning_service.TypeLabelPrefix+planning_service.TypeEpic)
+	insertEpicIssues(t, labelForLane(t, 1, planning_service.EpicLabelPrefix+"checkout"), typeEpic,
 		9500, []int64{1000, 1001}, 1002)
-	insertEpicIssues(t, labelForLane(t, 1, delivery_service.EpicLabelPrefix+"billing"), typeEpic,
+	insertEpicIssues(t, labelForLane(t, 1, planning_service.EpicLabelPrefix+"billing"), typeEpic,
 		9600, []int64{2000}, 2001)
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
@@ -658,7 +658,7 @@ func TestAPIDeliveryTimelineAttachesAnArrowToTheBracketItsEndFallsIn(t *testing.
 func TestAPIDeliveryTimelineAtMilestoneZoomNarrowsChildrenNotMilestones(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForLane(t, 1, delivery_service.EpicLabelPrefix+"paged")
+	epic := labelForLane(t, 1, planning_service.EpicLabelPrefix+"paged")
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 	timelineWrite(t, token, "/timeline/milestones", map[string]any{"repo": "user2/repo1", "title": "Sprint 9"})
 	sprint, err := issues_model.GetMilestoneByRepoIDANDName(t.Context(), 1, "Sprint 9")

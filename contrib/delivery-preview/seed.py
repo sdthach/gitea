@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Seed a Gitea delivery preview instance with fake but coherent test data.
 
-Everything goes through the public APIs — Gitea's /api/v1 and the fork's /api/delivery/v1.
+Everything goes through the public APIs — Gitea's /api/v1 and the fork's /api/deployments/v1.
 
   pip install faker
   ./seed.py --token <admin token>
@@ -36,7 +36,7 @@ ENVIRONMENTS = ["dev", "qa", "uat", "staging", "prod"]
 PASSWORD = "preview1234"
 
 V1 = "/api/v1"
-DV1 = "/api/delivery/v1"
+DV1 = "/api/deployments/v1"
 
 # Each role gets one account per --users and one org team, so a preview instance can
 # demonstrate the whole permission matrix. Outsiders hold no membership of any kind: the

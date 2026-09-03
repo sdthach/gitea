@@ -139,7 +139,7 @@ func GetEnvironment(ctx context.Context, repoID int64, name string) (*Environmen
 	if repoID == DefaultsRepoID {
 		return nil, &hub_model.Error{
 			Message:         fmt.Sprintf("no environment named %q", name),
-			SuggestedAction: "List /api/delivery/v1/environments to see the environments that exist.",
+			SuggestedAction: "List /api/deployments/v1/environments to see the environments that exist.",
 		}
 	}
 	return GetEnvironment(ctx, DefaultsRepoID, name)

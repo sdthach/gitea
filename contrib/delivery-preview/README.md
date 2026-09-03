@@ -18,7 +18,7 @@ in Docker. `templates/`, `public/` and `options/` are bind-mounted from the repo
 ## The data
 
 `seed.py` needs `faker` (`pip install faker`) and drives the public APIs — Gitea's `/api/v1`
-and the fork's `/api/delivery/v1`, environment policy included. It creates one account per
+and the fork's `/api/deployments/v1` and `/api/planning/v1`, environment policy included. It creates one account per
 role with its own token, an organisation with one team per role, repositories with deploy
 workflows and project boards, labelled and assigned issues, releases, then promotes each
 release up `dev → qa → uat → staging → prod` and resolves the approvals that prod holds.

@@ -27,8 +27,9 @@ import (
 	"gitea.dev/modules/web"
 	"gitea.dev/modules/web/routing"
 	actions_router "gitea.dev/routers/api/actions"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1" // delivery fork spoke
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1" // hub fork spoke
 	packages_router "gitea.dev/routers/api/packages"
+	planningv1 "gitea.dev/routers/api/planning/v1" // hub fork spoke
 	apiv1 "gitea.dev/routers/api/v1"
 	"gitea.dev/routers/common"
 	"gitea.dev/routers/private"
@@ -40,7 +41,7 @@ import (
 	"gitea.dev/services/automerge"
 	"gitea.dev/services/cron"
 	feed_service "gitea.dev/services/feed"
-	hub_service "gitea.dev/services/hub" // delivery fork spoke
+	hub_service "gitea.dev/services/hub" // hub fork spoke
 	indexer_service "gitea.dev/services/indexer"
 	"gitea.dev/services/mailer"
 	mailer_incoming "gitea.dev/services/mailer/incoming"
@@ -140,7 +141,7 @@ func InitWebInstalled(ctx context.Context) {
 	log.Info("ORM engine initialization successful!")
 	mustInit(system.Init)
 	mustInitCtx(ctx, oauth2.Init)
-	mustInitCtx(ctx, hub_service.Init) // delivery fork spoke
+	mustInitCtx(ctx, hub_service.Init) // hub fork spoke
 	mustInitCtx(ctx, oauth2_provider.Init)
 	mustInit(release_service.Init)
 
@@ -186,7 +187,8 @@ func NormalRoutes() *web.Router {
 	r.Mount("/", web_routers.Routes())
 	r.Mount("/api/v1", apiv1.Routes())
 	r.Mount("/api/internal", private.Routes())
-	r.Mount(deliveryv1.BasePath, deliveryv1.Routes()) // delivery fork spoke
+	r.Mount(planningv1.BasePath, planningv1.Routes())       // hub fork spoke
+	r.Mount(deploymentsv1.BasePath, deploymentsv1.Routes()) // hub fork spoke
 
 	r.Post("/-/fetch-redirect", common.FetchRedirectDelegate)
 

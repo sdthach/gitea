@@ -1,0 +1,38 @@
+# Copyright 2026 The Gitea Authors. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# The hub fork's own make targets. The upstream Makefile carries one line including
+# this file, so the fork adds no target to it.
+
+HUB_TEST_PACKAGES := gitea.dev/models/hub/... gitea.dev/models/deployments/... gitea.dev/services/hub/... gitea.dev/services/planning/... gitea.dev/services/deployments/... gitea.dev/routers/api/hub/... gitea.dev/routers/api/planning/... gitea.dev/routers/api/deployments/... gitea.dev/routers/web/hub/... gitea.dev/routers/web/hubroutes/... gitea.dev/routers/web/planning/... gitea.dev/routers/web/deployments/... gitea.dev/cmd/hubcli/... gitea.dev/cmd/gitea-planning/... gitea.dev/cmd/gitea-deployments/...
+
+.PHONY: hub-generate
+hub-generate: ## regenerate both areas' OpenAPI document, CLI request layer and command reference
+	$(GO) run ./tools/hub-generate.go
+
+.PHONY: hub-generate-check
+hub-generate-check: ## fail when a generated hub artifact differs from its source
+	$(GO) run ./tools/hub-generate.go -check
+
+.PHONY: hub-parity
+hub-parity: ## fail when a published hub endpoint has no CLI command
+	$(GO) run ./tools/hub-parity.go
+
+.PHONY: hub-spoke-check
+hub-spoke-check: ## fail when the fork edits an upstream file outside the declared spoke set
+	$(GO) run ./tools/hub-spoke-check.go
+
+.PHONY: hub-test
+hub-test: ## run the hub fork's Go unit tests
+	@echo "Running hub unit tests $(GOTEST_FLAGS) -tags '$(TAGS)'..."
+	@$(GO) test $(GOTEST_FLAGS) -tags='$(TAGS)' $(HUB_TEST_PACKAGES)
+
+.PHONY: hub-check
+hub-check: hub-test hub-generate-check hub-parity hub-spoke-check ## every hub gate
+
+.PHONY: hub-integration
+# One unanchored pattern, not a list of prefixes: enumerating them silently dropped
+# TestDeliverySecretNarrowingEndToEnd and TestDeliveryJobEnvironmentReadsTheWorkflowFile,
+# which matched neither. Every hub test carries "Delivery" in its name.
+hub-integration: ## run the hub fork's integration tests under Gitea's own harness
+	@$(MAKE) --no-print-directory "test-integration#Delivery"

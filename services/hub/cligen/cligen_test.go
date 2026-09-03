@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	hubapi "gitea.dev/routers/api/hub"
+	planningv1 "gitea.dev/routers/api/planning/v1"
 	"gitea.dev/services/hub/query"
 
 	"github.com/stretchr/testify/assert"
@@ -30,9 +31,10 @@ func TestCommandName(t *testing.T) {
 }
 
 // TestEveryOperationGetsACommand works at the source: the parity check reads the published
-// document, and this asserts the generator cannot produce a document without a command.
+// document, and this asserts the generator cannot produce a document without a command. Any
+// area's operation set proves the property; planning is used here because it is the smaller.
 func TestEveryOperationGetsACommand(t *testing.T) {
-	ops := deliveryv1.Operations()
+	ops := planningv1.Operations()
 	require.NotEmpty(t, ops)
 	names := CommandNames(ops)
 	// An operation may serve more than one command — deploy and rollback compose
@@ -55,24 +57,25 @@ func TestEveryOperationGetsACommand(t *testing.T) {
 }
 
 func TestRenderClientIsDeterministic(t *testing.T) {
-	ops := deliveryv1.Operations()
-	first, err := RenderClient(ops)
+	ops := planningv1.Operations()
+	schemas := planningv1.Schemas()
+	first, err := RenderClient(ops, schemas)
 	require.NoError(t, err)
-	second, err := RenderClient(ops)
+	second, err := RenderClient(ops, schemas)
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second))
 	assert.Contains(t, string(first), "DO NOT EDIT")
-	assert.Contains(t, string(first), "var Commands = []Command{")
+	assert.Contains(t, string(first), "var Commands = []hubcli.Command{")
 }
 
 // TestRenderClientRefusesCollidingCommands proves the generator fails rather than silently
 // dropping one of two endpoints that map to the same command name.
 func TestRenderClientRefusesCollidingCommands(t *testing.T) {
 	spec := query.Spec{Resource: "x", PrimaryKey: "id", Paging: query.PagingOffset}
-	_, err := RenderClient([]*deliveryv1.Operation{
+	_, err := RenderClient([]*hubapi.Operation{
 		{ID: "listThings", Method: http.MethodGet, Path: "/things", Summary: "a", Response: "Environment", Query: &spec},
 		{ID: "getThings", Method: http.MethodGet, Path: "/things/x", Summary: "b", Response: "Environment", Query: &spec},
-	})
+	}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "both map to command")
 }

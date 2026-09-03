@@ -13,11 +13,11 @@ import (
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
-	delivery "gitea.dev/models/deployments"
+	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	unit_model "gitea.dev/models/unit"
 	"gitea.dev/modules/structs"
-	deliveryv1 "gitea.dev/routers/api/delivery/v1"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +84,7 @@ func (w *deliveryRoleWorld) gridShowsRepo(t *testing.T, token string) bool {
 	var rows []struct {
 		ReleaseTag string `json:"release_tag"`
 	}
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/grid?repo_id="+strconv.FormatInt(w.repo.ID, 10)).
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id="+strconv.FormatInt(w.repo.ID, 10)).
 		AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
 	for _, row := range rows {
@@ -99,7 +99,7 @@ func (w *deliveryRoleWorld) gridShowsRepo(t *testing.T, token string) bool {
 // only thing separating the roles is write on the Actions unit.
 func (w *deliveryRoleWorld) canDeploy(t *testing.T, token string) bool {
 	t.Helper()
-	req := NewRequestWithJSON(t, "POST", deliveryv1.BasePath+"/deployments", map[string]any{
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", map[string]any{
 		"repo": w.repo.FullName(), "environment": "dev", "release_tag": w.releaseTag,
 	}).AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
@@ -107,7 +107,7 @@ func (w *deliveryRoleWorld) canDeploy(t *testing.T, token string) bool {
 
 func (w *deliveryRoleWorld) canApprove(t *testing.T, token string) bool {
 	t.Helper()
-	req := NewRequest(t, "POST", fmt.Sprintf("%s/approvals/%d/approve", deliveryv1.BasePath, w.approvalID)).
+	req := NewRequest(t, "POST", fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, w.approvalID)).
 		AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
 }
@@ -115,7 +115,7 @@ func (w *deliveryRoleWorld) canApprove(t *testing.T, token string) bool {
 func (w *deliveryRoleWorld) canSetPolicy(t *testing.T, token string) bool {
 	t.Helper()
 	req := NewRequestWithJSON(t, "PUT",
-		fmt.Sprintf("%s/environments/%d", deliveryv1.BasePath, w.devEnvID), map[string]any{
+		fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, w.devEnvID), map[string]any{
 			"name": "dev", "sort_order": 10, "approval_policy": "none", "required_approvals": 1,
 		}).AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
@@ -125,7 +125,7 @@ func (w *deliveryRoleWorld) canSetPolicy(t *testing.T, token string) bool {
 // site administrator gets past Gitea's own visibility check.
 func (w *deliveryRoleWorld) seesForeignRepo(t *testing.T, token string) bool {
 	t.Helper()
-	req := NewRequest(t, "GET", deliveryv1.BasePath+"/repos/user2/repo2/environments").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo2/environments").AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
 }
 
@@ -183,21 +183,21 @@ func setUpDeliveryRoles(t *testing.T) *deliveryRoleWorld {
 		&structs.AddCollaboratorOption{Permission: &adminPerm}).AddTokenAuth(adminToken)
 	MakeRequest(t, req, http.StatusNoContent)
 
-	dev := &delivery.Environment{
+	dev := &deployments_model.Environment{
 		RepoID: w.repo.ID, Name: "dev", SortOrder: 10,
-		ApprovalPolicy: delivery.PolicyNone, RequiredApprovals: 1,
+		ApprovalPolicy: deployments_model.PolicyNone, RequiredApprovals: 1,
 	}
 	require.NoError(t, db.Insert(t.Context(), dev))
 	w.devEnvID = dev.ID
-	require.NoError(t, db.Insert(t.Context(), &delivery.Environment{
+	require.NoError(t, db.Insert(t.Context(), &deployments_model.Environment{
 		RepoID: w.repo.ID, Name: "prod", SortOrder: 50,
-		ApprovalPolicy: delivery.PolicyOthersOnly, RequiredApprovals: 1,
+		ApprovalPolicy: deployments_model.PolicyOthersOnly, RequiredApprovals: 1,
 		EnableBypassAllowlist: true, BypassAllowlistTeamIDs: []int64{teams["approver"]},
 	}))
 
 	// The requester is the deployer, so others_only also has something to refuse.
 	deployer := deliveryRoleLogin("deployer")
-	approval := &delivery.Approval{
+	approval := &deployments_model.Approval{
 		RepoID: w.repo.ID, Environment: "prod", RunID: 9101, JobID: 9101,
 		ReleaseTag: w.releaseTag, RequesterID: userIDByName(t, adminToken, deployer),
 		RequesterLogin: deployer,

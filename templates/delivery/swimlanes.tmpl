@@ -1,7 +1,7 @@
 {{if and .EnableDeliverySwimlanes .Repository .Project}}
 <div class="ui container flex-text-block tw-mb-2" id="delivery-swimlanes"
 	data-repo-id="{{.Repository.ID}}" data-project-id="{{.Project.ID}}"
-	data-api-base="{{AppSubUrl}}/api/delivery/v1" data-repo-full-name="{{.Repository.FullName}}">
+	data-api-base="{{AppSubUrl}}/api/planning/v1" data-repo-full-name="{{.Repository.FullName}}">
 	<label class="tw-mr-2" for="delivery-swimlane-grouping">Swimlanes</label>
 	<select id="delivery-swimlane-grouping" class="ui dropdown">
 		<option value="none">no grouping</option>

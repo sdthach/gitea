@@ -16,7 +16,7 @@ async function apiRepoID(request: APIRequestContext, owner: string, name: string
 // A fresh instance seeds no environment — the names are the operator's — so a test that
 // needs one creates it, over the endpoint an operator would use.
 async function apiCreateEnvironment(request: APIRequestContext, repoID: number, name: string, sortOrder = 10): Promise<number> {
-  const response = await request.post(`${baseUrl()}/api/delivery/v1/environments`, {
+  const response = await request.post(`${baseUrl()}/api/deployments/v1/environments`, {
     headers: apiHeaders(),
     data: {repo_id: repoID, name, sort_order: sortOrder, approval_policy: 'none', required_approvals: 1},
   });
@@ -169,7 +169,7 @@ test('delivery environment editor creates an environment and gates it', async ({
   await expect(approvals).toHaveCount(0);
 
   const environmentID = /environments\/(\d+)\/edit/.exec(page.url())![1];
-  const row = await page.request.get(`${baseUrl()}/api/delivery/v1/environments/${environmentID}`, {headers: apiHeaders()});
+  const row = await page.request.get(`${baseUrl()}/api/deployments/v1/environments/${environmentID}`, {headers: apiHeaders()});
   expect(row.ok(), `read environment ${environmentID}: ${await row.text()}`).toBe(true);
   const stored = await row.json();
   expect(stored.approval_policy).toBe('none');

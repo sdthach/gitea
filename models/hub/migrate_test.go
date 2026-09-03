@@ -127,9 +127,15 @@ func forkPackageRoots(t *testing.T) []string {
 		filepath.Join(dir, "services", "hub"),
 		filepath.Join(dir, "services", "planning"),
 		filepath.Join(dir, "services", "deployments"),
-		filepath.Join(dir, "routers", "api", "delivery"),
-		filepath.Join(dir, "routers", "web", "delivery"),
-		filepath.Join(dir, "cmd", "gitea-delivery"),
+		filepath.Join(dir, "routers", "api", "hub"),
+		filepath.Join(dir, "routers", "api", "planning"),
+		filepath.Join(dir, "routers", "api", "deployments"),
+		filepath.Join(dir, "routers", "web", "hub"),
+		filepath.Join(dir, "routers", "web", "planning"),
+		filepath.Join(dir, "routers", "web", "deployments"),
+		filepath.Join(dir, "cmd", "hubcli"),
+		filepath.Join(dir, "cmd", "gitea-planning"),
+		filepath.Join(dir, "cmd", "gitea-deployments"),
 	}
 	for _, r := range roots {
 		_, statErr := os.Stat(r)

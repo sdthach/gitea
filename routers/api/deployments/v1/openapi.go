@@ -1,0 +1,237 @@
+// Copyright 2026 The Gitea Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package v1
+
+import (
+	"strings"
+
+	deployments_model "gitea.dev/models/deployments"
+	hubapi "gitea.dev/routers/api/hub"
+	deployments_service "gitea.dev/services/deployments"
+)
+
+// APIVersion is the fork's own API version. Gitea's swagger group at routers/api/v1 is
+// untouched; this namespace publishes its own document.
+const APIVersion = "1.0.0"
+
+// componentSchemas are the response shapes this area's document publishes.
+var componentSchemas = map[string]any{
+	"Environment": hubapi.ObjectSchema(map[string]any{
+		"id":                 hubapi.Prop("integer", "Primary key."),
+		"repo_id":            hubapi.Prop("integer", "Repository the environment belongs to; 0 is the instance-wide default set."),
+		"name":               hubapi.Prop("string", "Environment name, lower-cased."),
+		"sort_order":         hubapi.Prop("integer", "Render order. Order is configuration; the model expresses no sequence."),
+		"approval_policy":    hubapi.EnumProp("Approval policy. Defaults to none, so adding the fork changes no existing behaviour.", deployments_model.ApprovalPolicies),
+		"required_approvals": hubapi.Prop("integer", "Approvals a held deploy needs. Defaults to 1."),
+		"created_unix":       hubapi.Prop("integer", "Creation time, unix seconds."),
+		"updated_unix":       hubapi.Prop("integer", "Last update, unix seconds."),
+		"can_write":          hubapi.Prop("boolean", "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true."),
+	}, "id", "repo_id", "name", "sort_order", "approval_policy", "required_approvals", "can_write"),
+	"SecretName": hubapi.ObjectSchema(map[string]any{
+		"id":          hubapi.Prop("integer", "Scope row id, which is what DELETE /secret-scopes/{id} takes. 0 when the name carries no scope row."),
+		"name":        hubapi.Prop("string", "Secret name. A secret VALUE is never readable over any endpoint at any scope."),
+		"repo_id":     hubapi.Prop("integer", "Repository the secret belongs to."),
+		"environment": hubapi.Prop("string", "Environment the secret is scoped to; empty means unscoped."),
+		"scoped":      hubapi.Prop("boolean", "Whether an environment scope is configured for this secret."),
+	}, "id", "name", "repo_id", "environment", "scoped"),
+	"Repository": hubapi.ObjectSchema(map[string]any{
+		"id":        hubapi.Prop("integer", "Repository id."),
+		"owner":     hubapi.Prop("string", "Owner name."),
+		"name":      hubapi.Prop("string", "Repository name."),
+		"full_name": hubapi.Prop("string", "owner/name."),
+	}, "id", "owner", "name", "full_name"),
+	"Deployment": hubapi.ObjectSchema(map[string]any{
+		"id":           hubapi.Prop("integer", "Primary key."),
+		"repo_id":      hubapi.Prop("integer", "Repository the deployment belongs to."),
+		"environment":  hubapi.Prop("string", "Environment deployed to, lower-cased."),
+		"release_tag":  hubapi.Prop("string", "Release tag deployed. Releases own version identity; no version string is parsed."),
+		"sha":          hubapi.Prop("string", "Commit the run built."),
+		"branch":       hubapi.Prop("string", "Branch, when the run was not dispatched against a tag."),
+		"run_id":       hubapi.Prop("integer", "Gitea's own Actions run id."),
+		"run_url":      hubapi.Prop("string", "Link to the run."),
+		"status":       hubapi.Prop("string", "Run status at the moment the deployment was first recorded. Written once, never updated: the current state of a cell is projected from the audit log."),
+		"created_unix": hubapi.Prop("integer", "When the row was appended, unix seconds."),
+		"release":      hubapi.Prop("object", "The release, when ?expand=release was asked for."),
+		"audit":        hubapi.ArrayProp("object", "The run's audit events, when ?expand=audit was asked for."),
+		"approval":     hubapi.Prop("object", "The approval gate's hold on this run, when ?expand=approval was asked for."),
+	}, "id", "repo_id", "environment", "release_tag", "run_id", "status", "created_unix"),
+	"AuditEvent": hubapi.ObjectSchema(map[string]any{
+		"id":            hubapi.Prop("integer", "Primary key."),
+		"event":         hubapi.EnumProp("What happened.", deployments_model.AuditEvents),
+		"occurred_unix": hubapi.Prop("integer", "When it happened, UTC unix seconds."),
+		"actor_id":      hubapi.Prop("integer", "Gitea user id of the actor."),
+		"actor_login":   hubapi.Prop("string", "Actor login, denormalized so deleting the user from Gitea does not erase who deployed."),
+		"repo_id":       hubapi.Prop("integer", "Repository the event belongs to."),
+		"environment":   hubapi.Prop("string", "Environment, lower-cased."),
+		"release_tag":   hubapi.Prop("string", "Release tag."),
+		"sha":           hubapi.Prop("string", "Commit the run built."),
+		"branch":        hubapi.Prop("string", "Branch, when the run was not dispatched against a tag."),
+		"run_id":        hubapi.Prop("integer", "Gitea's own Actions run id, the evidence for the event."),
+		"run_url":       hubapi.Prop("string", "Link to the run."),
+		"source":        hubapi.EnumProp("Where the event came from.", deployments_model.AuditSources),
+		"created_unix":  hubapi.Prop("integer", "When the row was appended, unix seconds."),
+	}, "id", "event", "occurred_unix", "actor_id", "actor_login", "repo_id", "environment", "release_tag", "run_id", "source"),
+	"Release": hubapi.ObjectSchema(map[string]any{
+		"id":            hubapi.Prop("integer", "Release id."),
+		"repo_id":       hubapi.Prop("integer", "Repository the release belongs to."),
+		"tag_name":      hubapi.Prop("string", "Release tag, the identity a deployment points at."),
+		"title":         hubapi.Prop("string", "Release title."),
+		"target":        hubapi.Prop("string", "The release's own commitish. The deploy job posts its commit status against this SHA."),
+		"sha":           hubapi.Prop("string", "Commit the tag resolves to."),
+		"url":           hubapi.Prop("string", "Link to the release."),
+		"is_prerelease": hubapi.Prop("boolean", "Whether the release is marked as a prerelease."),
+		"created_unix":  hubapi.Prop("integer", "Creation time, unix seconds."),
+		"artifacts":     hubapi.ArrayProp("object", "The release's attachments."),
+		"deployments":   hubapi.ArrayProp("object", "Deployments of this release, when ?expand=deployments was asked for."),
+	}, "id", "repo_id", "tag_name", "target", "url", "created_unix"),
+	"GridRow": hubapi.ObjectSchema(map[string]any{
+		"repo_id":        hubapi.Prop("integer", "Repository the release belongs to."),
+		"repo_full_name": hubapi.Prop("string", "owner/name."),
+		"release_tag":    hubapi.Prop("string", "The release this row renders."),
+		"release_url":    hubapi.Prop("string", "Link to the release; a release row opens the release."),
+		"created_unix":   hubapi.Prop("integer", "Release creation time, unix seconds."),
+		"cells":          hubapi.ArrayProp("object", "One cell per environment, in configured order. Each carries environment, sort_order, state, symbol, successes, run_id, run_url and occurred_unix; sort_order is that environment's configured column order, which is what orders a grid spanning repositories. A cell opens its run."),
+	}, "repo_id", "repo_full_name", "release_tag", "cells"),
+	"Promotion": hubapi.ObjectSchema(map[string]any{
+		"repo_id":                  hubapi.Prop("integer", "Repository the deploy targets."),
+		"repo_full_name":           hubapi.Prop("string", "owner/name."),
+		"environment":              hubapi.Prop("string", "Target environment, lower-cased."),
+		"release_tag":              hubapi.Prop("string", "Release tag being deployed. Rolling back names a prior tag; it is the same request."),
+		"is_prerelease":            hubapi.Prop("boolean", "Whether the release is marked as a prerelease. Prereleases reach only the configured prerelease environments."),
+		"currently_live":           hubapi.Prop("string", "The release live in the target environment right now, empty when nothing has ever succeeded there. The confirm step names it before anything is dispatched."),
+		"is_rollback":              hubapi.Prop("boolean", "Whether the target release predates what is live there. A label on the request, never a second code path."),
+		"predecessor":              hubapi.Prop("string", "The environment this one names as its predecessor, empty when it names none."),
+		"predecessor_state":        hubapi.EnumProp("What the predecessor has done with this release: none, never, held or live.", []string{"none", "never", "held", "live"}),
+		"outcome":                  hubapi.EnumProp("The sequence rule's decision: proceed, warn, override or refuse.", []string{"proceed", "warn", "override", "refuse"}),
+		"message":                  hubapi.Prop("string", "What the decision was, in words, for the confirm step to show."),
+		"suggested_action":         hubapi.Prop("string", "What to do about it. Every decision carries one."),
+		"requires_override_reason": hubapi.Prop("boolean", "Whether a confirmed deploy must carry override_reason. The reason is written to the audit log."),
+		"workflow_id":              hubapi.Prop("string", "The workflow file the deploy dispatches, named for the environment."),
+		"ref":                      hubapi.Prop("string", "The ref dispatched. Deploy and rollback compose the identical request and differ only here."),
+		"confirmed":                hubapi.Prop("boolean", "Whether this call dispatched. False on the first of the two steps."),
+		"override_reason":          hubapi.Prop("string", "The reason given for bypassing the sequence rule."),
+		"run_id":                   hubapi.Prop("integer", "Gitea's own Actions run id, once dispatched."),
+		"run_url":                  hubapi.Prop("string", "Link to the run, once dispatched."),
+	}, "repo_id", "repo_full_name", "environment", "release_tag", "outcome", "predecessor_state", "confirmed"),
+	"Run": hubapi.ObjectSchema(map[string]any{
+		"id":               hubapi.Prop("integer", "Gitea's own Actions run id."),
+		"repo_id":          hubapi.Prop("integer", "Repository the run belongs to."),
+		"repo_full_name":   hubapi.Prop("string", "owner/name, so the row links out to Gitea's own repository page."),
+		"index":            hubapi.Prop("integer", "The run's per-repository number, as Gitea's own run page shows it."),
+		"title":            hubapi.Prop("string", "Run title."),
+		"workflow_id":      hubapi.Prop("string", "The workflow file that produced the run."),
+		"event":            hubapi.Prop("string", "The webhook event that caused the run."),
+		"ref":              hubapi.Prop("string", "The commit, branch or tag that caused the run."),
+		"commit_sha":       hubapi.Prop("string", "Commit the run built."),
+		"status":           hubapi.EnumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer.", deployments_service.RunStateNames()),
+		"run_url":          hubapi.Prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page."),
+		"created_unix":     hubapi.Prop("integer", "When the run was created, unix seconds."),
+		"started_unix":     hubapi.Prop("integer", "When the run started, unix seconds; 0 if it has not."),
+		"stopped_unix":     hubapi.Prop("integer", "When the run stopped, unix seconds; 0 if it has not."),
+		"duration_seconds": hubapi.Prop("integer", "stopped minus started. An unfinished run contributes zero rather than a negative duration."),
+	}, "id", "repo_id", "repo_full_name", "workflow_id", "status", "created_unix"),
+	"RepoStat": hubapi.ObjectSchema(map[string]any{
+		"repo_id":                  hubapi.Prop("integer", "Repository id."),
+		"repo_full_name":           hubapi.Prop("string", "owner/name."),
+		"runs":                     hubapi.Prop("integer", "Runs in the window."),
+		"successes":                hubapi.Prop("integer", "Runs that succeeded."),
+		"failures":                 hubapi.Prop("integer", "Runs that failed."),
+		"success_rate":             hubapi.Prop("number", "Successes over runs that reached a result. A queue of pending runs does not depress it."),
+		"average_duration_seconds": hubapi.Prop("integer", "Mean duration over the runs that finished."),
+	}, "repo_id", "repo_full_name", "runs", "success_rate", "average_duration_seconds"),
+	"WorkflowStat": hubapi.ObjectSchema(map[string]any{
+		"repo_id":                  hubapi.Prop("integer", "Repository id."),
+		"repo_full_name":           hubapi.Prop("string", "owner/name."),
+		"workflow_id":              hubapi.Prop("string", "The workflow file."),
+		"runs":                     hubapi.Prop("integer", "Runs in the window."),
+		"successes":                hubapi.Prop("integer", "Runs that succeeded."),
+		"failures":                 hubapi.Prop("integer", "Runs that failed."),
+		"success_rate":             hubapi.Prop("number", "Successes over runs that reached a result."),
+		"average_duration_seconds": hubapi.Prop("integer", "Mean duration over the runs that finished."),
+		"disabled":                 hubapi.Prop("boolean", "Whether the repository has this workflow disabled, read from Gitea's own Actions unit configuration."),
+	}, "repo_id", "workflow_id", "runs", "success_rate", "average_duration_seconds", "disabled"),
+	"Summary": hubapi.ObjectSchema(map[string]any{
+		"window":                 hubapi.Prop("object", "The half-open window the figures cover: from_unix, to_unix and days."),
+		"total_runs":             hubapi.Prop("integer", "Runs in the window."),
+		"runs":                   hubapi.Prop("object", "Run count per state: "+strings.Join(deployments_service.RunStateNames(), ", ")+"."),
+		"success_rate":           hubapi.Prop("number", "Successes over runs that reached a result."),
+		"total_duration_seconds": hubapi.Prop("integer", "Summed run duration."),
+		"active_repositories":    hubapi.Prop("integer", "Repositories with at least one run in the window."),
+		"inactive_repositories":  hubapi.Prop("integer", "Repositories the viewer can see that had no run in the window."),
+		"active_workflows":       hubapi.Prop("integer", "Distinct (repository, workflow file) pairs that ran in the window."),
+		"disabled_workflows":     hubapi.Prop("integer", "Workflow files the viewer's repositories have disabled."),
+	}, "window", "total_runs", "runs", "success_rate", "total_duration_seconds",
+		"active_repositories", "inactive_repositories", "active_workflows", "disabled_workflows"),
+	"Overview": hubapi.ObjectSchema(map[string]any{
+		"summary":   hubapi.Prop("object", "The selected window's Summary."),
+		"previous":  hubapi.Prop("object", "The previous window of equal length, shown beside each tile for comparison."),
+		"truncated": hubapi.Prop("boolean", "True when the window held more runs than one aggregate reads, so the numbers are a floor. A silently capped aggregate would be a wrong number that does not say so."),
+	}, "summary", "previous", "truncated"),
+	"TrendPoint": hubapi.ObjectSchema(map[string]any{
+		"date":                     hubapi.Prop("string", "The UTC day, YYYY-MM-DD."),
+		"day_unix":                 hubapi.Prop("integer", "Start of that UTC day, unix seconds."),
+		"runs":                     hubapi.Prop("integer", "Runs created that day."),
+		"successes":                hubapi.Prop("integer", "Runs that succeeded."),
+		"failures":                 hubapi.Prop("integer", "Runs that failed."),
+		"average_duration_seconds": hubapi.Prop("integer", "Mean duration over the runs that finished."),
+		"deployments":              hubapi.Prop("integer", "Deployments appended that day, read from the fork's own table so both dashboards share one source of truth."),
+	}, "date", "day_unix", "runs", "successes", "failures", "average_duration_seconds", "deployments"),
+	"Approval": hubapi.ObjectSchema(map[string]any{
+		"id":                 hubapi.Prop("integer", "Primary key."),
+		"repo_id":            hubapi.Prop("integer", "Repository the held run belongs to."),
+		"environment":        hubapi.Prop("string", "Environment the held job declares, lower-cased."),
+		"run_id":             hubapi.Prop("integer", "Gitea's own Actions run id."),
+		"job_id":             hubapi.Prop("integer", "Gitea's own Actions job id. The gate holds exactly this job."),
+		"release_tag":        hubapi.Prop("string", "Release tag the run was dispatched at; empty when it was dispatched against a branch."),
+		"sha":                hubapi.Prop("string", "Commit the run builds."),
+		"run_url":            hubapi.Prop("string", "Link to the held run."),
+		"requester_id":       hubapi.Prop("integer", "Gitea user id of whoever asked for the deploy."),
+		"requester_login":    hubapi.Prop("string", "Requester login, denormalized so deleting the user does not erase who asked."),
+		"created_unix":       hubapi.Prop("integer", "When the hold was recorded, unix seconds."),
+		"state":              hubapi.EnumProp("Projected over the append-only audit log, never a stored column.", deployments_model.ApprovalStates),
+		"approval_policy":    hubapi.EnumProp("The environment's live approval policy.", deployments_model.ApprovalPolicies),
+		"approvals_count":    hubapi.Prop("integer", "Distinct approvers so far, counted under the environment's policy."),
+		"required_approvals": hubapi.Prop("integer", "Approvals this deploy needs before the job is assigned."),
+		"age_seconds":        hubapi.Prop("integer", "How long the deploy has been held."),
+		"can_approve":        hubapi.Prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces."),
+		"deployment":         hubapi.Prop("object", "The deployment row for this run, when ?expand=deployment was asked for."),
+	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "approvals_count", "required_approvals", "created_unix", "can_approve"),
+	"SecretScope": hubapi.ObjectSchema(map[string]any{
+		"id":           hubapi.Prop("integer", "Primary key."),
+		"repo_id":      hubapi.Prop("integer", "Repository the secret belongs to."),
+		"name":         hubapi.Prop("string", "Secret name."),
+		"environment":  hubapi.Prop("string", "Environment the secret is scoped to."),
+		"created_unix": hubapi.Prop("integer", "Creation time, unix seconds."),
+		"updated_unix": hubapi.Prop("integer", "Last update, unix seconds."),
+	}, "id", "repo_id", "name", "environment"),
+	"DeploymentSummary": hubapi.ObjectSchema(map[string]any{
+		"id":               hubapi.Prop("integer", "Primary key."),
+		"repo_id":          hubapi.Prop("integer", "Repository the deployment belongs to."),
+		"repo_full_name":   hubapi.Prop("string", "owner/name."),
+		"environment":      hubapi.Prop("string", "Environment deployed to, lower-cased."),
+		"release_tag":      hubapi.Prop("string", "Release tag deployed."),
+		"status":           hubapi.Prop("string", "Run status at the moment the deployment was recorded."),
+		"branch":           hubapi.Prop("string", "Branch, when the run was not dispatched against a tag."),
+		"deployed_by":      hubapi.Prop("string", "Login of whoever requested the deploy."),
+		"deployed_at":      hubapi.Prop("integer", "When deployed, unix seconds."),
+		"sha":              hubapi.Prop("string", "Commit SHA, when ?fields=sha was asked for."),
+		"run_id":           hubapi.Prop("integer", "Actions run id, when ?fields=run was asked for."),
+		"run_url":          hubapi.Prop("string", "Link to the run, when ?fields=run was asked for."),
+		"approved_by":      hubapi.Prop("string", "Login of the approver, when ?fields=approved_by was asked for."),
+		"approved_at":      hubapi.Prop("integer", "When approved, unix seconds, when ?fields=approved_at was asked for."),
+		"duration_seconds": hubapi.Prop("integer", "Deploy duration in seconds, when ?fields=duration was asked for."),
+	}, "id", "repo_id", "environment", "release_tag", "status", "deployed_by", "deployed_at"),
+	"Error": hubapi.ErrorSchema(),
+}
+
+// OpenAPI renders the OpenAPI 3 document for the deployments namespace.
+func OpenAPI() ([]byte, error) {
+	return hubapi.BuildOpenAPI(BasePath, "Gitea deployments API",
+		"The fork's own deployments namespace: environments, deployments, reviews, secrets, audit, releases, workflows, runs and insights. Gitea's swagger group at /api/v1 is untouched.",
+		APIVersion, Operations(), componentSchemas)
+}
+
+// Schemas exposes the published component schemas, so a generator can render a table from
+// the same declaration the document publishes.
+func Schemas() map[string]map[string]any { return hubapi.SchemasFrom(componentSchemas) }
