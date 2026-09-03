@@ -4,7 +4,7 @@
 # The hub fork's own make targets. The upstream Makefile carries one line including
 # this file, so the fork adds no target to it.
 
-HUB_TEST_PACKAGES := gitea.dev/models/hub/... gitea.dev/models/deployments/... gitea.dev/services/hub/... gitea.dev/services/planning/... gitea.dev/services/deployments/... gitea.dev/routers/api/hub/... gitea.dev/routers/api/planning/... gitea.dev/routers/api/deployments/... gitea.dev/routers/web/hub/... gitea.dev/routers/web/hubroutes/... gitea.dev/routers/web/planning/... gitea.dev/routers/web/deployments/... gitea.dev/cmd/hubcli/... gitea.dev/cmd/gitea-planning/... gitea.dev/cmd/gitea-deployments/...
+HUB_TEST_PACKAGES := gitea.dev/models/hub/... gitea.dev/models/planning/... gitea.dev/models/deployments/... gitea.dev/services/hub/... gitea.dev/services/planning/... gitea.dev/services/deployments/... gitea.dev/routers/api/hub/... gitea.dev/routers/api/planning/... gitea.dev/routers/api/deployments/... gitea.dev/routers/web/hub/... gitea.dev/routers/web/hubroutes/... gitea.dev/routers/web/planning/... gitea.dev/routers/web/deployments/... gitea.dev/cmd/hubcli/... gitea.dev/cmd/gitea-planning/... gitea.dev/cmd/gitea-deployments/...
 
 .PHONY: hub-generate
 hub-generate: ## regenerate both areas' OpenAPI document, CLI request layer and command reference

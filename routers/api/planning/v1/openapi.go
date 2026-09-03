@@ -61,9 +61,26 @@ var componentSchemas = map[string]any{
 			"the range drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while "+
 			"the write granularity stays a day at every unit."),
 		"milestones": hubapi.ArrayProp("object", "The repository's milestones, which are the rows an issue can be filed under. Each "+
-			"carries milestone_id, title and is_closed."),
+			"carries milestone_id, title, is_closed, start_unix (the recorded schedule, 0 when unset) and end_unix (the milestone's own deadline, 0 when unset)."),
 		"truncated": hubapi.Prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
 	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "truncated"),
+	"IssueFacets": hubapi.ObjectSchema(map[string]any{
+		"issue_id":  hubapi.Prop("integer", "The issue's global id."),
+		"number":    hubapi.Prop("integer", "The issue's per-repository number."),
+		"repo_id":   hubapi.Prop("integer", "Repository the issue belongs to."),
+		"can_write": hubapi.Prop("boolean", "Whether the caller may write the schedule and estimate endpoints below."),
+		"schedule": hubapi.Prop("object", "start_unix and start_source, one of "+
+			strings.Join(planning_service.StartSources, ", ")+"."),
+		"milestone":       hubapi.Prop("object", "The milestone the issue is filed under, or null. Carries id, title, start_unix and due_unix (0 when unset)."),
+		"time_estimate":   hubapi.Prop("integer", "Seconds, from Gitea's own time-tracking."),
+		"tracked_seconds": hubapi.Prop("integer", "Seconds actually logged, from Gitea's own time-tracking."),
+	}, "issue_id", "number", "repo_id", "can_write", "schedule", "milestone", "time_estimate", "tracked_seconds"),
+	"MilestoneSchedule": hubapi.ObjectSchema(map[string]any{
+		"milestone_id": hubapi.Prop("integer", "The milestone's id."),
+		"title":        hubapi.Prop("string", "The milestone's title."),
+		"start_unix":   hubapi.Prop("integer", "The recorded start, 0 when unset."),
+		"due_unix":     hubapi.Prop("integer", "The milestone's own deadline, 0 when unset."),
+	}, "milestone_id", "title", "start_unix", "due_unix"),
 	"Error": hubapi.ErrorSchema(),
 }
 

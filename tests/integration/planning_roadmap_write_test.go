@@ -84,7 +84,7 @@ func TestPlanningRoadmapMovesAnIssueBetweenMilestoneRows(t *testing.T) {
 
 // TestPlanningRoadmapSetsABarsStartAndEnd covers the endpoint whose two halves are written
 // to different places: the end is Issue.DeadlineUnix, and the start has no Gitea field, so
-// it is the ccpm:started comment the chart already reads.
+// it is the recorded schedule the chart already reads.
 func TestPlanningRoadmapSetsABarsStartAndEnd(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -96,7 +96,7 @@ func TestPlanningRoadmapSetsABarsStartAndEnd(t *testing.T) {
 	})
 	_, startUnix, endUnix, startSource, endSource := roadmapBar(t, after, issue.ID)
 
-	assert.Equal(t, "ccpm_started", startSource, "the chart reads back the marker the write posted")
+	assert.Equal(t, "schedule", startSource, "the chart reads back the schedule the write recorded")
 	assert.EqualValues(t, 1772323200, startUnix, "2026-03-01T00:00:00Z")
 	assert.Equal(t, "deadline", endSource)
 	assert.EqualValues(t, 1773187200, endUnix, "2026-03-11T00:00:00Z")

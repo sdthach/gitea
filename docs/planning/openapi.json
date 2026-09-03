@@ -97,6 +97,80 @@
         ],
         "type": "object"
       },
+      "IssueFacets": {
+        "properties": {
+          "can_write": {
+            "description": "Whether the caller may write the schedule and estimate endpoints below.",
+            "type": "boolean"
+          },
+          "issue_id": {
+            "description": "The issue's global id.",
+            "type": "integer"
+          },
+          "milestone": {
+            "description": "The milestone the issue is filed under, or null. Carries id, title, start_unix and due_unix (0 when unset).",
+            "type": "object"
+          },
+          "number": {
+            "description": "The issue's per-repository number.",
+            "type": "integer"
+          },
+          "repo_id": {
+            "description": "Repository the issue belongs to.",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "start_unix and start_source, one of schedule, issue_created, none.",
+            "type": "object"
+          },
+          "time_estimate": {
+            "description": "Seconds, from Gitea's own time-tracking.",
+            "type": "integer"
+          },
+          "tracked_seconds": {
+            "description": "Seconds actually logged, from Gitea's own time-tracking.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "can_write",
+          "issue_id",
+          "milestone",
+          "number",
+          "repo_id",
+          "schedule",
+          "time_estimate",
+          "tracked_seconds"
+        ],
+        "type": "object"
+      },
+      "MilestoneSchedule": {
+        "properties": {
+          "due_unix": {
+            "description": "The milestone's own deadline, 0 when unset.",
+            "type": "integer"
+          },
+          "milestone_id": {
+            "description": "The milestone's id.",
+            "type": "integer"
+          },
+          "start_unix": {
+            "description": "The recorded start, 0 when unset.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The milestone's title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "due_unix",
+          "milestone_id",
+          "start_unix",
+          "title"
+        ],
+        "type": "object"
+      },
       "Roadmap": {
         "properties": {
           "arrows": {
@@ -107,7 +181,7 @@
             "type": "array"
           },
           "bars": {
-            "description": "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, title, url, epic, type, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of ccpm_started, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
+            "description": "One bar per issue ccpm manages, empty at a rolled-up zoom. Each carries issue_id, number, title, url, epic, type, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred and is_closed. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
             "items": {
               "type": "object"
             },
@@ -131,7 +205,7 @@
             "type": "array"
           },
           "milestones": {
-            "description": "The repository's milestones, which are the rows an issue can be filed under. Each carries milestone_id, title and is_closed.",
+            "description": "The repository's milestones, which are the rows an issue can be filed under. Each carries milestone_id, title, is_closed, start_unix (the recorded schedule, 0 when unset) and end_unix (the milestone's own deadline, 0 when unset).",
             "items": {
               "type": "object"
             },
@@ -587,9 +661,72 @@
         ]
       }
     },
+    "/issues/{issue_id}": {
+      "get": {
+        "description": "Scoped by Gitea's own permission check on the Issues or Pull Requests unit, whichever the issue belongs to; a caller who cannot read it gets 404 rather than 403, so the refusal never confirms the issue exists. can_write says whether the write endpoints below will accept an edit from this caller.",
+        "operationId": "issue",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
     "/issues/{issue_id}/dates": {
       "post": {
-        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. The start is a recorded plan_issue_schedule row rather than a Gitea field — see PUT /issues/{issue_id}/schedule for the endpoint dedicated to it. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "setIssueDates",
         "parameters": [
           {
@@ -674,6 +811,93 @@
         "summary": "Set a bar's start and end",
         "tags": [
           "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/estimate": {
+      "put": {
+        "description": "time_estimate is a duration like \"3d\" or \"4h30m\", parsed and written through Gitea's own time-tracking. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueEstimate",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "time_estimate": {
+                    "description": "Duration such as \"3d\" or \"4h30m\".",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "time_estimate"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's time estimate",
+        "tags": [
+          "issues"
         ]
       }
     },
@@ -860,6 +1084,173 @@
         ]
       }
     },
+    "/issues/{issue_id}/schedule": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearIssueSchedule",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Clear an issue's start date",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the start in plan_issue_schedule; refused for a pull request, a start at or before the Unix epoch, or a start after the issue's own deadline when one is set. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueSchedule",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "start"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's start date",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
     "/milestones": {
       "post": {
         "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
@@ -945,9 +1336,176 @@
         ]
       }
     },
+    "/milestones/{milestone_id}/schedule": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearMilestoneSchedule",
+        "parameters": [
+          {
+            "description": "The milestone's id.",
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneSchedule"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Clear a milestone's start date",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the start in plan_milestone_schedule; refused for a milestone that does not belong to repo, a start at or before the Unix epoch, or a start after the milestone's own due date when one is set. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setMilestoneSchedule",
+        "parameters": [
+          {
+            "description": "The milestone's id.",
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "start"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneSchedule"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a milestone's start date",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
     "/roadmap": {
       "get": {
-        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /planning/roadmap page is a client of this endpoint.",
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from the recorded schedule this API's own PUT /issues/{issue_id}/schedule writes, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /planning/roadmap page is a client of this endpoint.",
         "operationId": "getRoadmap",
         "parameters": [
           {

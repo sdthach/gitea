@@ -4,8 +4,8 @@
 		<h2 class="ui header">{{.Title}}</h2>
 		<p class="tw-text-14">
 			One bar per issue, with dependency arrows. It needs no Projects API, so it renders on a
-			build whose board does not. Gitea stores no start date, so a bar's start comes from ccpm's
-			own <code>started:</code> record and falls back to the issue's creation time; its end is
+			build whose board does not. Gitea stores no start date, so a bar's start comes from the
+			recorded schedule and falls back to the issue's creation time; its end is
 			the close time, then the deadline, then the effort estimate applied to the start. Every bar
 			names both sources, and an <strong>inferred</strong> end is drawn as an open outline rather
 			than a solid bar — presenting an estimate as a measurement is this view's characteristic
@@ -118,7 +118,7 @@
 				onto a group heading to move it between groups, which edits the grouping field itself —
 				the <code>type:</code> label, the <code>epic:</code> label or the assignee. A drag
 				writes the day it lands on at every zoom — the end to the issue's deadline, the start
-				to ccpm's <code>started:</code> marker, because Gitea has nowhere else to keep one.
+				to its recorded schedule, because Gitea has nowhere else to keep one.
 			</p>
 		</div>
 

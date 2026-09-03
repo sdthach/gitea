@@ -10,6 +10,7 @@ import (
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	planning_model "gitea.dev/models/planning"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
@@ -373,6 +374,8 @@ type roadmapPayload struct {
 	Milestones []struct {
 		MilestoneID int64  `json:"milestone_id"`
 		Title       string `json:"title"`
+		StartUnix   int64  `json:"start_unix"`
+		EndUnix     int64  `json:"end_unix"`
 	} `json:"milestones"`
 	GroupBy string `json:"group_by"`
 	Zoom    string `json:"zoom"`
@@ -408,14 +411,10 @@ func TestAPIPlanningRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	epic := labelForGroup(t, 1, "epic:checkout")
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
-	// Issue 1 is managed, has a ccpm start marker on a comment, and is closed: actuals.
+	// Issue 1 is managed, has a recorded start, and is closed: actuals.
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, epic))
-	require.NoError(t, db.Insert(t.Context(), &issues_model.Comment{
-		Type: issues_model.CommentTypeComment, IssueID: issue1.ID, PosterID: doer.ID,
-		Content:     "## Progress\n\n<!-- ccpm:started=2001-01-01T00:00:00Z -->",
-		CreatedUnix: timeutil.TimeStamp(978307200),
-	}))
+	require.NoError(t, planning_model.UpsertIssueStart(t.Context(), issue1.ID, 978307200))
 	issue1.IsClosed = true
 	issue1.ClosedUnix = timeutil.TimeStamp(1_000_000_000)
 	_, err := db.GetEngine(t.Context()).ID(issue1.ID).Cols("is_closed", "closed_unix").Update(issue1)
@@ -443,8 +442,8 @@ func TestAPIPlanningRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	require.Contains(t, bars, int64(5))
 
 	actual := payload.Bars[bars[1]]
-	assert.Equal(t, "ccpm_started", actual.StartSource)
-	assert.Equal(t, int64(978307200), actual.StartUnix, "the marker's own time, not the comment's")
+	assert.Equal(t, "schedule", actual.StartSource)
+	assert.Equal(t, int64(978307200), actual.StartUnix, "the recorded schedule's own time")
 	assert.Equal(t, "closed", actual.EndSource)
 	assert.False(t, actual.EndInferred, "a bar drawn from actuals is not marked inferred")
 

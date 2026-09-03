@@ -26,9 +26,9 @@ func managed(in BarInput) BarInput {
 
 // Each of the three start sources, with the source label asserted.
 func TestPlanningResolveBarNamesItsStartSource(t *testing.T) {
-	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, EffortSeconds: 2 * 86400}))
+	bar, ok := ResolveBar(managed(BarInput{ScheduledStartUnix: started, EffortSeconds: 2 * 86400}))
 	require.True(t, ok)
-	assert.Equal(t, StartFromProgress, bar.StartSource, "a recorded ccpm start wins")
+	assert.Equal(t, StartFromSchedule, bar.StartSource, "a recorded schedule wins")
 	assert.Equal(t, started, bar.StartUnix)
 
 	bar, ok = ResolveBar(managed(BarInput{EffortSeconds: 2 * 86400}))
@@ -40,19 +40,19 @@ func TestPlanningResolveBarNamesItsStartSource(t *testing.T) {
 	_, ok = ResolveBar(BarInput{IssueID: 9002, Number: 2, CreatedUnix: created})
 	assert.False(t, ok)
 	assert.Equal(t, StartNone, StartSource("none"))
-	assert.Equal(t, []string{"ccpm_started", "issue_created", "none"}, StartSources)
+	assert.Equal(t, []string{"schedule", "issue_created", "none"}, StartSources)
 }
 
 // Each of the three end sources, with the source label asserted, and the inferred one
 // distinguishable from the recorded ones.
 func TestPlanningResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) {
-	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed, DeadlineUnix: deadline}))
+	bar, ok := ResolveBar(managed(BarInput{ScheduledStartUnix: started, IsClosed: true, ClosedUnix: closed, DeadlineUnix: deadline}))
 	require.True(t, ok)
 	assert.Equal(t, EndFromClosed, bar.EndSource, "a close time outranks a deadline")
 	assert.Equal(t, closed, bar.EndUnix)
 	assert.False(t, bar.EndInferred, "a close time is a record")
 
-	bar, ok = ResolveBar(managed(BarInput{StartedUnix: started, DeadlineUnix: deadline}))
+	bar, ok = ResolveBar(managed(BarInput{ScheduledStartUnix: started, DeadlineUnix: deadline}))
 	require.True(t, ok)
 	assert.Equal(t, EndFromDeadline, bar.EndSource)
 	assert.Equal(t, deadline, bar.EndUnix)
@@ -69,9 +69,9 @@ func TestPlanningResolveBarNamesItsEndSourceAndFlagsAnInferredOne(t *testing.T) 
 // A task with a recorded start and a close time draws from actuals; one with neither
 // draws from created plus estimate and is visually distinct.
 func TestPlanningResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing.T) {
-	actual, ok := ResolveBar(managed(BarInput{StartedUnix: started, IsClosed: true, ClosedUnix: closed}))
+	actual, ok := ResolveBar(managed(BarInput{ScheduledStartUnix: started, IsClosed: true, ClosedUnix: closed}))
 	require.True(t, ok)
-	assert.Equal(t, StartFromProgress, actual.StartSource)
+	assert.Equal(t, StartFromSchedule, actual.StartSource)
 	assert.Equal(t, EndFromClosed, actual.EndSource)
 	assert.False(t, actual.EndInferred)
 
@@ -84,7 +84,7 @@ func TestPlanningResolveBarDrawsFromActualsOrFromEstimateAndSaysWhich(t *testing
 }
 
 func TestPlanningResolveBarClampsAnEndThatPrecedesItsStart(t *testing.T) {
-	bar, ok := ResolveBar(managed(BarInput{StartedUnix: started, DeadlineUnix: created - 86400}))
+	bar, ok := ResolveBar(managed(BarInput{ScheduledStartUnix: started, DeadlineUnix: created - 86400}))
 	require.True(t, ok)
 	assert.Equal(t, EndFromDeadline, bar.EndSource, "a deadline before the start is real data and keeps its source")
 	assert.Equal(t, bar.StartUnix, bar.EndUnix, "the bar is clamped rather than drawn backwards")
@@ -123,13 +123,6 @@ func TestPlanningArrowKindPerRelationType(t *testing.T) {
 		_, ok := ArrowKindFor(word)
 		assert.False(t, ok, "%q carries no ordering, so it draws no arrow", word)
 	}
-}
-
-func TestPlanningParseStartedMarkerReadsCcpmsOwnRecord(t *testing.T) {
-	body := "## Progress Update\n\n---\n*Progress: 40%*\n\n<!-- ccpm:started=2026-08-31T22:33:25Z -->\n"
-	assert.Equal(t, "2026-08-31T22:33:25Z", ParseStartedMarker(body))
-	assert.Empty(t, ParseStartedMarker("a plain comment with no marker"),
-		"most comments are not progress updates, and that is not an error")
 }
 
 func TestPlanningParseEffortSecondsReadsTheRenderedSection(t *testing.T) {

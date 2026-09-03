@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
@@ -21,8 +20,6 @@ import (
 	"gitea.dev/services/context"
 	"gitea.dev/services/hub/query"
 	planning_service "gitea.dev/services/planning"
-
-	"xorm.io/builder"
 )
 
 // roadmapSpec is the roadmap projection's whitelist declaration. Like the matrix and the
@@ -94,6 +91,8 @@ type RoadmapMilestone struct {
 	MilestoneID int64  `json:"milestone_id"`
 	Title       string `json:"title"`
 	IsClosed    bool   `json:"is_closed"`
+	StartUnix   int64  `json:"start_unix"`
+	EndUnix     int64  `json:"end_unix"`
 }
 
 func getRoadmapEndpoint() *hubapi.Endpoint {
@@ -102,9 +101,9 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 			ID: "getRoadmap", Method: http.MethodGet, Path: "/roadmap",
 			Summary: "The roadmap: one bar per issue, with dependency arrows",
 			Description: "Needs no Projects API, so it renders on a build the board cannot. " +
-				"Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: " +
-				"the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker " +
-				"on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, " +
+				"Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from the " +
+				"recorded schedule this API's own PUT /issues/{issue_id}/schedule writes, falling back to the issue's " +
+				"creation time. Its end is the close time when closed, " +
 				"the deadline when set, and otherwise the effort estimate applied to the start. " +
 				"EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting " +
 				"an estimate as a measurement is this view's characteristic failure. " +
@@ -222,8 +221,20 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		ctx.APIErrorInternal(err)
 		return
 	}
+	milestoneIDs := make([]int64, 0, len(milestones))
 	for _, m := range milestones {
-		out.Milestones = append(out.Milestones, RoadmapMilestone{MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed})
+		milestoneIDs = append(milestoneIDs, m.ID)
+	}
+	milestoneStarts, err := planning_service.MilestoneStarts(ctx, milestoneIDs)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	for _, m := range milestones {
+		out.Milestones = append(out.Milestones, RoadmapMilestone{
+			MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed,
+			StartUnix: milestoneStarts[m.ID], EndUnix: int64(m.DeadlineUnix),
+		})
 	}
 
 	if view.zoom == planning_service.ZoomMilestone {
@@ -252,7 +263,7 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	}
 	out.Truncated = len(issues) == limit
 
-	starts, err := ccpmStarts(ctx, issues)
+	starts, err := planning_service.IssueStarts(ctx, issueIDsOf(issues))
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -441,7 +452,7 @@ func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state o
 	if err := issues.LoadAttributes(ctx); err != nil {
 		return planning_service.RollupRow{}, nil, false, err
 	}
-	starts, err := ccpmStarts(ctx, issues)
+	starts, err := planning_service.IssueStarts(ctx, issueIDsOf(issues))
 	if err != nil {
 		return planning_service.RollupRow{}, nil, false, err
 	}
@@ -520,14 +531,14 @@ func parseRoadmapState(ctx *context.APIContext, raw string) (optional.Option[boo
 func barInputFor(issue *issues_model.Issue, startedUnix int64) planning_service.BarInput {
 	in := planning_service.BarInput{
 		IssueID: issue.ID, Number: issue.Index, Title: issue.Title, URL: issue.Link(),
-		StartedUnix:   startedUnix,
-		CreatedUnix:   int64(issue.CreatedUnix),
-		ClosedUnix:    int64(issue.ClosedUnix),
-		DeadlineUnix:  int64(issue.DeadlineUnix),
-		EffortSeconds: planning_service.ParseEffortSeconds(issue.Content),
-		IsClosed:      issue.IsClosed,
-		Labels:        make([]string, 0, len(issue.Labels)),
-		Assignees:     make([]string, 0, len(issue.Assignees)),
+		ScheduledStartUnix: startedUnix,
+		CreatedUnix:        int64(issue.CreatedUnix),
+		ClosedUnix:         int64(issue.ClosedUnix),
+		DeadlineUnix:       int64(issue.DeadlineUnix),
+		EffortSeconds:      planning_service.ParseEffortSeconds(issue.Content),
+		IsClosed:           issue.IsClosed,
+		Labels:             make([]string, 0, len(issue.Labels)),
+		Assignees:          make([]string, 0, len(issue.Assignees)),
 	}
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)
@@ -548,47 +559,13 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64) planning_service.
 	return in
 }
 
-// ccpmStarts reads the ccpm:started marker off each issue's comments.
-//
-// The marker is the ONLY carrier of a start date onto the forge: Gitea has no column for
-// one, and the comment is append-only. The LAST marker posted wins, because it is the most
-// recent statement of when the work started: re-syncing an unchanged value changes nothing,
-// a changed one is ccpm correcting itself, and dragging the chart's start edge later has to
-// move the bar or the edge only drags one way.
-func ccpmStarts(ctx *context.APIContext, issues issues_model.IssueList) (map[int64]int64, error) {
-	starts := map[int64]int64{}
-	if len(issues) == 0 {
-		return starts, nil
-	}
+// issueIDsOf collects an issue list's ids, for the batch lookups the chart makes over them.
+func issueIDsOf(issues issues_model.IssueList) []int64 {
 	ids := make([]int64, 0, len(issues))
 	for _, issue := range issues {
 		ids = append(ids, issue.ID)
 	}
-
-	comments := make([]*issues_model.Comment, 0, len(ids))
-	if err := db.GetEngine(ctx).
-		Where(builder.Eq{"type": issues_model.CommentTypeComment}).
-		In("issue_id", ids).
-		OrderBy("created_unix ASC, id ASC").
-		Find(&comments); err != nil {
-		return nil, err
-	}
-
-	for _, comment := range comments {
-		marker := planning_service.ParseStartedMarker(comment.Content)
-		if marker == "" {
-			continue
-		}
-		at, err := time.Parse(time.RFC3339, marker)
-		if err != nil {
-			// A malformed marker is not an error the whole chart should fail on: the bar
-			// falls back to the issue's creation time and says so.
-			continue
-		}
-		// Comments are ordered oldest first, so the last assignment is the newest marker.
-		starts[comment.IssueID] = at.Unix()
-	}
-	return starts, nil
+	return ids
 }
 
 // arrowEdge is one dependency edge between two issues, before it is attached to whatever the

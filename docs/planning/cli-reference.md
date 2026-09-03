@@ -9,15 +9,21 @@ gitea-planning — a thin client over /api/planning/v1.
 Usage: gitea-planning <command> [positional...] [flags]
 
 Commands:
-  board                 A project board with horizontal groups
-  board-move-column     Move a card between the board's columns
-  board-move-group      Move a card between the board's groups
-  issue-create          Create an issue on a row
-  issue-move-group      Move a bar between the chart's groups
-  issue-move-milestone  Move an issue between the chart's milestone rows
-  issue-set-dates       Set a bar's start and end
-  milestone-create      Create a milestone row
-  roadmap               The roadmap: one bar per issue, with dependency arrows
+  board                  A project board with horizontal groups
+  board-move-column      Move a card between the board's columns
+  board-move-group       Move a card between the board's groups
+  issue                  The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
+  issue-clear-start      Clear an issue's start date
+  issue-create           Create an issue on a row
+  issue-move-group       Move a bar between the chart's groups
+  issue-move-milestone   Move an issue between the chart's milestone rows
+  issue-set-dates        Set a bar's start and end
+  issue-set-estimate     Set an issue's time estimate
+  issue-set-start        Set an issue's start date
+  milestone-clear-start  Clear a milestone's start date
+  milestone-create       Create a milestone row
+  milestone-set-start    Set a milestone's start date
+  roadmap                The roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -135,6 +141,76 @@ Flags:
     	asc or desc
   -project-id string
     	required. The board the card is on.
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue
+
+```
+gitea-planning issue — The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time
+
+  GET /issues/{issue_id}
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-clear-start
+
+```
+gitea-planning issue-clear-start — Clear an issue's start date
+
+  DELETE /issues/{issue_id}/schedule
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
   -q string
     	free-text search
   -repo string
@@ -307,6 +383,118 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
+## gitea-planning issue-set-estimate
+
+```
+gitea-planning issue-set-estimate — Set an issue's time estimate
+
+  PUT /issues/{issue_id}/estimate
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -time-estimate string
+    	required. Duration such as "3d" or "4h30m".
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-set-start
+
+```
+gitea-planning issue-set-start — Set an issue's start date
+
+  PUT /issues/{issue_id}/schedule
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -start string
+    	required. Start as an RFC 3339 timestamp or a YYYY-MM-DD date.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning milestone-clear-start
+
+```
+gitea-planning milestone-clear-start — Clear a milestone's start date
+
+  DELETE /milestones/{milestone_id}/schedule
+
+Positional arguments: milestone_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
 ## gitea-planning milestone-create
 
 ```
@@ -343,6 +531,44 @@ Flags:
     	sort field
   -title string
     	required. Milestone title.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning milestone-set-start
+
+```
+gitea-planning milestone-set-start — Set a milestone's start date
+
+  PUT /milestones/{milestone_id}/schedule
+
+Positional arguments: milestone_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -start string
+    	required. Start as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```

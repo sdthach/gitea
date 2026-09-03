@@ -27,10 +27,9 @@ import (
 type StartSource string
 
 const (
-	// StartFromProgress is ccpm's own record: `started:` in updates/<N>/progress.md,
-	// carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress
-	// comment. It is the only recorded start that exists.
-	StartFromProgress StartSource = "ccpm_started"
+	// StartFromSchedule is a recorded row in plan_issue_schedule, written through
+	// services/planning's own SetIssueStart rather than inferred from anything else.
+	StartFromSchedule StartSource = "schedule"
 	// StartFromCreated is the issue's creation time, the fallback start.
 	StartFromCreated StartSource = "issue_created"
 	// StartNone is an issue ccpm does not manage: it has no start to draw.
@@ -52,7 +51,7 @@ const (
 // StartSources and EndSources are the published enumerations, so the document, the CLI and
 // the page all read one list.
 var (
-	StartSources = []string{string(StartFromProgress), string(StartFromCreated), string(StartNone)}
+	StartSources = []string{string(StartFromSchedule), string(StartFromCreated), string(StartNone)}
 	EndSources   = []string{string(EndFromClosed), string(EndFromDeadline), string(EndFromEstimate)}
 )
 
@@ -71,34 +70,11 @@ var EffortDays = map[string]int64{"xs": 1, "s": 2, "m": 5, "l": 10, "xl": 20}
 // the middle size rather than zero: a zero-width bar would read as an instant task.
 const DefaultEffortDays = int64(5)
 
-// startedMarker is the trailer issue-sync posts on a progress comment. It is the only
-// carrier of ccpm's `started:` onto the forge, because Gitea has nowhere to store one.
-var startedMarker = regexp.MustCompile(`ccpm:started=([0-9TZ:+\-]{4,40})`)
-
 // effortLine reads the size token out of an Effort Estimate or Timebox line.
 var effortLine = regexp.MustCompile(`(?i)^[-*\s]*(?:size|timebox|effort)\s*:\s*([A-Za-z0-9.]+)`)
 
 // durationLiteral is a bare `3d` / `4h` / `90m` estimate.
 var durationLiteral = regexp.MustCompile(`^(\d+(?:\.\d+)?)([hdwm])$`)
-
-// StartedMarkerComment is the body of the comment a start-date write posts. It is the exact
-// inverse of ParseStartedMarker, so the chart reads back what the chart wrote: a start lives
-// on a comment because Gitea has nowhere else to keep one, and the progress file ccpm syncs
-// from is not something the forge can read.
-func StartedMarkerComment(startedUnix int64) string {
-	return "ccpm:started=" + time.Unix(startedUnix, 0).UTC().Format(time.RFC3339)
-}
-
-// ParseStartedMarker reads a ccpm:started marker out of a comment body, returning the
-// RFC 3339 text it carries. It returns "" when the comment carries none, which is the normal
-// case: most comments are not progress updates.
-func ParseStartedMarker(body string) string {
-	m := startedMarker.FindStringSubmatch(body)
-	if m == nil {
-		return ""
-	}
-	return strings.TrimSpace(m[1])
-}
 
 // ParseEffortSeconds reads an effort estimate out of an issue body, in the shape
 // references/issue-types.yaml renders it: an `### Effort Estimate` section holding
@@ -152,11 +128,11 @@ type BarInput struct {
 	// definition the board does.
 	Labels    []string
 	Assignees []string
-	// StartedUnix is the ccpm:started marker, 0 when the issue carries none.
-	StartedUnix  int64
-	CreatedUnix  int64
-	ClosedUnix   int64
-	DeadlineUnix int64
+	// ScheduledStartUnix is the recorded plan_issue_schedule row, 0 when the issue has none.
+	ScheduledStartUnix int64
+	CreatedUnix        int64
+	ClosedUnix         int64
+	DeadlineUnix       int64
 	// EffortSeconds is the parsed estimate, used only when nothing recorded an end.
 	EffortSeconds int64
 	IsClosed      bool
@@ -221,8 +197,8 @@ func ResolveBar(in BarInput) (Bar, bool) {
 	}
 
 	switch {
-	case in.StartedUnix > 0:
-		bar.StartUnix, bar.StartSource = in.StartedUnix, StartFromProgress
+	case in.ScheduledStartUnix > 0:
+		bar.StartUnix, bar.StartSource = in.ScheduledStartUnix, StartFromSchedule
 	default:
 		bar.StartUnix, bar.StartSource = in.CreatedUnix, StartFromCreated
 	}

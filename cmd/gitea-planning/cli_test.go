@@ -92,6 +92,27 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"issue-create", "--repo", "acme/widgets", "--title", "Wire it"},
 			"/api/planning/v1/issues", http.MethodPost,
 		},
+		"issue": {[]string{"issue", "9042"}, "/api/planning/v1/issues/9042", ""},
+		"issue-set-start": {
+			[]string{"issue-set-start", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
+			"/api/planning/v1/issues/9042/schedule", http.MethodPut,
+		},
+		"issue-clear-start": {
+			[]string{"issue-clear-start", "--repo", "acme/widgets", "9042"},
+			"/api/planning/v1/issues/9042/schedule", http.MethodDelete,
+		},
+		"milestone-set-start": {
+			[]string{"milestone-set-start", "--repo", "acme/widgets", "--start", "2026-03-01", "7"},
+			"/api/planning/v1/milestones/7/schedule", http.MethodPut,
+		},
+		"milestone-clear-start": {
+			[]string{"milestone-clear-start", "--repo", "acme/widgets", "7"},
+			"/api/planning/v1/milestones/7/schedule", http.MethodDelete,
+		},
+		"issue-set-estimate": {
+			[]string{"issue-set-estimate", "--repo", "acme/widgets", "--time-estimate", "3h", "9042"},
+			"/api/planning/v1/issues/9042/estimate", http.MethodPut,
+		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

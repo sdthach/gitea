@@ -31,23 +31,23 @@ import (
 // comment, a new issue — and the fork keeps no second history of the same edits.
 //
 // A start date is the exception with no Gitea field behind it: Gitea stores no start, so a
-// write posts the `ccpm:started=` comment the chart already reads, and nothing else in the
-// repository is touched.
+// write records it in plan_issue_schedule instead, and nothing in the repository is touched.
 
 const maxWriteBody = 16 << 10
 
 // writeBody is every field the four writes take between them. One shape keeps the
 // repository resolution and the permission check in one place.
 type writeBody struct {
-	Repo        string `json:"repo"`
-	MilestoneID int64  `json:"milestone_id"`
-	Start       string `json:"start"`
-	End         string `json:"end"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Epic        string `json:"epic"`
-	GroupBy     string `json:"group_by"`
-	Group       string `json:"group"`
+	Repo         string `json:"repo"`
+	MilestoneID  int64  `json:"milestone_id"`
+	Start        string `json:"start"`
+	End          string `json:"end"`
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	Epic         string `json:"epic"`
+	GroupBy      string `json:"group_by"`
+	Group        string `json:"group"`
+	TimeEstimate string `json:"time_estimate"`
 }
 
 var repoParam = []hubapi.Param{
@@ -82,9 +82,9 @@ func setIssueDatesEndpoint() *hubapi.Endpoint {
 			ID: "setIssueDates", Method: http.MethodPost, Path: "/issues/{issue_id}/dates",
 			Summary: "Set a bar's start and end",
 			Description: "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline " +
-				"comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads " +
-				"— no file in the repository is touched. Send either field empty to leave it as it stands. " +
-				"Authorized by Gitea's own write check on the Issues unit.",
+				"comment. The start is a recorded plan_issue_schedule row rather than a Gitea field — see PUT " +
+				"/issues/{issue_id}/schedule for the endpoint dedicated to it. Send either field empty to leave it as it " +
+				"stands. Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "roadmap", PathParams: issueParam,
 			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "start", In: "body", Type: "string", Description: "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date."},
@@ -213,10 +213,8 @@ func SetIssueDates(ctx *context.APIContext) {
 		}
 	}
 	if start != 0 {
-		// Gitea has no start field, so the record is the comment the chart already reads.
-		if _, err := issue_service.CreateIssueComment(ctx, ctx.Doer, repo, issue,
-			planning_service.StartedMarkerComment(start), nil); err != nil {
-			ctx.APIErrorInternal(err)
+		if err := planning_service.SetIssueStart(ctx, issue, time.Unix(start, 0).UTC()); err != nil {
+			hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
 			return
 		}
 	}

@@ -4,6 +4,7 @@
 package hub
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 
@@ -28,19 +29,25 @@ func RenderQueryError(ctx *context.APIContext, err *query.Error) {
 	ctx.JSON(err.Status, err)
 }
 
-// RenderHubError renders a hub error, which always carries its suggested action.
+// RenderHubError renders a hub error, which always carries its suggested action. Code
+// defaults to "hub_error" and Status to the status argument; either is used verbatim when the
+// error sets it.
 func RenderHubError(ctx *context.APIContext, status int, err error) {
-	var hubErr *hub_model.Error
-	if e, ok := err.(*hub_model.Error); ok {
-		hubErr = e
-	}
-	if hubErr == nil {
+	hubErr, ok := errors.AsType[*hub_model.Error](err)
+	if !ok {
 		ctx.APIErrorInternal(err)
 		return
 	}
+	code := "hub_error"
+	if hubErr.Code != "" {
+		code = hubErr.Code
+	}
+	if hubErr.Status != 0 {
+		status = hubErr.Status
+	}
 	ctx.JSON(status, &query.Error{
 		Status:          status,
-		Code:            "hub_error",
+		Code:            code,
 		Message:         hubErr.Message,
 		SuggestedAction: hubErr.SuggestedAction,
 	})
