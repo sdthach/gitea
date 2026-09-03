@@ -35,6 +35,13 @@
             },
             "type": "array"
           },
+          "labels": {
+            "description": "The repository's own labels plus its owning organization's: id, name and color.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "project_id": {
             "description": "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json.",
             "type": "integer"
@@ -59,7 +66,7 @@
             "type": "array"
           },
           "types": {
-            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, parent_issue_id, root_issue_id, depth and has_children.",
+            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, milestone_id, parent_issue_id, root_issue_id, depth and has_children.",
             "items": {
               "type": "object"
             },
@@ -72,6 +79,7 @@
           "columns",
           "group_by",
           "groups",
+          "labels",
           "project_id",
           "repo_full_name",
           "repo_id",
@@ -307,6 +315,44 @@
         ],
         "type": "object"
       },
+      "ProjectViewList": {
+        "properties": {
+          "views": {
+            "description": "The project's saved views: id, project_id, name, query, created_by and created_unix.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "views"
+        ],
+        "type": "object"
+      },
+      "ProjectsPage": {
+        "properties": {
+          "projects": {
+            "description": "Empty without repo_id. With it, the repository's own boards plus, when its owner is an organization, that organization's own: id, title, repo_id, owner_id, type, is_closed and columns.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repos": {
+            "description": "Without repo_id, every repository the caller can read the Issues unit of: id, full_name, owner, name, private and projects_enabled. With repo_id, that one repository.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects",
+          "repos"
+        ],
+        "type": "object"
+      },
       "Roadmap": {
         "properties": {
           "arrows": {
@@ -335,6 +381,13 @@
           },
           "groups": {
             "description": "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, and empty at a rolled-up zoom, which publishes no bars to group. Each group carries key, label, is_empty_value, cards and one column holding its bars.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "description": "The repository's own labels plus its owning organization's: id, name and color.",
             "items": {
               "type": "object"
             },
@@ -385,7 +438,7 @@
             "type": "array"
           },
           "unmanaged": {
-            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar.",
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each also carries labels, assignees, type, type_id, milestone_id and is_closed, the same fields a bar would have.",
             "items": {
               "type": "object"
             },
@@ -406,6 +459,7 @@
           "bars",
           "group_by",
           "groups",
+          "labels",
           "repo_full_name",
           "repo_id",
           "rollups",
@@ -2452,6 +2506,348 @@
         "summary": "Set a milestone's start date",
         "tags": [
           "issues"
+        ]
+      }
+    },
+    "/projects": {
+      "get": {
+        "description": "Without repo_id every repository the caller can read the Issues unit of, and no project: a picker lists repositories before a board is chosen. With repo_id, that one repository — 404 when it is not readable, never naming it — and the boards filed under it: its own repository projects, plus, when its owner is an organization, that organization's own projects. A repository whose Projects unit is unusable, instance-wide or on the repository itself, answers projects_unavailable exactly as /api/planning/v1/board does.",
+        "operationId": "listProjects",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on is_closed. Bare form means the eq operator.",
+            "in": "query",
+            "name": "is_closed",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsPage"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The repositories and boards a planning page can open",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/projects/{project_id}/views": {
+      "get": {
+        "description": "Needs Projects unit read on the named repository. The project must belong to that repository, or to its owning organization, else project_not_in_repo.",
+        "operationId": "getProjectViews",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+            "in": "query",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "A project's saved views",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Needs Projects unit write on the named repository. Refused with view_exists when the project already carries a view of that name.",
+        "operationId": "createProjectView",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "name": {
+                    "description": "The view's name, 1-100 characters, unique on the project.",
+                    "type": "string"
+                  },
+                  "query": {
+                    "description": "The saved query string, at most 4KiB.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Save a view on a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/projects/{project_id}/views/{view_id}": {
+      "delete": {
+        "description": "Needs Projects unit write on the named repository. view_not_found when the view belongs to a different project than project_id names.",
+        "operationId": "deleteProjectView",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The view to delete.",
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete a saved view",
+        "tags": [
+          "projects"
         ]
       }
     },

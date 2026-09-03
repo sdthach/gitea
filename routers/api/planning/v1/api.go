@@ -43,6 +43,10 @@ func endpoints() []*hubapi.Endpoint {
 		setIssueTypeEndpoint(),
 		clearIssueTypeEndpoint(),
 		getIssueTypeAssignmentsEndpoint(),
+		listProjectsEndpoint(),
+		getProjectViewsEndpoint(),
+		createProjectViewEndpoint(),
+		deleteProjectViewEndpoint(),
 	}
 }
 

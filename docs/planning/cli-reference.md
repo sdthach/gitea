@@ -32,6 +32,10 @@ Commands:
   milestone-clear-start   Clear a milestone's start date
   milestone-create        Create a milestone row
   milestone-set-start     Set a milestone's start date
+  project-view-delete     Delete a saved view
+  project-view-save       Save a view on a project
+  project-views           A project's saved views
+  projects                The repositories and boards a planning page can open
   roadmap                 The roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
@@ -918,6 +922,148 @@ Flags:
     	sort field
   -start string
     	required. Start as an RFC 3339 timestamp or a YYYY-MM-DD date.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning project-view-delete
+
+```
+gitea-planning project-view-delete — Delete a saved view
+
+  DELETE /projects/{project_id}/views/{view_id}
+
+Positional arguments: project_id view_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name; the project must belong to it, or to its owning organization.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning project-view-save
+
+```
+gitea-planning project-view-save — Save a view on a project
+
+  POST /projects/{project_id}/views
+
+Positional arguments: project_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -name string
+    	required. The view's name, 1-100 characters, unique on the project.
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -query string
+    	The saved query string, at most 4KiB.
+  -repo string
+    	required. Repository as owner/name; the project must belong to it, or to its owning organization.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning project-views
+
+```
+gitea-planning project-views — A project's saved views
+
+  GET /projects/{project_id}/views
+
+Positional arguments: project_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning projects
+
+```
+gitea-planning projects — The repositories and boards a planning page can open
+
+  GET /projects
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```

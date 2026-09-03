@@ -56,6 +56,23 @@ func TestEveryOperationGetsACommand(t *testing.T) {
 	assert.Len(t, names, len(seen))
 }
 
+// TestQueryParamNamesIncludesQueryParams proves an operation's non-grammar QueryParams (e.g.
+// getProjectViews' repo) become flags too, not only the grammar's own filterable fields.
+func TestQueryParamNamesIncludesQueryParams(t *testing.T) {
+	spec := query.Spec{
+		Resource: "x", PrimaryKey: "id", Paging: query.PagingOffset,
+		Fields: []query.Field{{Name: "repo_id", Column: "repo_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}}},
+	}
+	op := &hubapi.Operation{
+		ID: "getThings", Method: http.MethodGet, Path: "/things/{id}/x",
+		Query:       &spec,
+		QueryParams: []hubapi.Param{{Name: "repo", In: "query", Type: "string", Required: true}},
+	}
+	names := queryParamNames(op)
+	assert.Contains(t, names, "repo")
+	assert.Contains(t, names, "repo_id")
+}
+
 func TestRenderClientIsDeterministic(t *testing.T) {
 	ops := planningv1.Operations()
 	schemas := planningv1.Schemas()

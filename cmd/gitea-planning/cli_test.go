@@ -149,6 +149,22 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"issue-type-assignments", "--filter", "repo_id=1"},
 			"/api/planning/v1/issue-type-assignments", "",
 		},
+		"projects": {
+			[]string{"projects", "--filter", "repo_id=1"},
+			"/api/planning/v1/projects", "",
+		},
+		"project-views": {
+			[]string{"project-views", "--filter", "repo=user2/repo1", "5"},
+			"/api/planning/v1/projects/5/views", "",
+		},
+		"project-view-save": {
+			[]string{"project-view-save", "--repo", "acme/widgets", "--name", "open bugs", "--query", "state:open", "5"},
+			"/api/planning/v1/projects/5/views", http.MethodPost,
+		},
+		"project-view-delete": {
+			[]string{"project-view-delete", "--repo", "acme/widgets", "5", "9"},
+			"/api/planning/v1/projects/5/views/9", http.MethodDelete,
+		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 
@@ -180,4 +196,26 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			assert.Equal(t, "token t0ken", req.Header.Get("Authorization"))
 		})
 	}
+}
+
+// TestProjectViewsCommandSendsRepoOnTheQueryString: getProjectViews takes repo as a
+// non-grammar query parameter (its op has no filter grammar of its own), so the generated
+// client must still carry it onto the request's query string.
+func TestProjectViewsCommandSendsRepoOnTheQueryString(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "project-views", "--filter", "repo=user2/repo1", "5")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+	assert.Equal(t, "user2/repo1", rec.requests[0].URL.Query().Get("repo"))
+
+	found := false
+	for _, cmd := range Commands {
+		if cmd.Name == "project-views" {
+			found = true
+			assert.Contains(t, cmd.QueryParams, "repo", "the generated command must document repo as a query parameter")
+		}
+	}
+	require.True(t, found)
 }

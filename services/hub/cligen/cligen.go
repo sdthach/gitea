@@ -172,11 +172,23 @@ func boolBodyNames(op *hubapi.Operation) []string {
 	return names
 }
 
+// queryParamNames lists every flag a query parameter gets: the grammar's own filterable
+// fields plus an operation's non-grammar QueryParams (e.g. getProjectViews' repo), deduplicated
+// since a name could in principle appear in both.
 func queryParamNames(op *hubapi.Operation) []string {
-	params := op.GrammarParams()
-	names := make([]string, 0, len(params))
-	for _, p := range params {
-		names = append(names, p.Name)
+	seen := map[string]bool{}
+	names := make([]string, 0, len(op.QueryParams))
+	for _, p := range op.QueryParams {
+		if !seen[p.Name] {
+			seen[p.Name] = true
+			names = append(names, p.Name)
+		}
+	}
+	for _, p := range op.GrammarParams() {
+		if !seen[p.Name] {
+			seen[p.Name] = true
+			names = append(names, p.Name)
+		}
 	}
 	sort.Strings(names)
 	return names

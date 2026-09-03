@@ -80,6 +80,8 @@ type Roadmap struct {
 	// Types are the types visible from this repository, nearest scope shadowing by name —
 	// what a bar's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
+	// Labels are the repository's own labels plus its owning organization's.
+	Labels []LabelRef `json:"labels"`
 	// CanWrite says whether the caller may write on the Issues unit, so a client offers the
 	// chart's edits only to someone the endpoints will accept them from.
 	CanWrite bool `json:"can_write"`
@@ -266,7 +268,7 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		Rollups: []planning_service.RollupRow{}, Unmanaged: []planning_service.Unmanaged{},
 		Groups: []planning_service.Group{}, Milestones: []RoadmapMilestone{},
 		GroupBy: string(view.grouping), Zoom: string(view.zoom),
-		Types: []planning_service.VisibleType{}, CanWrite: canWrite,
+		Types: []planning_service.VisibleType{}, Labels: []LabelRef{}, CanWrite: canWrite,
 	}
 
 	types, err := planning_service.TypesFor(ctx, repo)
@@ -275,6 +277,13 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 		return
 	}
 	out.Types = types
+
+	labels, err := repoLabels(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	out.Labels = labels
 
 	parents, err := planning_service.ParentMap(ctx, repo.ID)
 	if err != nil {
@@ -390,6 +399,20 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	// Groups group the bars the response publishes, so a zoom that publishes none carries none.
 	if view.grouping != planning_service.GroupNone && len(out.Bars) > 0 {
 		out.Groups = planning_service.RoadmapGroups(out.Bars, view.grouping)
+		// A parent-grouped row's root may be unmanaged or off this chart entirely, exactly
+		// as on the board: its title is fetched here rather than left blank.
+		if missing := planning_service.GroupsMissingRootTitle(out.Groups); len(missing) > 0 {
+			roots, err := issues_model.GetIssuesByIDs(ctx, missing)
+			if err != nil {
+				ctx.APIErrorInternal(err)
+				return
+			}
+			titles := make(map[int64]string, len(roots))
+			for _, root := range roots {
+				titles[root.ID] = root.Title
+			}
+			planning_service.ApplyRootTitles(out.Groups, titles)
+		}
 	}
 	out.Ruler = rulerOver(out.Bars, out.Rollups)
 	ctx.JSON(http.StatusOK, out)

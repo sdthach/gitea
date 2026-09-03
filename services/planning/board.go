@@ -84,8 +84,12 @@ type Card struct {
 	TypeIcon  string   `json:"type_icon,omitempty"`
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
-	IsClosed  bool     `json:"is_closed"`
-	IsPull    bool     `json:"is_pull"`
+	// Milestone is the milestone's title, empty when the issue is filed under none;
+	// MilestoneID is its id.
+	Milestone   string `json:"milestone,omitempty"`
+	MilestoneID int64  `json:"milestone_id,omitempty"`
+	IsClosed    bool   `json:"is_closed"`
+	IsPull      bool   `json:"is_pull"`
 	// ParentIssueID is the issue's own recorded parent, 0 when it has none. RootIssueID is
 	// the top of its chain — itself when ParentIssueID is 0. Depth is its distance from that
 	// root. HasChildren says whether this issue itself has any recorded child.

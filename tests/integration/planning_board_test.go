@@ -44,9 +44,10 @@ type boardPayload struct {
 			ColumnID int64 `json:"column_id"`
 			Title    string
 			Cards    []struct {
-				IssueID  int64 `json:"issue_id"`
-				Number   int64 `json:"number"`
-				ColumnID int64 `json:"column_id"`
+				IssueID     int64 `json:"issue_id"`
+				Number      int64 `json:"number"`
+				ColumnID    int64 `json:"column_id"`
+				MilestoneID int64 `json:"milestone_id"`
 			} `json:"cards"`
 		} `json:"columns"`
 	} `json:"groups"`
@@ -54,8 +55,28 @@ type boardPayload struct {
 		IssueID       int64 `json:"issue_id"`
 		ParentIssueID int64 `json:"parent_issue_id"`
 	} `json:"tree"`
+	Labels []struct {
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	} `json:"labels"`
 	CanWrite     bool `json:"can_write"`
 	CanEditIssue bool `json:"can_edit_issue"`
+}
+
+// labelNames collects a projection's label names, for an ElementsMatch assertion that
+// does not care about order.
+func labelNames(labels []struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+},
+) []string {
+	names := make([]string, 0, len(labels))
+	for _, l := range labels {
+		names = append(names, l.Name)
+	}
+	return names
 }
 
 type hubRefusal struct {
@@ -127,6 +148,31 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 	// A legacy row with no column renders in the default one rather than vanishing.
 	assert.Equal(t, board.Columns[0].ColumnID, columnOf(t, board, 2),
 		"a card with no column lands in the default column, not off the board")
+
+	assert.ElementsMatch(t, []string{"label1", "label2"}, labelNames(board.Labels),
+		"the board carries the repository's own labels")
+	for _, group := range board.Groups {
+		for _, column := range group.Columns {
+			for _, card := range column.Cards {
+				if card.IssueID == 2 {
+					assert.Equal(t, int64(1), card.MilestoneID, "issue2's fixture milestone carries onto its card")
+				}
+			}
+		}
+	}
+}
+
+// TestAPIPlanningBoardLabelsIncludeTheOwningOrganization: repo3 is owned by org3, so its
+// board carries org3's own labels alongside the repository's own — repoLabels' organization
+// branch, which repo1's user ownership never reaches.
+func TestAPIPlanningBoardLabelsIncludeTheOwningOrganization(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	memberToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+	board := getBoard(t, memberToken, "repo_id=3&project_id=2")
+	names := labelNames(board.Labels)
+	assert.Contains(t, names, "orglabel3", "org3's own label")
+	assert.Contains(t, names, "repo3label1", "repo3's own label")
 }
 
 // TestAPIPlanningBoardGroupsByTypeAssigneeAndParent covers the three groupings over the wire.
@@ -421,12 +467,23 @@ type roadmapPayload struct {
 			Label string `json:"label"`
 		} `json:"ticks"`
 	} `json:"ruler"`
+	Labels []struct {
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	} `json:"labels"`
 	CanWrite  bool `json:"can_write"`
 	Truncated bool `json:"truncated"`
 	Unmanaged []struct {
-		Number          int64  `json:"number"`
-		Reason          string `json:"reason"`
-		SuggestedAction string `json:"suggested_action"`
+		Number          int64    `json:"number"`
+		Reason          string   `json:"reason"`
+		SuggestedAction string   `json:"suggested_action"`
+		Labels          []string `json:"labels"`
+		Assignees       []string `json:"assignees"`
+		Type            string   `json:"type"`
+		TypeID          int64    `json:"type_id"`
+		MilestoneID     int64    `json:"milestone_id"`
+		IsClosed        bool     `json:"is_closed"`
 	} `json:"unmanaged"`
 }
 
@@ -491,10 +548,68 @@ func TestAPIPlanningRoadmapListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 
 	assert.Empty(t, payload.Bars, "no fixture issue carries a type, a parent or a start, so nothing is drawn")
 	require.NotEmpty(t, payload.Unmanaged, "the issues are listed rather than dropped")
+	assert.ElementsMatch(t, []string{"label1", "label2"}, labelNames(payload.Labels),
+		"the roadmap carries the repository's own labels, same shape as the board")
+
+	found, foundClosed := false, false
 	for _, item := range payload.Unmanaged {
 		assert.Contains(t, item.Reason, "no type, no parent and no start date")
 		assert.NotEmpty(t, item.SuggestedAction, "every error carries a suggested next action")
+		if item.Number == 1 {
+			found = true
+			assert.Equal(t, []string{"label1"}, item.Labels, "an unmanaged row carries its own labels")
+			assert.Equal(t, []string{"user1"}, item.Assignees, "and its assignees")
+			assert.False(t, item.IsClosed)
+		}
+		// Issue 5 (index 4) is closed and otherwise unmanaged in the fixtures: its
+		// unmanaged row must carry the issue's own state, not a hardcoded false.
+		if item.Number == 4 {
+			foundClosed = true
+			assert.True(t, item.IsClosed, "issue5 is closed in the fixtures")
+		}
 	}
+	assert.True(t, found, "issue 1 is unmanaged in these fixtures")
+	assert.True(t, foundClosed, "issue5 is unmanaged and closed in these fixtures")
+}
+
+// TestPlanningRoadmapLabelsAParentGroupWhoseRootIsOffChart: a parent-grouped row's label
+// comes from the root issue's own title even when parent_issue_id narrows the fetch to the
+// root's descendants and the root itself is never drawn — the same gap readBoard's own
+// ApplyRootTitles closes for the board.
+func TestPlanningRoadmapLabelsAParentGroupWhoseRootIsOffChart(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	epic := issueType(t, 1, "epic", "#8250df", "octicon-rocket", 1)
+	bug := issueType(t, 1, "bug", "#d1242f", "octicon-bug", 3)
+
+	now := timeutil.TimeStamp(1700000000)
+	root := &issues_model.Issue{
+		ID: 9901, RepoID: 1, Index: 9901, PosterID: 2, Title: "roadmap root off chart",
+		CreatedUnix: now, UpdatedUnix: now,
+	}
+	require.NoError(t, db.Insert(t.Context(), root))
+	require.NoError(t, planning_model.UpsertAssignment(t.Context(), root.ID, epic.ID))
+
+	setIssueType(t, token, "user2/repo1", 1, bug.ID)
+	setIssueParent(t, token, "user2/repo1", 1, root.ID)
+
+	// parent_issue_id narrows the fetch to root's own descendants — never root itself — so
+	// root draws no bar despite being fully managed.
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&group_by=parent&limit=200&parent_issue_id="+strconv.FormatInt(root.ID, 10)).AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+	var payload roadmapPayload
+	DecodeJSON(t, resp, &payload)
+
+	key := strconv.FormatInt(root.ID, 10)
+	found := false
+	for _, group := range payload.Groups {
+		if group.Key == key {
+			found = true
+			assert.Equal(t, root.Title, group.Label, "the group's title comes from the root even though it draws no bar")
+		}
+	}
+	assert.True(t, found, "the group for the off-chart root exists")
 }
 
 // TestAPIPlanningRoadmapDistinguishesAGateFromASequencingHint: they do not read

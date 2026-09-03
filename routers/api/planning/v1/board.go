@@ -60,6 +60,9 @@ type Board struct {
 	Tree []planning_service.TreeEdge `json:"tree"`
 	// Types are the types visible from this repository, what a card's type picker offers.
 	Types []planning_service.VisibleType `json:"types"`
+	// Labels are the repository's own labels plus its owning organization's, what a card's
+	// label picker offers.
+	Labels []LabelRef `json:"labels"`
 	// CanWrite is whether the calling user may perform either of the two writes, resolved
 	// by the same checks the write endpoints enforce, so the page offers no action it
 	// would be refused for.
@@ -345,6 +348,9 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		if at, ok := assigned[issue.ID]; ok {
 			card.Type, card.TypeID, card.TypeColor, card.TypeIcon = at.Name, at.TypeID, at.Color, at.Icon
 		}
+		if issue.Milestone != nil {
+			card.Milestone, card.MilestoneID = issue.Milestone.Name, issue.Milestone.ID
+		}
 		for _, label := range issue.Labels {
 			card.Labels = append(card.Labels, label.Name)
 		}
@@ -355,6 +361,12 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 	}
 
 	types, err := planning_service.TypesFor(ctx, repo)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return nil, false
+	}
+
+	labels, err := repoLabels(ctx, repo)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return nil, false
@@ -384,6 +396,7 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		Groups:       groups,
 		Tree:         planning_service.BuildTree(parents),
 		Types:        types,
+		Labels:       labels,
 		CanWrite:     perm.CanWrite(unit.TypeProjects),
 		CanEditIssue: perm.CanWrite(unit.TypeIssues),
 	}, true

@@ -185,7 +185,7 @@ var Commands = []hubcli.Command{
 		Path:         "/insights/deployments",
 		Summary:      "Deployment summary view",
 		PathParams:   nil,
-		QueryParams:  []string{"branch", "branch[contains]", "branch[in]", "branch[ne]", "created_unix", "created_unix[gt]", "created_unix[gte]", "created_unix[in]", "created_unix[lt]", "created_unix[lte]", "created_unix[ne]", "cursor", "environment", "environment[contains]", "environment[in]", "environment[ne]", "id", "id[gt]", "id[gte]", "id[in]", "id[lt]", "id[lte]", "id[ne]", "limit", "order", "q", "release_tag", "release_tag[contains]", "release_tag[in]", "release_tag[ne]", "repo_id", "repo_id[gt]", "repo_id[gte]", "repo_id[in]", "repo_id[lt]", "repo_id[lte]", "repo_id[ne]", "sort_by", "status", "status[contains]", "status[in]", "status[ne]"},
+		QueryParams:  []string{"branch", "branch[contains]", "branch[in]", "branch[ne]", "created_unix", "created_unix[gt]", "created_unix[gte]", "created_unix[in]", "created_unix[lt]", "created_unix[lte]", "created_unix[ne]", "cursor", "environment", "environment[contains]", "environment[in]", "environment[ne]", "fields", "id", "id[gt]", "id[gte]", "id[in]", "id[lt]", "id[lte]", "id[ne]", "limit", "order", "q", "release_tag", "release_tag[contains]", "release_tag[in]", "release_tag[ne]", "repo_id", "repo_id[gt]", "repo_id[gte]", "repo_id[in]", "repo_id[lt]", "repo_id[lte]", "repo_id[ne]", "sort_by", "status", "status[contains]", "status[in]", "status[ne]"},
 		BodyParams:   nil,
 		RequiredBody: nil,
 		BoolBody:     nil,

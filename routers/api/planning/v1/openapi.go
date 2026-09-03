@@ -30,11 +30,12 @@ var componentSchemas = map[string]any{
 		"tree": hubapi.ArrayProp("object", "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id, "+
 			"so a client can draw the hierarchy without re-deriving it from each card's own parent_issue_id."),
 		"types": hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a card's "+
-			"type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, parent_issue_id, "+
-			"root_issue_id, depth and has_children."),
+			"type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, "+
+			"milestone_id, parent_issue_id, root_issue_id, depth and has_children."),
+		"labels":         hubapi.ArrayProp("object", "The repository's own labels plus its owning organization's: id, name and color."),
 		"can_write":      hubapi.Prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
 		"can_edit_issue": hubapi.Prop("boolean", "Whether the caller may move a card between groups, which edits the issue's own label, assignee, assigned type or recorded parent."),
-	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "tree", "types", "can_write", "can_edit_issue"),
+	}, "repo_id", "repo_full_name", "project_id", "group_by", "columns", "groups", "tree", "types", "labels", "can_write", "can_edit_issue"),
 	"Roadmap": hubapi.ObjectSchema(map[string]any{
 		"repo_id":        hubapi.Prop("integer", "Repository the chart covers."),
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
@@ -58,7 +59,8 @@ var componentSchemas = map[string]any{
 			"declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row "+
 			"publishes progress 0, because a fraction of an unknown denominator is not a measurement."),
 		"unmanaged": hubapi.ArrayProp("object", "Issues with no bar, each with the reason and a suggested action. An issue with no "+
-			"type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar."),
+			"type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each "+
+			"also carries labels, assignees, type, type_id, milestone_id and is_closed, the same fields a bar would have."),
 		"group_by": hubapi.EnumProp("The active grouping, reusing the board's own. A view setting, never stored.", planning_service.Groupings),
 		"zoom":     hubapi.EnumProp("The depth the chart is read at. At parent or milestone only rollup rows are listed and no bar is drawn.", planning_service.Zooms),
 		"groups": hubapi.ArrayProp("object", "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, "+
@@ -72,7 +74,8 @@ var componentSchemas = map[string]any{
 		"tree":      hubapi.ArrayProp("object", "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id."),
 		"truncated": hubapi.Prop("boolean", "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so."),
 		"types":     hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a bar's type picker offers."),
-	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "tree", "types", "truncated"),
+		"labels":    hubapi.ArrayProp("object", "The repository's own labels plus its owning organization's: id, name and color."),
+	}, "repo_id", "repo_full_name", "bars", "arrows", "rollups", "unmanaged", "group_by", "zoom", "groups", "ruler", "tree", "types", "labels", "truncated"),
 	"IssueFacets": hubapi.ObjectSchema(map[string]any{
 		"issue_id":  hubapi.Prop("integer", "The issue's global id."),
 		"number":    hubapi.Prop("integer", "The issue's per-repository number."),
@@ -113,6 +116,15 @@ var componentSchemas = map[string]any{
 		"start_unix":   hubapi.Prop("integer", "The recorded start, 0 when unset."),
 		"due_unix":     hubapi.Prop("integer", "The milestone's own deadline, 0 when unset."),
 	}, "milestone_id", "title", "start_unix", "due_unix"),
+	"ProjectsPage": hubapi.ObjectSchema(map[string]any{
+		"repos": hubapi.ArrayProp("object", "Without repo_id, every repository the caller can read the Issues unit of: "+
+			"id, full_name, owner, name, private and projects_enabled. With repo_id, that one repository."),
+		"projects": hubapi.ArrayProp("object", "Empty without repo_id. With it, the repository's own boards plus, when its "+
+			"owner is an organization, that organization's own: id, title, repo_id, owner_id, type, is_closed and columns."),
+	}, "repos", "projects"),
+	"ProjectViewList": hubapi.ObjectSchema(map[string]any{
+		"views": hubapi.ArrayProp("object", "The project's saved views: id, project_id, name, query, created_by and created_unix."),
+	}, "views"),
 	"Error": hubapi.ErrorSchema(),
 }
 

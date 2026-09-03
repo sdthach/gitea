@@ -191,6 +191,15 @@ type Unmanaged struct {
 	Reason  string `json:"reason"`
 	// SuggestedAction is what to do about it, like every other refusal.
 	SuggestedAction string `json:"suggested_action"`
+	// Labels, Assignees, Type, TypeID, MilestoneID and IsClosed are the same fields a bar
+	// would have carried, published even without a bar so a client can still filter and
+	// group the issues it lists here.
+	Labels      []string `json:"labels,omitempty"`
+	Assignees   []string `json:"assignees,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	TypeID      int64    `json:"type_id,omitempty"`
+	MilestoneID int64    `json:"milestone_id,omitempty"`
+	IsClosed    bool     `json:"is_closed"`
 }
 
 // Managed reports whether an issue is managed enough to draw a bar for it: it carries an
@@ -255,6 +264,8 @@ func UnmanagedFor(in BarInput) Unmanaged {
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Reason:          "this issue has no type, no parent and no start date, so there is no bar to draw",
 		SuggestedAction: "Set a type, a parent or a start date first. A bar drawn from creation alone would present a guess as a schedule.",
+		Labels:          in.Labels, Assignees: in.Assignees,
+		Type: in.TypeName, TypeID: in.TypeID, MilestoneID: in.MilestoneID, IsClosed: in.IsClosed,
 	}
 }
 
