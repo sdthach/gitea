@@ -4,9 +4,9 @@
 		<h2 class="ui header">{{.Title}}</h2>
 		<p class="tw-text-14">
 			Every run across the repositories you can see. Gitea shows runs one repository at a time;
-			this is the aggregate, served by <code>{{.DeliveryAPIBase}}/overview</code>. Every figure here
+			this is the aggregate, served by <code>{{.DeliveryAPIBase}}/insights</code>. Every figure here
 			is also reachable on its own from <code>/runs</code>, <code>/workflows</code> and
-			<code>/overview/repos</code>, and every detail links out to Gitea's own page.
+			<code>/insights/repos</code>, and every detail links out to Gitea's own page.
 		</p>
 
 		<div class="ui form">
@@ -187,11 +187,11 @@ async function load() {
 		// Five documented endpoints, no private data path: the composite saves the page a
 		// round trip, and each list is independently queryable.
 		const [overview, recent, failed, repos, trends] = await Promise.all([
-			get(`/overview?${windowParam}`),
+			get(`/insights?${windowParam}`),
 			get(`/runs?limit=10&sort_by=created_unix&order=desc`),
 			get(`/runs?limit=10&sort_by=created_unix&order=desc&status[eq]=failure`),
-			get(`/overview/repos?${windowParam}&limit=10&sort_by=runs&order=desc`),
-			get(`/overview/trends?${windowParam}`),
+			get(`/insights/repos?${windowParam}&limit=10&sort_by=runs&order=desc`),
+			get(`/insights/trends?${windowParam}`),
 		]);
 		$('delivery-error').classList.add('tw-hidden');
 		renderTiles(overview);

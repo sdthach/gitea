@@ -9,27 +9,27 @@ gitea-deployments — a thin client over /api/deployments/v1.
 Usage: gitea-deployments <command> [positional...] [flags]
 
 Commands:
-  approvals                 List held deploys and their approval state
   approve                   Approve a held deploy
   audit                     List delivery audit events across every repository the caller can see
   deploy                    Plan or dispatch a deploy of a release to an environment
-  deployment-summary        Deployment summary view
+  deployment-matrix         The release × environment deployment matrix
   deployments               List deployments across every repository the caller can see
   environment               Read one environment by id
   environment-create        Create an environment
   environment-delete        Delete an environment
   environment-update        Update an environment
   environments              List environments across every repository the caller can see
-  grid                      The release × environment grid
-  overview                  The cross-repository CI summary and its comparison window
-  overview-repos            List repositories by run volume, with success rate and average duration
-  overview-trends           The daily trend series: total, successful and failed runs, average duration and deployments
+  insights                  The cross-repository CI summary and its comparison window
+  insights-deployments      Deployment summary view
+  insights-repos            List repositories by run volume, with success rate and average duration
+  insights-trends           The daily trend series: total, successful and failed runs, average duration and deployments
   reject                    Reject a held deploy
   releases                  List a repository's releases, the rows of the grid
   repo-environment          Read one environment
   repo-environment-secrets  List the secret NAMES scoped to one environment
   repo-environments         List one repository's environments
   repos                     List the repositories the caller can see delivery data for
+  reviews                   List held deploys and their review state
   rollback                  Plan or dispatch a deploy of a release to an environment
   runs                      List Actions runs across every repository the caller can see
   secret-scope-create       Bind a secret to an environment
@@ -48,44 +48,12 @@ Exit codes: 0 success, 1 request failed, 2 usage error, 3 refused by the server.
 See docs/deployments/openapi.json for the published OpenAPI document.
 ```
 
-## gitea-deployments approvals
-
-```
-gitea-deployments approvals — List held deploys and their approval state
-
-  GET /approvals
-
-Flags:
-  -cursor string
-    	opaque cursor from a previous response
-  -expand string
-    	comma-separated sub-resources, one level deep
-  -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim
-  -json
-    	emit the API response verbatim and unshaped
-  -limit int
-    	page size; the server defaults to 50 and caps at 200
-  -offset int
-    	row offset, converted to the 1-based page the API takes
-  -order string
-    	asc or desc
-  -q string
-    	free-text search
-  -server string
-    	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
-  -sort-by string
-    	sort field
-  -token string
-    	API token; resolved by the same precedence detect.sh implements
-```
-
 ## gitea-deployments approve
 
 ```
 gitea-deployments approve — Approve a held deploy
 
-  POST /approvals/{id}/approve
+  POST /reviews/{id}/approve
 
 Positional arguments: id
 
@@ -188,12 +156,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-deployments deployment-summary
+## gitea-deployments deployment-matrix
 
 ```
-gitea-deployments deployment-summary — Deployment summary view
+gitea-deployments deployment-matrix — The release × environment deployment matrix
 
-  GET /deployment-summary
+  GET /deployments/matrix
 
 Flags:
   -cursor string
@@ -466,12 +434,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-deployments grid
+## gitea-deployments insights
 
 ```
-gitea-deployments grid — The release × environment grid
+gitea-deployments insights — The cross-repository CI summary and its comparison window
 
-  GET /grid
+  GET /insights
 
 Flags:
   -cursor string
@@ -498,12 +466,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-deployments overview
+## gitea-deployments insights-deployments
 
 ```
-gitea-deployments overview — The cross-repository CI summary and its comparison window
+gitea-deployments insights-deployments — Deployment summary view
 
-  GET /overview
+  GET /insights/deployments
 
 Flags:
   -cursor string
@@ -530,12 +498,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-deployments overview-repos
+## gitea-deployments insights-repos
 
 ```
-gitea-deployments overview-repos — List repositories by run volume, with success rate and average duration
+gitea-deployments insights-repos — List repositories by run volume, with success rate and average duration
 
-  GET /overview/repos
+  GET /insights/repos
 
 Flags:
   -cursor string
@@ -562,12 +530,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-deployments overview-trends
+## gitea-deployments insights-trends
 
 ```
-gitea-deployments overview-trends — The daily trend series: total, successful and failed runs, average duration and deployments
+gitea-deployments insights-trends — The daily trend series: total, successful and failed runs, average duration and deployments
 
-  GET /overview/trends
+  GET /insights/trends
 
 Flags:
   -cursor string
@@ -599,7 +567,7 @@ Flags:
 ```
 gitea-deployments reject — Reject a held deploy
 
-  POST /approvals/{id}/reject
+  POST /reviews/{id}/reject
 
 Positional arguments: id
 
@@ -770,6 +738,38 @@ Flags:
 gitea-deployments repos — List the repositories the caller can see delivery data for
 
   GET /repos
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-deployments reviews
+
+```
+gitea-deployments reviews — List held deploys and their review state
+
+  GET /reviews
 
 Flags:
   -cursor string

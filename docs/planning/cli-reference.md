@@ -9,15 +9,15 @@ gitea-planning — a thin client over /api/planning/v1.
 Usage: gitea-planning <command> [positional...] [flags]
 
 Commands:
-  board                      A project board with horizontal swimlanes
-  board-move-column          Move a card between the board's columns
-  board-move-lane            Move a card between the board's lanes
-  timeline                   The delivery timeline: one bar per issue, with dependency arrows
-  timeline-create-issue      Create an issue on a row
-  timeline-create-milestone  Create a milestone row
-  timeline-move-lane         Move a bar between the chart's lanes
-  timeline-move-milestone    Move an issue between the chart's milestone rows
-  timeline-set-dates         Set a bar's start and end
+  board                 A project board with horizontal groups
+  board-move-column     Move a card between the board's columns
+  board-move-group      Move a card between the board's groups
+  issue-create          Create an issue on a row
+  issue-move-group      Move a bar between the chart's groups
+  issue-move-milestone  Move an issue between the chart's milestone rows
+  issue-set-dates       Set a bar's start and end
+  milestone-create      Create a milestone row
+  roadmap               The delivery roadmap: one bar per issue, with dependency arrows
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -34,7 +34,7 @@ See docs/planning/openapi.json for the published OpenAPI document.
 ## gitea-planning board
 
 ```
-gitea-planning board — A project board with horizontal swimlanes
+gitea-planning board — A project board with horizontal groups
 
   GET /board
 
@@ -105,12 +105,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-planning board-move-lane
+## gitea-planning board-move-group
 
 ```
-gitea-planning board-move-lane — Move a card between the board's lanes
+gitea-planning board-move-group — Move a card between the board's groups
 
-  POST /board/cards/{issue_id}/lane
+  POST /board/cards/{issue_id}/group
 
 Positional arguments: issue_id
 
@@ -121,12 +121,12 @@ Flags:
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
     	repeatable field[op]=value filter; sent to the server verbatim
+  -group string
+    	The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.
   -group-by string
-    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write.
+    	required. The active grouping. A group move is refused when this is none, because there is nothing to write.
   -json
     	emit the API response verbatim and unshaped
-  -lane string
-    	The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.
   -limit int
     	page size; the server defaults to 50 and caps at 200
   -offset int
@@ -147,44 +147,12 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-planning timeline
+## gitea-planning issue-create
 
 ```
-gitea-planning timeline — The delivery timeline: one bar per issue, with dependency arrows
+gitea-planning issue-create — Create an issue on a row
 
-  GET /timeline
-
-Flags:
-  -cursor string
-    	opaque cursor from a previous response
-  -expand string
-    	comma-separated sub-resources, one level deep
-  -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim
-  -json
-    	emit the API response verbatim and unshaped
-  -limit int
-    	page size; the server defaults to 50 and caps at 200
-  -offset int
-    	row offset, converted to the 1-based page the API takes
-  -order string
-    	asc or desc
-  -q string
-    	free-text search
-  -server string
-    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
-  -sort-by string
-    	sort field
-  -token string
-    	API token; resolved by the same precedence detect.sh implements
-```
-
-## gitea-planning timeline-create-issue
-
-```
-gitea-planning timeline-create-issue — Create an issue on a row
-
-  POST /timeline/issues
+  POST /issues
 
 Flags:
   -cursor string
@@ -221,12 +189,130 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-planning timeline-create-milestone
+## gitea-planning issue-move-group
 
 ```
-gitea-planning timeline-create-milestone — Create a milestone row
+gitea-planning issue-move-group — Move a bar between the chart's groups
 
-  POST /timeline/milestones
+  POST /issues/{issue_id}/group
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -group string
+    	The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.
+  -group-by string
+    	required. The active grouping. A group move is refused when this is none, because there is nothing to write.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-move-milestone
+
+```
+gitea-planning issue-move-milestone — Move an issue between the chart's milestone rows
+
+  POST /issues/{issue_id}/milestone
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -milestone-id string
+    	Target milestone; 0 removes the issue from its row.
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning issue-set-dates
+
+```
+gitea-planning issue-set-dates — Set a bar's start and end
+
+  POST /issues/{issue_id}/dates
+
+Positional arguments: issue_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -end string
+    	Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -repo string
+    	required. Repository as owner/name.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -start string
+    	Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning milestone-create
+
+```
+gitea-planning milestone-create — Create a milestone row
+
+  POST /milestones
 
 Flags:
   -cursor string
@@ -261,98 +347,16 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
-## gitea-planning timeline-move-lane
+## gitea-planning roadmap
 
 ```
-gitea-planning timeline-move-lane — Move a bar between the chart's lanes
+gitea-planning roadmap — The delivery roadmap: one bar per issue, with dependency arrows
 
-  POST /timeline/issues/{issue_id}/lane
-
-Positional arguments: issue_id
+  GET /roadmap
 
 Flags:
   -cursor string
     	opaque cursor from a previous response
-  -expand string
-    	comma-separated sub-resources, one level deep
-  -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim
-  -group-by string
-    	required. The active grouping. A lane move is refused when this is none, because there is nothing to write.
-  -json
-    	emit the API response verbatim and unshaped
-  -lane string
-    	The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.
-  -limit int
-    	page size; the server defaults to 50 and caps at 200
-  -offset int
-    	row offset, converted to the 1-based page the API takes
-  -order string
-    	asc or desc
-  -q string
-    	free-text search
-  -repo string
-    	required. Repository as owner/name.
-  -server string
-    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
-  -sort-by string
-    	sort field
-  -token string
-    	API token; resolved by the same precedence detect.sh implements
-```
-
-## gitea-planning timeline-move-milestone
-
-```
-gitea-planning timeline-move-milestone — Move an issue between the chart's milestone rows
-
-  POST /timeline/issues/{issue_id}/milestone
-
-Positional arguments: issue_id
-
-Flags:
-  -cursor string
-    	opaque cursor from a previous response
-  -expand string
-    	comma-separated sub-resources, one level deep
-  -filter field[op]=value
-    	repeatable field[op]=value filter; sent to the server verbatim
-  -json
-    	emit the API response verbatim and unshaped
-  -limit int
-    	page size; the server defaults to 50 and caps at 200
-  -milestone-id string
-    	Target milestone; 0 removes the issue from its row.
-  -offset int
-    	row offset, converted to the 1-based page the API takes
-  -order string
-    	asc or desc
-  -q string
-    	free-text search
-  -repo string
-    	required. Repository as owner/name.
-  -server string
-    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
-  -sort-by string
-    	sort field
-  -token string
-    	API token; resolved by the same precedence detect.sh implements
-```
-
-## gitea-planning timeline-set-dates
-
-```
-gitea-planning timeline-set-dates — Set a bar's start and end
-
-  POST /timeline/issues/{issue_id}/dates
-
-Positional arguments: issue_id
-
-Flags:
-  -cursor string
-    	opaque cursor from a previous response
-  -end string
-    	Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -367,14 +371,10 @@ Flags:
     	asc or desc
   -q string
     	free-text search
-  -repo string
-    	required. Repository as owner/name.
   -server string
     	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string
     	sort field
-  -start string
-    	Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```

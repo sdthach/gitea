@@ -26,7 +26,7 @@ import (
 	planning_service "gitea.dev/services/planning"
 )
 
-// The timeline's writes. Every one goes through Gitea's own service layer as the calling
+// The roadmap's writes. Every one goes through Gitea's own service layer as the calling
 // user, so each leaves the record Gitea leaves for it — a milestone comment, a deadline
 // comment, a new issue — and the fork keeps no second history of the same edits.
 //
@@ -34,11 +34,11 @@ import (
 // write posts the `ccpm:started=` comment the chart already reads, and nothing else in the
 // repository is touched.
 
-const maxTimelineBody = 16 << 10
+const maxWriteBody = 16 << 10
 
-// timelineWriteBody is every field the four writes take between them. One shape keeps the
+// writeBody is every field the four writes take between them. One shape keeps the
 // repository resolution and the permission check in one place.
-type timelineWriteBody struct {
+type writeBody struct {
 	Repo        string `json:"repo"`
 	MilestoneID int64  `json:"milestone_id"`
 	Start       string `json:"start"`
@@ -47,130 +47,130 @@ type timelineWriteBody struct {
 	Description string `json:"description"`
 	Epic        string `json:"epic"`
 	GroupBy     string `json:"group_by"`
-	Lane        string `json:"lane"`
+	Group       string `json:"group"`
 }
 
-var timelineRepoParam = []hubapi.Param{
+var repoParam = []hubapi.Param{
 	{Name: "repo", In: "body", Type: "string", Required: true, Description: "Repository as owner/name."},
 }
 
-var timelineIssueParam = []hubapi.Param{
-	{Name: "issue_id", In: "path", Type: "integer", Required: true, Description: "The issue's global id, as the timeline's bars publish it."},
+var issueParam = []hubapi.Param{
+	{Name: "issue_id", In: "path", Type: "integer", Required: true, Description: "The issue's global id, as the roadmap's bars publish it."},
 }
 
-func moveTimelineIssueMilestoneEndpoint() *hubapi.Endpoint {
+func moveIssueMilestoneEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "moveTimelineIssueMilestone", Method: http.MethodPost, Path: "/timeline/issues/{issue_id}/milestone",
+			ID: "moveIssueMilestone", Method: http.MethodPost, Path: "/issues/{issue_id}/milestone",
 			Summary: "Move an issue between the chart's milestone rows",
 			Description: "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records " +
 				"the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
-			Tag: "timeline", PathParams: timelineIssueParam,
-			Body: append(append([]hubapi.Param{}, timelineRepoParam...),
+			Tag: "roadmap", PathParams: issueParam,
+			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "milestone_id", In: "body", Type: "integer", Description: "Target milestone; 0 removes the issue from its row."}),
-			CLINames: []string{"timeline-move-milestone"},
-			Response: "Timeline", ResponseIs: "object",
+			CLINames: []string{"issue-move-milestone"},
+			Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: MoveTimelineIssueMilestone,
+		Handler: MoveIssueMilestone,
 	}
 }
 
-func setTimelineIssueDatesEndpoint() *hubapi.Endpoint {
+func setIssueDatesEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "setTimelineIssueDates", Method: http.MethodPost, Path: "/timeline/issues/{issue_id}/dates",
+			ID: "setIssueDates", Method: http.MethodPost, Path: "/issues/{issue_id}/dates",
 			Summary: "Set a bar's start and end",
 			Description: "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline " +
 				"comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads " +
 				"— no file in the repository is touched. Send either field empty to leave it as it stands. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
-			Tag: "timeline", PathParams: timelineIssueParam,
-			Body: append(append([]hubapi.Param{}, timelineRepoParam...),
+			Tag: "roadmap", PathParams: issueParam,
+			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "start", In: "body", Type: "string", Description: "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date."},
 				hubapi.Param{Name: "end", In: "body", Type: "string", Description: "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date."}),
-			CLINames: []string{"timeline-set-dates"},
-			Response: "Timeline", ResponseIs: "object",
+			CLINames: []string{"issue-set-dates"},
+			Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: SetTimelineIssueDates,
+		Handler: SetIssueDates,
 	}
 }
 
-func moveTimelineIssueLaneEndpoint() *hubapi.Endpoint {
+func moveIssueGroupEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "moveTimelineIssueLane", Method: http.MethodPost, Path: "/timeline/issues/{issue_id}/lane",
-			Summary: "Move a bar between the chart's lanes",
-			Description: "The chart's vertical drag. A lane IS the grouping value, so moving between lanes edits the " +
-				"field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanLaneMove " +
-				"the board's lane move goes through, so a vertical drag on the chart and a lane move on the board are one " +
+			ID: "moveIssueGroup", Method: http.MethodPost, Path: "/issues/{issue_id}/group",
+			Summary: "Move a bar between the chart's groups",
+			Description: "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the " +
+				"field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanGroupMove " +
+				"the board's group move goes through, so a vertical drag on the chart and a group move on the board are one " +
 				"operation with one definition rather than two that can drift. Dragging vertically writes the grouping " +
 				"field and dragging horizontally writes dates; the two are independent. " +
 				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
-			Tag: "timeline", PathParams: timelineIssueParam,
-			Body: append(append([]hubapi.Param{}, timelineRepoParam...),
+			Tag: "roadmap", PathParams: issueParam,
+			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{
 					Name: "group_by", In: "body", Type: "string", Required: true, Enum: planning_service.Groupings,
-					Description: "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
+					Description: "The active grouping. A group move is refused when this is none, because there is nothing to write.",
 				},
 				hubapi.Param{
-					Name: "lane", In: "body", Type: "string",
-					Description: "The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.",
+					Name: "group", In: "body", Type: "string",
+					Description: "The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.",
 				}),
-			CLINames: []string{"timeline-move-lane"},
-			Response: "Timeline", ResponseIs: "object",
+			CLINames: []string{"issue-move-group"},
+			Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: MoveTimelineIssueLane,
+		Handler: MoveIssueGroup,
 	}
 }
 
-func createTimelineMilestoneEndpoint() *hubapi.Endpoint {
+func createMilestoneEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "createTimelineMilestone", Method: http.MethodPost, Path: "/timeline/milestones",
+			ID: "createMilestone", Method: http.MethodPost, Path: "/milestones",
 			Summary:     "Create a milestone row",
 			Description: "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
-			Tag:         "timeline",
-			Body: append(append([]hubapi.Param{}, timelineRepoParam...),
+			Tag:         "roadmap",
+			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Milestone title."},
 				hubapi.Param{Name: "description", In: "body", Type: "string", Description: "Milestone description."},
 				hubapi.Param{Name: "end", In: "body", Type: "string", Description: "Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date."}),
-			CLINames: []string{"timeline-create-milestone"},
-			Response: "Timeline", ResponseIs: "object",
+			CLINames: []string{"milestone-create"},
+			Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: CreateTimelineMilestone,
+		Handler: CreateMilestone,
 	}
 }
 
-func createTimelineIssueEndpoint() *hubapi.Endpoint {
+func createIssueEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "createTimelineIssue", Method: http.MethodPost, Path: "/timeline/issues",
+			ID: "createIssue", Method: http.MethodPost, Path: "/issues",
 			Summary: "Create an issue on a row",
 			Description: "Creates the issue and files it under the milestone row and, when epic is given, the epic: label " +
 				"the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
-			Tag: "timeline",
-			Body: append(append([]hubapi.Param{}, timelineRepoParam...),
+			Tag: "roadmap",
+			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Issue title."},
 				hubapi.Param{Name: "description", In: "body", Type: "string", Description: "Issue body."},
 				hubapi.Param{Name: "milestone_id", In: "body", Type: "integer", Description: "Milestone row to file it under."},
 				hubapi.Param{Name: "epic", In: "body", Type: "string", Description: "Epic name; the issue is labelled epic:<name> so the chart draws it."}),
-			CLINames: []string{"timeline-create-issue"},
-			Response: "Timeline", ResponseIs: "object",
+			CLINames: []string{"issue-create"},
+			Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: CreateTimelineIssue,
+		Handler: CreateIssue,
 	}
 }
 
-// MoveTimelineIssueMilestone answers POST /timeline/issues/{issue_id}/milestone.
-func MoveTimelineIssueMilestone(ctx *context.APIContext) {
-	body, repo, issue, ok := timelineIssueTarget(ctx)
+// MoveIssueMilestone answers POST /issues/{issue_id}/milestone.
+func MoveIssueMilestone(ctx *context.APIContext) {
+	body, repo, issue, ok := issueTarget(ctx)
 	if !ok {
 		return
 	}
-	if body.MilestoneID != 0 && !timelineMilestoneBelongs(ctx, repo, body.MilestoneID) {
+	if body.MilestoneID != 0 && !milestoneBelongs(ctx, repo, body.MilestoneID) {
 		return
 	}
 	if issue.MilestoneID != body.MilestoneID {
@@ -181,21 +181,21 @@ func MoveTimelineIssueMilestone(ctx *context.APIContext) {
 			return
 		}
 	}
-	renderTimelineAfterWrite(ctx, repo, timelineView{})
+	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
-// SetTimelineIssueDates answers POST /timeline/issues/{issue_id}/dates.
-func SetTimelineIssueDates(ctx *context.APIContext) {
-	body, repo, issue, ok := timelineIssueTarget(ctx)
+// SetIssueDates answers POST /issues/{issue_id}/dates.
+func SetIssueDates(ctx *context.APIContext) {
+	body, repo, issue, ok := issueTarget(ctx)
 	if !ok {
 		return
 	}
 
-	start, ok := parseTimelineDate(ctx, "start", body.Start)
+	start, ok := parseDate(ctx, "start", body.Start)
 	if !ok {
 		return
 	}
-	end, ok := parseTimelineDate(ctx, "end", body.End)
+	end, ok := parseDate(ctx, "end", body.End)
 	if !ok {
 		return
 	}
@@ -220,14 +220,14 @@ func SetTimelineIssueDates(ctx *context.APIContext) {
 			return
 		}
 	}
-	renderTimelineAfterWrite(ctx, repo, timelineView{})
+	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
-// MoveTimelineIssueLane answers POST /timeline/issues/{issue_id}/lane. It delegates to the
-// same PlanLaneMove the board's lane move delegates to, so there is one definition of what a
-// lane move writes rather than one per view.
-func MoveTimelineIssueLane(ctx *context.APIContext) {
-	body, repo, issue, ok := timelineIssueTarget(ctx)
+// MoveIssueGroup answers POST /issues/{issue_id}/group. It delegates to the
+// same PlanGroupMove the board's group move delegates to, so there is one definition of what a
+// group move writes rather than one per view.
+func MoveIssueGroup(ctx *context.APIContext) {
+	body, repo, issue, ok := issueTarget(ctx)
 	if !ok {
 		return
 	}
@@ -235,7 +235,7 @@ func MoveTimelineIssueLane(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	write, err := planning_service.PlanLaneMove(grouping, body.Lane)
+	write, err := planning_service.PlanGroupMove(grouping, body.Group)
 	if err != nil {
 		// With grouping off there is no field to write, and the message says which write
 		// does still work.
@@ -244,21 +244,21 @@ func MoveTimelineIssueLane(ctx *context.APIContext) {
 	}
 
 	switch write.Kind {
-	case planning_service.LaneWriteLabel:
-		if !applyLaneLabel(ctx, repo, issue, write) {
+	case planning_service.GroupWriteLabel:
+		if !applyGroupLabel(ctx, repo, issue, write) {
 			return
 		}
-	case planning_service.LaneWriteAssignee:
-		if !applyLaneAssignee(ctx, issue, write) {
+	case planning_service.GroupWriteAssignee:
+		if !applyGroupAssignee(ctx, issue, write) {
 			return
 		}
 	}
-	renderTimelineAfterWrite(ctx, repo, timelineView{grouping: grouping, zoom: planning_service.ZoomIssue})
+	renderRoadmapAfterWrite(ctx, repo, roadmapView{grouping: grouping, zoom: planning_service.ZoomIssue})
 }
 
-// CreateTimelineMilestone answers POST /timeline/milestones.
-func CreateTimelineMilestone(ctx *context.APIContext) {
-	body, repo, ok := timelineWriteTarget(ctx)
+// CreateMilestone answers POST /milestones.
+func CreateMilestone(ctx *context.APIContext) {
+	body, repo, ok := writeTarget(ctx)
 	if !ok {
 		return
 	}
@@ -268,7 +268,7 @@ func CreateTimelineMilestone(ctx *context.APIContext) {
 			"a milestone row needs a title", "Send title with the request.")
 		return
 	}
-	deadline, ok := parseTimelineDate(ctx, "end", body.End)
+	deadline, ok := parseDate(ctx, "end", body.End)
 	if !ok {
 		return
 	}
@@ -280,12 +280,12 @@ func CreateTimelineMilestone(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	renderTimelineAfterWrite(ctx, repo, timelineView{})
+	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
-// CreateTimelineIssue answers POST /timeline/issues.
-func CreateTimelineIssue(ctx *context.APIContext) {
-	body, repo, ok := timelineWriteTarget(ctx)
+// CreateIssue answers POST /issues.
+func CreateIssue(ctx *context.APIContext) {
+	body, repo, ok := writeTarget(ctx)
 	if !ok {
 		return
 	}
@@ -295,13 +295,13 @@ func CreateTimelineIssue(ctx *context.APIContext) {
 			"an issue needs a title", "Send title with the request.")
 		return
 	}
-	if body.MilestoneID != 0 && !timelineMilestoneBelongs(ctx, repo, body.MilestoneID) {
+	if body.MilestoneID != 0 && !milestoneBelongs(ctx, repo, body.MilestoneID) {
 		return
 	}
 
 	var labelIDs []int64
 	if epic := strings.TrimSpace(body.Epic); epic != "" {
-		label, err := timelineEpicLabel(ctx, repo, epic)
+		label, err := epicLabel(ctx, repo, epic)
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
@@ -317,12 +317,12 @@ func CreateTimelineIssue(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	renderTimelineAfterWrite(ctx, repo, timelineView{})
+	renderRoadmapAfterWrite(ctx, repo, roadmapView{})
 }
 
-// timelineEpicLabel finds or creates the epic:<name> label the chart groups by, so creating
+// epicLabel finds or creates the epic:<name> label the chart groups by, so creating
 // an issue on an epic row does not silently produce an unmanaged one.
-func timelineEpicLabel(ctx *context.APIContext, repo *repo_model.Repository, epic string) (*issues_model.Label, error) {
+func epicLabel(ctx *context.APIContext, repo *repo_model.Repository, epic string) (*issues_model.Label, error) {
 	name := planning_service.EpicLabelPrefix + epic
 	existing, err := issues_model.GetLabelInRepoByName(ctx, repo.ID, name)
 	if err == nil {
@@ -338,11 +338,11 @@ func timelineEpicLabel(ctx *context.APIContext, repo *repo_model.Repository, epi
 	return label, nil
 }
 
-// timelineWriteTarget reads the body, resolves the repository and applies Gitea's own write
+// writeTarget reads the body, resolves the repository and applies Gitea's own write
 // check on the Issues unit. Visibility is answered before permission, so a caller who cannot
 // see the repository is not told it exists.
-func timelineWriteTarget(ctx *context.APIContext) (*timelineWriteBody, *repo_model.Repository, bool) {
-	body, ok := readTimelineWriteBody(ctx)
+func writeTarget(ctx *context.APIContext) (*writeBody, *repo_model.Repository, bool) {
+	body, ok := readWriteBody(ctx)
 	if !ok {
 		return nil, nil, false
 	}
@@ -380,9 +380,9 @@ func timelineWriteTarget(ctx *context.APIContext) (*timelineWriteBody, *repo_mod
 	return body, repo, true
 }
 
-// timelineIssueTarget adds the issue the path names to what timelineWriteTarget resolves.
-func timelineIssueTarget(ctx *context.APIContext) (*timelineWriteBody, *repo_model.Repository, *issues_model.Issue, bool) {
-	body, repo, ok := timelineWriteTarget(ctx)
+// issueTarget adds the issue the path names to what writeTarget resolves.
+func issueTarget(ctx *context.APIContext) (*writeBody, *repo_model.Repository, *issues_model.Issue, bool) {
+	body, repo, ok := writeTarget(ctx)
 	if !ok {
 		return nil, nil, nil, false
 	}
@@ -390,7 +390,7 @@ func timelineIssueTarget(ctx *context.APIContext) (*timelineWriteBody, *repo_mod
 	if err != nil || issue.RepoID != repo.ID {
 		hubapi.APIError(ctx, http.StatusNotFound, "issue_not_found",
 			"no issue with that id belongs to "+repo.FullName(),
-			"The path takes the issue's global id, not its per-repository number; "+BasePath+"/timeline publishes issue_id on every bar.")
+			"The path takes the issue's global id, not its per-repository number; "+BasePath+"/roadmap publishes issue_id on every bar.")
 		return nil, nil, nil, false
 	}
 	if err := issue.LoadAttributes(ctx); err != nil {
@@ -400,28 +400,28 @@ func timelineIssueTarget(ctx *context.APIContext) (*timelineWriteBody, *repo_mod
 	return body, repo, issue, true
 }
 
-func timelineMilestoneBelongs(ctx *context.APIContext, repo *repo_model.Repository, milestoneID int64) bool {
+func milestoneBelongs(ctx *context.APIContext, repo *repo_model.Repository, milestoneID int64) bool {
 	milestone, err := issues_model.GetMilestoneByRepoID(ctx, repo.ID, milestoneID)
 	if err != nil || milestone == nil {
 		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "milestone_not_found",
 			"no milestone with that id belongs to "+repo.FullName(),
-			"Read the chart's rows from "+BasePath+"/timeline and use one of their milestone_id values.")
+			"Read the chart's rows from "+BasePath+"/roadmap and use one of their milestone_id values.")
 		return false
 	}
 	return true
 }
 
-// timelineDateFormats are what a date may be sent as: a full timestamp, or the day alone,
+// dateFormats are what a date may be sent as: a full timestamp, or the day alone,
 // which is what a chart's own controls produce.
-var timelineDateFormats = []string{time.RFC3339, "2006-01-02"}
+var dateFormats = []string{time.RFC3339, "2006-01-02"}
 
-// parseTimelineDate returns 0 for an empty value, which every caller reads as "leave it".
-func parseTimelineDate(ctx *context.APIContext, field, raw string) (int64, bool) {
+// parseDate returns 0 for an empty value, which every caller reads as "leave it".
+func parseDate(ctx *context.APIContext, field, raw string) (int64, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, true
 	}
-	for _, format := range timelineDateFormats {
+	for _, format := range dateFormats {
 		if at, err := time.Parse(format, raw); err == nil {
 			return at.UTC().Unix(), true
 		}
@@ -432,20 +432,20 @@ func parseTimelineDate(ctx *context.APIContext, field, raw string) (int64, bool)
 	return 0, false
 }
 
-func readTimelineWriteBody(ctx *context.APIContext) (*timelineWriteBody, bool) {
-	raw, err := io.ReadAll(io.LimitReader(ctx.Req.Body, maxTimelineBody+1))
+func readWriteBody(ctx *context.APIContext) (*writeBody, bool) {
+	raw, err := io.ReadAll(io.LimitReader(ctx.Req.Body, maxWriteBody+1))
 	if err != nil {
 		hubapi.APIError(ctx, http.StatusBadRequest, "unreadable_body",
 			"the request body could not be read", "Retry the request.")
 		return nil, false
 	}
-	if len(raw) > maxTimelineBody {
+	if len(raw) > maxWriteBody {
 		hubapi.APIError(ctx, http.StatusBadRequest, "body_too_large",
 			"the request body is larger than 16KiB",
-			"A timeline write is small; check whether the request is sending the right content.")
+			"A roadmap write is small; check whether the request is sending the right content.")
 		return nil, false
 	}
-	body := new(timelineWriteBody)
+	body := new(writeBody)
 	if err := json.Unmarshal(raw, body); err != nil {
 		hubapi.APIError(ctx, http.StatusBadRequest, "malformed_body",
 			"the request body is not the JSON object this endpoint takes",
@@ -455,11 +455,11 @@ func readTimelineWriteBody(ctx *context.APIContext) (*timelineWriteBody, bool) {
 	return body, true
 }
 
-// renderTimelineAfterWrite answers with the chart the write produced, over the same
+// renderRoadmapAfterWrite answers with the chart the write produced, over the same
 // projection GET serves, so a client never has to guess what its write did.
-func renderTimelineAfterWrite(ctx *context.APIContext, repo *repo_model.Repository, view timelineView) {
+func renderRoadmapAfterWrite(ctx *context.APIContext, repo *repo_model.Repository, view roadmapView) {
 	const limit = 200
-	renderTimeline(ctx, repo, &issues_model.IssuesOptions{
+	renderRoadmap(ctx, repo, &issues_model.IssuesOptions{
 		RepoIDs:   []int64{repo.ID},
 		IsPull:    optional.Some(false),
 		Paginator: &db.ListOptions{Page: 1, PageSize: limit},

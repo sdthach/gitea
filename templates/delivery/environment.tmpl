@@ -12,7 +12,7 @@
 			<p class="tw-text-14">
 				<a id="delivery-grid-link" href="{{.AppSubURL}}/delivery/grid">Deployments to this environment</a>
 				·
-				<a id="delivery-approvals-link" href="{{.AppSubURL}}/delivery/approvals">Pending approvals</a>
+				<a id="delivery-approvals-link" href="{{.AppSubURL}}/delivery/approvals">Pending reviews</a>
 			</p>
 
 			<div id="delivery-error" class="ui negative message tw-hidden">
@@ -225,10 +225,10 @@ function link(text, href) {
 // checks is the check model: presence, summary, and what add and remove do to the row.
 const checks = [
 	{
-		key: 'approvals',
-		label: 'Approvals',
+		key: 'reviews',
+		label: 'Reviews',
 		present: (env) => env.review_policy !== 'none',
-		summary: (env) => `${env.required_reviewers} approval${env.required_reviewers === 1 ? '' : 's'}`
+		summary: (env) => `${env.required_reviewers} review${env.required_reviewers === 1 ? '' : 's'}`
 			+ (env.review_policy === 'others_only'
 				? ', and not from whoever asked for the deploy'
 				: ', from anyone with write on Actions'),
@@ -240,7 +240,7 @@ const checks = [
 			draft.review_policy = 'none';
 			draft.required_reviewers = 1;
 		},
-		editor: approvalsEditor,
+		editor: reviewsEditor,
 	},
 	{
 		key: 'sequence',
@@ -357,9 +357,9 @@ function checkField(form, text, id) {
 	return input;
 }
 
-function approvalsEditor(draft) {
+function reviewsEditor(draft) {
 	const form = el('div', 'ui form');
-	const count = textField(form, 'Required approvals', 'delivery-required-reviewers', 'number');
+	const count = textField(form, 'Required reviewers', 'delivery-required-reviewers', 'number');
 	count.min = '1';
 	count.value = String(draft.required_reviewers || 1);
 	count.addEventListener('input', () => {

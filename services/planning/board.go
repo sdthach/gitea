@@ -1,7 +1,7 @@
 // Copyright 2026 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// Package planning holds the board and roadmap view logic: lane grouping, the timeline
+// Package planning holds the board and roadmap view logic: group grouping, the roadmap
 // bar model, and the ruler that ticks it.
 package planning
 
@@ -12,21 +12,21 @@ import (
 	hub_model "gitea.dev/models/hub"
 )
 
-// The board renders Gitea's project columns vertically and adds horizontal lanes, a
+// The board renders Gitea's project columns vertically and adds horizontal groups, a
 // dimension Gitea does not model: project.Column carries ID, Title, Default, Sorting,
-// Color, ProjectID, CreatorID and timestamps and no lane, row or group field (verified in
-// models/project/column.go). Lanes are therefore a RENDERING over rows the Projects API
+// Color, ProjectID, CreatorID and timestamps and no group or row field (verified in
+// models/project/column.go). Groups are therefore a RENDERING over rows the Projects API
 // already returns — no schema change, no migration and no fork change.
 //
 // Everything in this file is pure: it takes reduced structs and returns reduced structs, so
-// lane assignment is tested with no database and no server.
+// group assignment is tested with no database and no server.
 
-// Grouping is the lane dimension, chosen at view time. It is never stored on the project,
+// Grouping is the group dimension, chosen at view time. It is never stored on the project,
 // so two people may group the same board differently.
 type Grouping string
 
 const (
-	// GroupNone renders the board with a single lane, which is Gitea's own board.
+	// GroupNone renders the board with a single group, which is Gitea's own board.
 	GroupNone Grouping = "none"
 	// GroupType groups by ccpm's type:<t> label.
 	GroupType Grouping = "type"
@@ -46,12 +46,12 @@ const (
 	EpicLabelPrefix = "epic:"
 )
 
-// Lane keys and labels for the explicit empty-value lane. An issue with no value for
+// Group keys and labels for the explicit empty-value group. An issue with no value for
 // the active grouping lands here; nothing disappears from a board because a field is unset.
-const emptyLaneKey = ""
+const emptyGroupKey = ""
 
-// singleLaneLabel names the one lane grouping "none" renders.
-const singleLaneLabel = "All issues"
+// singleGroupLabel names the one group grouping "none" renders.
+const singleGroupLabel = "All issues"
 
 // ParseGrouping resolves a caller's word. An empty string means none, so a board with no
 // grouping parameter renders Gitea's own board rather than being refused.
@@ -69,7 +69,7 @@ func ParseGrouping(s string) (Grouping, bool) {
 	return GroupNone, false
 }
 
-// Card is one issue on the board, reduced to what lane assignment depends on.
+// Card is one issue on the board, reduced to what group assignment depends on.
 type Card struct {
 	IssueID  int64  `json:"issue_id"`
 	Number   int64  `json:"number"`
@@ -77,7 +77,7 @@ type Card struct {
 	URL      string `json:"url"`
 	ColumnID int64  `json:"column_id"`
 	Sorting  int64  `json:"sorting"`
-	// Labels and Assignees are the grouping fields. A lane move edits one of them.
+	// Labels and Assignees are the grouping fields. A group move edits one of them.
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
 	IsClosed  bool     `json:"is_closed"`
@@ -92,29 +92,29 @@ type BoardColumn struct {
 	Default bool   `json:"default"`
 }
 
-// LaneColumn is one column within one lane: the cells of the board's grid.
-type LaneColumn struct {
+// GroupColumn is one column within one group: the cells of the board's grid.
+type GroupColumn struct {
 	ColumnID int64  `json:"column_id"`
 	Title    string `json:"title"`
 	Cards    []Card `json:"cards"`
 }
 
-// Lane is one horizontal row of the board.
-type Lane struct {
-	// Key is the grouping value itself — the text a lane move writes. Empty is the
-	// empty-value lane.
+// Group is one horizontal row of the board.
+type Group struct {
+	// Key is the grouping value itself — the text a group move writes. Empty is the
+	// empty-value group.
 	Key   string `json:"key"`
 	Label string `json:"label"`
 	// IsEmptyValue marks the issues with no value for the active
 	// grouping, shown rather than dropped.
-	IsEmptyValue bool         `json:"is_empty_value"`
-	Columns      []LaneColumn `json:"columns"`
-	Cards        int          `json:"cards"`
+	IsEmptyValue bool          `json:"is_empty_value"`
+	Columns      []GroupColumn `json:"columns"`
+	Cards        int           `json:"cards"`
 }
 
-// emptyLaneLabel names the empty-value lane per grouping, so it reads as a fact about the
+// emptyGroupLabel names the empty-value group per grouping, so it reads as a fact about the
 // issues rather than as a blank row.
-func emptyLaneLabel(g Grouping) string {
+func emptyGroupLabel(g Grouping) string {
 	switch g {
 	case GroupType:
 		return "no type label"
@@ -123,11 +123,11 @@ func emptyLaneLabel(g Grouping) string {
 	case GroupEpic:
 		return "no epic label"
 	}
-	return singleLaneLabel
+	return singleGroupLabel
 }
 
 // labelValue returns the text after prefix on the first matching label, sorted so a card
-// carrying two lands in the same lane on every render. Matching is case-insensitive on the
+// carrying two lands in the same group on every render. Matching is case-insensitive on the
 // prefix because Gitea does not case-fold label names.
 func labelValue(labels []string, prefix string) string {
 	matched := make([]string, 0, 1)
@@ -143,15 +143,15 @@ func labelValue(labels []string, prefix string) string {
 	return matched[0]
 }
 
-// LaneKeyFor is the whole of lane assignment. A row with no value for the active grouping
-// returns the empty key, which BuildLanes renders as the explicit empty-value lane.
+// GroupKeyFor is the whole of group assignment. A row with no value for the active grouping
+// returns the empty key, which BuildGroups renders as the explicit empty-value group.
 //
 // It takes the two slices rather than a Card so the chart's bars and the board's cards reach
-// one definition of a lane.
+// one definition of a group.
 //
 // A row with more than one candidate value lands in the lexicographically first, so neither
 // view reshuffles between two renders of the same data.
-func LaneKeyFor(labels, assignees []string, grouping Grouping) string {
+func GroupKeyFor(labels, assignees []string, grouping Grouping) string {
 	switch grouping {
 	case GroupType:
 		return labelValue(labels, TypeLabelPrefix)
@@ -159,58 +159,58 @@ func LaneKeyFor(labels, assignees []string, grouping Grouping) string {
 		return labelValue(labels, EpicLabelPrefix)
 	case GroupAssignee:
 		if len(assignees) == 0 {
-			return emptyLaneKey
+			return emptyGroupKey
 		}
 		sorted := append([]string(nil), assignees...)
 		sort.Strings(sorted)
 		return sorted[0]
 	}
-	return emptyLaneKey
+	return emptyGroupKey
 }
 
-// BuildLanes renders the board: every lane carries every column, in the Projects API's own
+// BuildGroups renders the board: every group carries every column, in the Projects API's own
 // order, so the result is a rectangle a template can lay out without knowing the grouping.
 //
-// The empty-value lane is always last and is emitted only when it holds a card — except
-// under GroupNone, where the single lane IS the board and is always emitted.
-func BuildLanes(columns []BoardColumn, cards []Card, grouping Grouping) []Lane {
-	byLane := map[string][]Card{}
+// The empty-value group is always last and is emitted only when it holds a card — except
+// under GroupNone, where the single group IS the board and is always emitted.
+func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group {
+	byGroup := map[string][]Card{}
 	order := make([]string, 0, 8)
 	for _, card := range cards {
-		key := LaneKeyFor(card.Labels, card.Assignees, grouping)
-		if _, seen := byLane[key]; !seen {
+		key := GroupKeyFor(card.Labels, card.Assignees, grouping)
+		if _, seen := byGroup[key]; !seen {
 			order = append(order, key)
 		}
-		byLane[key] = append(byLane[key], card)
+		byGroup[key] = append(byGroup[key], card)
 	}
 	if grouping == GroupNone {
-		byLane = map[string][]Card{emptyLaneKey: cards}
-		order = []string{emptyLaneKey}
+		byGroup = map[string][]Card{emptyGroupKey: cards}
+		order = []string{emptyGroupKey}
 	}
 	if len(order) == 0 {
-		order = []string{emptyLaneKey}
-		byLane[emptyLaneKey] = nil
+		order = []string{emptyGroupKey}
+		byGroup[emptyGroupKey] = nil
 	}
 
 	sort.Slice(order, func(i, j int) bool {
-		// The empty-value lane is explicit, and it sorts last so the named lanes
+		// The empty-value group is explicit, and it sorts last so the named groups
 		// read first.
-		if (order[i] == emptyLaneKey) != (order[j] == emptyLaneKey) {
-			return order[j] == emptyLaneKey
+		if (order[i] == emptyGroupKey) != (order[j] == emptyGroupKey) {
+			return order[j] == emptyGroupKey
 		}
 		return order[i] < order[j]
 	})
 
-	lanes := make([]Lane, 0, len(order))
+	groups := make([]Group, 0, len(order))
 	for _, key := range order {
-		lane := Lane{Key: key, Label: key, IsEmptyValue: key == emptyLaneKey}
-		if lane.IsEmptyValue {
-			lane.Label = emptyLaneLabel(grouping)
+		group := Group{Key: key, Label: key, IsEmptyValue: key == emptyGroupKey}
+		if group.IsEmptyValue {
+			group.Label = emptyGroupLabel(grouping)
 		}
-		lane.Columns = make([]LaneColumn, 0, len(columns))
+		group.Columns = make([]GroupColumn, 0, len(columns))
 		for _, col := range columns {
-			lc := LaneColumn{ColumnID: col.ID, Title: col.Title, Cards: []Card{}}
-			for _, card := range byLane[key] {
+			lc := GroupColumn{ColumnID: col.ID, Title: col.Title, Cards: []Card{}}
+			for _, card := range byGroup[key] {
 				if card.ColumnID == col.ID {
 					lc.Cards = append(lc.Cards, card)
 				}
@@ -221,22 +221,22 @@ func BuildLanes(columns []BoardColumn, cards []Card, grouping Grouping) []Lane {
 				}
 				return lc.Cards[i].Number < lc.Cards[j].Number
 			})
-			lane.Cards += len(lc.Cards)
-			lane.Columns = append(lane.Columns, lc)
+			group.Cards += len(lc.Cards)
+			group.Columns = append(group.Columns, lc)
 		}
-		lanes = append(lanes, lane)
+		groups = append(groups, group)
 	}
-	return lanes
+	return groups
 }
 
-// timelineLaneColumn is the one column the chart's lanes carry. A chart has no columns of its
-// own, so BuildLanes lays every bar of a lane into a single cell and the result is still the
+// roadmapGroupColumn is the one column the chart's groups carry. A chart has no columns of its
+// own, so BuildGroups lays every bar of a group into a single cell and the result is still the
 // rectangle a template can walk.
-const timelineLaneColumn = "bars"
+const roadmapGroupColumn = "bars"
 
-// TimelineLanes groups the chart's bars through the board's own lane definition, so a lane on
-// the chart and a lane on the board are the same value read the same way.
-func TimelineLanes(bars []Bar, grouping Grouping) []Lane {
+// RoadmapGroups groups the chart's bars through the board's own group definition, so a group on
+// the chart and a group on the board are the same value read the same way.
+func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 	cards := make([]Card, 0, len(bars))
 	for _, bar := range bars {
 		cards = append(cards, Card{
@@ -244,49 +244,49 @@ func TimelineLanes(bars []Bar, grouping Grouping) []Lane {
 			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
 		})
 	}
-	return BuildLanes([]BoardColumn{{Title: timelineLaneColumn}}, cards, grouping)
+	return BuildGroups([]BoardColumn{{Title: roadmapGroupColumn}}, cards, grouping)
 }
 
-// LaneWriteKind is what a lane move edits.
-type LaneWriteKind string
+// GroupWriteKind is what a group move edits.
+type GroupWriteKind string
 
 const (
-	// LaneWriteLabel replaces the card's type: or epic: label.
-	LaneWriteLabel LaneWriteKind = "label"
-	// LaneWriteAssignee replaces the card's assignee.
-	LaneWriteAssignee LaneWriteKind = "assignee"
+	// GroupWriteLabel replaces the card's type: or epic: label.
+	GroupWriteLabel GroupWriteKind = "label"
+	// GroupWriteAssignee replaces the card's assignee.
+	GroupWriteAssignee GroupWriteKind = "assignee"
 )
 
-// LaneWrite is the single edit a lane move performs. It names the field itself — the
-// grouping value is not stored anywhere else, so moving between lanes IS editing it.
-type LaneWrite struct {
-	Kind LaneWriteKind
+// GroupWrite is the single edit a group move performs. It names the field itself — the
+// grouping value is not stored anywhere else, so moving between groups IS editing it.
+type GroupWrite struct {
+	Kind GroupWriteKind
 	// Prefix is the label namespace to clear before adding, so a card never carries two
 	// type: labels. Empty for an assignee move.
 	Prefix string
 	// Label is the label to apply; empty means the card is moving into the empty-value
-	// lane, so the namespace is cleared and nothing is added.
+	// group, so the namespace is cleared and nothing is added.
 	Label string
 	// Assignee is the login to assign; empty means clear the assignees.
 	Assignee string
 }
 
-// PlanLaneMove resolves a lane move into the one field edit it performs, or refuses it.
+// PlanGroupMove resolves a group move into the one field edit it performs, or refuses it.
 //
-// A lane move is REFUSED when grouping is off, because there is nothing to write. The
+// A group move is REFUSED when grouping is off, because there is nothing to write. The
 // refusal carries what to do about it.
-func PlanLaneMove(grouping Grouping, laneKey string) (LaneWrite, error) {
+func PlanGroupMove(grouping Grouping, groupKey string) (GroupWrite, error) {
 	switch grouping {
 	case GroupType:
-		return LaneWrite{Kind: LaneWriteLabel, Prefix: TypeLabelPrefix, Label: prefixedLabel(TypeLabelPrefix, laneKey)}, nil
+		return GroupWrite{Kind: GroupWriteLabel, Prefix: TypeLabelPrefix, Label: prefixedLabel(TypeLabelPrefix, groupKey)}, nil
 	case GroupEpic:
-		return LaneWrite{Kind: LaneWriteLabel, Prefix: EpicLabelPrefix, Label: prefixedLabel(EpicLabelPrefix, laneKey)}, nil
+		return GroupWrite{Kind: GroupWriteLabel, Prefix: EpicLabelPrefix, Label: prefixedLabel(EpicLabelPrefix, groupKey)}, nil
 	case GroupAssignee:
-		return LaneWrite{Kind: LaneWriteAssignee, Assignee: strings.TrimSpace(laneKey)}, nil
+		return GroupWrite{Kind: GroupWriteAssignee, Assignee: strings.TrimSpace(groupKey)}, nil
 	}
-	return LaneWrite{}, &hub_model.Error{
-		Message: "the board is not grouped, so a lane move has no field to write",
-		SuggestedAction: "Group the board by type, assignee or epic first — a lane is the grouping value, and with grouping off there is only one lane. " +
+	return GroupWrite{}, &hub_model.Error{
+		Message: "the board is not grouped, so a group move has no field to write",
+		SuggestedAction: "Group the board by type, assignee or epic first — a group is the grouping value, and with grouping off there is only one group. " +
 			"Moving a card between COLUMNS works with grouping off.",
 	}
 }

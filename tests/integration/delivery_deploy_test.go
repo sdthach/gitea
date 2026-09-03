@@ -61,7 +61,7 @@ func TestAPIDeliveryGridProjectsRepeatDeploys(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
 
-	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id=1").AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id=1").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 
 	var rows []struct {
@@ -333,6 +333,6 @@ func TestDeliveryGridPageIsAClientOfTheAPI(t *testing.T) {
 	session := loginUser(t, "user2")
 	req = NewRequest(t, "GET", "/delivery/grid")
 	resp := session.MakeRequest(t, req, http.StatusOK)
-	assert.Contains(t, resp.Body.String(), deploymentsv1.BasePath+"/grid",
+	assert.Contains(t, resp.Body.String(), deploymentsv1.BasePath+"/deployments/matrix",
 		"the page fetches its rows from the documented endpoint")
 }

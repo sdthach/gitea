@@ -80,13 +80,13 @@ var forkPages = []struct {
 	},
 	{
 		template:  "grid.tmpl",
-		endpoints: []string{"/grid", "/deployments", "/repos/{owner}/{repo}/releases"},
-		fetch:     "/grid?",
+		endpoints: []string{"/deployments/matrix", "/deployments", "/repos/{owner}/{repo}/releases"},
+		fetch:     "/deployments/matrix?",
 	},
 	{
 		template:  "overview.tmpl",
-		endpoints: []string{"/overview", "/overview/trends", "/overview/repos", "/runs"},
-		fetch:     "/overview?",
+		endpoints: []string{"/insights", "/insights/trends", "/insights/repos", "/runs"},
+		fetch:     "/insights?",
 	},
 	{
 		template:  "promote.tmpl",
@@ -95,18 +95,18 @@ var forkPages = []struct {
 	},
 	{
 		template:  "approvals.tmpl",
-		endpoints: []string{"/approvals"},
-		fetch:     "/approvals?",
+		endpoints: []string{"/reviews"},
+		fetch:     "/reviews?",
 	},
 	{
 		template:  "board.tmpl",
-		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/lane"},
+		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/group"},
 		fetch:     "/board?",
 	},
 	{
 		template:  "timeline.tmpl",
-		endpoints: []string{"/timeline"},
-		fetch:     "/timeline?",
+		endpoints: []string{"/roadmap"},
+		fetch:     "/roadmap?",
 	},
 }
 

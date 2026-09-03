@@ -3,9 +3,9 @@
 	<div class="ui container">
 		<h2 class="ui header">{{.Title}}</h2>
 		<p class="tw-text-14">
-			Gitea's project columns run across; the lanes run down. Gitea models no lane at all —
+			Gitea's project columns run across; the groups run down. Gitea models no group at all —
 			<code>project.Column</code> carries a title, a sort order, a colour and a project and nothing
-			else — so a lane is a rendering over rows the API already returns. Grouping is a view
+			else — so a group is a rendering over rows the API already returns. Grouping is a view
 			setting, never stored on the board, so two people may group the same board differently.
 			Every figure is fetched from <code>{{.DeliveryAPIBase}}/board</code>; this page is a client
 			of that endpoint and reads nothing the API does not serve.
@@ -22,7 +22,7 @@
 					<input id="delivery-project" type="number" min="1" size="6">
 				</div>
 				<div class="field">
-					<label for="delivery-group">Lanes by</label>
+					<label for="delivery-group">Groups by</label>
 					<select id="delivery-group" class="ui dropdown">
 						{{range .Groupings}}<option value="{{.}}">{{.}}</option>{{end}}
 					</select>
@@ -64,8 +64,8 @@
 
 		<p class="tw-text-12">
 			Two writes exist on this board and no others: moving a card between columns, and moving it
-			between lanes, which edits the grouping field itself — the <code>type:</code> label, the
-			<code>epic:</code> label or the assignee. A lane move is refused when grouping is off,
+			between groups, which edits the grouping field itself — the <code>type:</code> label, the
+			<code>epic:</code> label or the assignee. A group move is refused when grouping is off,
 			because there is then nothing to write.
 		</p>
 	</div>
@@ -79,7 +79,7 @@ const pageToken = {{.DeliveryPageToken}};
 // document spells them, so this page names the endpoints it is a client of rather than a
 // rewritten copy of them.
 const columnMovePath = '/board/cards/{issue_id}/column';
-const laneMovePath = '/board/cards/{issue_id}/lane';
+const groupMovePath = '/board/cards/{issue_id}/group';
 
 const head = document.querySelector('#delivery-board-head');
 const body = document.querySelector('#delivery-board-body');
@@ -119,39 +119,39 @@ function clearError() {
 
 let current = null;
 
-// render lays the board out as lanes down and columns across. Every lane carries every
+// render lays the board out as groups down and columns across. Every group carries every
 // column, so the table is a rectangle whatever the grouping.
 function render(board) {
 	current = board;
 	heading.textContent = `${board.title} — ${board.repo_full_name}`;
 	heading.classList.remove('tw-hidden');
 
-	const laneHeader = document.createElement('th');
-	laneHeader.textContent = board.group_by === 'none' ? '' : board.group_by;
-	head.replaceChildren(laneHeader);
+	const groupHeader = document.createElement("th");
+	groupHeader.textContent = board.group_by === 'none' ? '' : board.group_by;
+	head.replaceChildren(groupHeader);
 	for (const column of board.columns) {
 		const th = document.createElement('th');
 		th.textContent = column.title;
 		head.append(th);
 	}
 
-	body.replaceChildren(...board.lanes.map((lane) => {
+	body.replaceChildren(...board.groups.map((group) => {
 		const tr = document.createElement('tr');
-		const laneCell = document.createElement('th');
-		laneCell.textContent = lane.label;
-		if (lane.is_empty_value) {
-			// The empty-value lane is explicit. It reads as a fact about the issues,
+		const groupCell = document.createElement('th');
+		groupCell.textContent = group.label;
+		if (group.is_empty_value) {
+			// The empty-value group is explicit. It reads as a fact about the issues,
 			// not as a blank row.
-			laneCell.append(Object.assign(document.createElement('div'), {
+			groupCell.append(Object.assign(document.createElement('div'), {
 				className: 'tw-text-12',
 				textContent: 'no value for this grouping',
 			}));
 		}
-		tr.append(laneCell);
+		tr.append(groupCell);
 
-		for (const column of lane.columns) {
+		for (const column of group.columns) {
 			const td = document.createElement('td');
-			td.append(...column.cards.map((card) => cardElement(board, lane, card)));
+			td.append(...column.cards.map((card) => cardElement(board, group, card)));
 			if (!column.cards.length) td.textContent = '—';
 			tr.append(td);
 		}
@@ -159,7 +159,7 @@ function render(board) {
 	}));
 }
 
-function cardElement(board, lane, card) {
+function cardElement(board, group, card) {
 	const wrapper = document.createElement('div');
 	wrapper.className = 'tw-mb-2';
 
@@ -173,8 +173,8 @@ function cardElement(board, lane, card) {
 			String(card.column_id), (value) => moveColumn(card, Number(value))));
 	}
 	if (board.can_edit_issue && board.group_by !== 'none') {
-		const lanes = board.lanes.map((l) => [l.key, l.label]);
-		wrapper.append(move('lane', lanes, lane.key, (value) => moveLane(card, value)));
+		const groups = board.groups.map((g) => [g.key, g.label]);
+		wrapper.append(move('group', groups, group.key, (value) => moveGroup(card, value)));
 	}
 	return wrapper;
 }
@@ -216,10 +216,10 @@ function moveColumn(card, columnID) {
 	});
 }
 
-function moveLane(card, lane) {
-	return post(laneMovePath.replace('{issue_id}', String(card.issue_id)), {
+function moveGroup(card, group) {
+	return post(groupMovePath.replace('{issue_id}', String(card.issue_id)), {
 		repo: current.repo_full_name, project_id: current.project_id,
-		group_by: current.group_by, lane,
+		group_by: current.group_by, group,
 	});
 }
 

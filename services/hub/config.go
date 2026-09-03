@@ -65,7 +65,7 @@ func DeploymentsPagesEnabled() bool {
 }
 
 // SwimlanesEnabled reports whether Gitea's own repository project page offers the fork's
-// lane grouping:
+// swimlane grouping:
 //
 //	[deployments]
 //	ENABLE_SWIMLANES = true

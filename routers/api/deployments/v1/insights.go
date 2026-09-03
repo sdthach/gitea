@@ -14,12 +14,12 @@ import (
 	"gitea.dev/services/hub/query"
 )
 
-// overviewSpec is the composite's whitelist declaration. The composite is not a list, so it
+// insightsSpec is the composite's whitelist declaration. The composite is not a list, so it
 // declares only the two parameters that narrow it — and it declares them through the one
 // grammar, so an unknown parameter is a 400 that names the offender rather than a silently
 // ignored word.
-var overviewSpec = query.Spec{
-	Resource: "overview",
+var insightsSpec = query.Spec{
+	Resource: "insights",
 	Fields: []query.Field{
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
 		{Name: "window_days", Column: "window_days", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
@@ -28,12 +28,12 @@ var overviewSpec = query.Spec{
 	Paging:     query.PagingOffset,
 }
 
-// overviewRepoSpec is the per-repository statistics resource. The `repos`
+// insightsRepoSpec is the per-repository statistics resource. The `repos`
 // resource already publishes repository IDENTITY; this publishes their run STATISTICS over a
 // window, which is a different shape with a different lifetime, so it is a resource of its
 // own rather than a second meaning for the same rows.
-var overviewRepoSpec = query.Spec{
-	Resource: "overview-repos",
+var insightsRepoSpec = query.Spec{
+	Resource: "insights-repos",
 	Fields: []query.Field{
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
 		{Name: "repo_full_name", Column: "repo_full_name", Kind: query.KindString},
@@ -67,30 +67,30 @@ func repoStatValue(row deployments_service.RepoStat, field string) (any, bool) {
 	return nil, false
 }
 
-func getOverviewEndpoint() *hubapi.Endpoint {
+func getInsightsEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "getOverview", Method: http.MethodGet, Path: "/overview",
+			ID: "getInsights", Method: http.MethodGet, Path: "/insights",
 			Summary: "The cross-repository CI summary and its comparison window",
 			Description: "Repositories active/inactive, workflows active/disabled, and runs by state with success rate " +
 				"and total duration, beside the previous window of equal length. " +
 				"The composite exists to save round trips, NEVER as the only way to reach the data: every number in " +
-				"it is independently queryable from /runs, /workflows and /overview/repos. " +
+				"it is independently queryable from /runs, /workflows and /insights/repos. " +
 				"Aggregates are computed in process over Gitea's own action_run, since its Actions API lists runs " +
 				"one repository and one workflow at a time and cannot group. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit: a run in a repository the viewer " +
 				"cannot read appears in no figure. " +
 				"The /delivery/ci page is a client of this endpoint.",
-			Tag: "overview", Query: &overviewSpec, Response: "Overview", ResponseIs: "object",
+			Tag: "insights", Query: &insightsSpec, Response: "Overview", ResponseIs: "object",
 		},
-		Handler: GetOverview,
+		Handler: GetInsights,
 	}
 }
 
-func getOverviewTrendsEndpoint() *hubapi.Endpoint {
+func getInsightsTrendsEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "getOverviewTrends", Method: http.MethodGet, Path: "/overview/trends",
+			ID: "getInsightsTrends", Method: http.MethodGet, Path: "/insights/trends",
 			Summary: "The daily trend series: total, successful and failed runs, average duration and deployments",
 			Description: "One point per UTC day across the window, including days with no run — a gap would read as " +
 				"missing data rather than as a quiet day. " +
@@ -98,35 +98,35 @@ func getOverviewTrendsEndpoint() *hubapi.Endpoint {
 				"runs, so this dashboard and the delivery grid share one source of truth. " +
 				"Days are bucketed in process: SQLite spells the truncation strftime and PostgreSQL date_trunc, and " +
 				"one schema has to answer both.",
-			Tag: "overview", Query: &overviewSpec, Response: "TrendPoint", ResponseIs: "array",
+			Tag: "insights", Query: &insightsSpec, Response: "TrendPoint", ResponseIs: "array",
 		},
-		Handler: GetOverviewTrends,
+		Handler: GetInsightsTrends,
 	}
 }
 
-func listOverviewReposEndpoint() *hubapi.Endpoint {
+func listInsightsReposEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "listOverviewRepos", Method: http.MethodGet, Path: "/overview/repos",
+			ID: "listInsightsRepos", Method: http.MethodGet, Path: "/insights/repos",
 			Summary: "List repositories by run volume, with success rate and average duration",
 			Description: "The top-repositories list, reachable as a queryable resource rather than only as a " +
 				"panel on the page. Sorting defaults to run volume descending. " +
-				"Each row carries repo_full_name so it links out to Gitea's own repository page; the overview " +
+				"Each row carries repo_full_name so it links out to Gitea's own repository page; the insights " +
 				"duplicates no Gitea page. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit.",
-			Tag: "overview", Query: &overviewRepoSpec, Response: "RepoStat", ResponseIs: "array",
+			Tag: "insights", Query: &insightsRepoSpec, Response: "RepoStat", ResponseIs: "array",
 		},
-		Handler: ListOverviewRepos,
+		Handler: ListInsightsRepos,
 	}
 }
 
-// overviewOptions resolves the permission scope and the window every overview resource
+// insightsOptions resolves the permission scope and the window every insights resource
 // shares.
 //
-// It is the one place the CI overview's permission filter is applied. It is fail-CLOSED: a
+// It is the one place the CI insights' permission filter is applied. It is fail-CLOSED: a
 // caller who can see no repository aggregates nothing, and a repo_id outside the accessible
 // set narrows to nothing rather than widening to every repository.
-func overviewOptions(ctx *context.APIContext, q *query.Query) (deployments_service.OverviewOptions, bool) {
+func insightsOptions(ctx *context.APIContext, q *query.Query) (deployments_service.OverviewOptions, bool) {
 	repoIDs, ok := accessibleRepoIDs(ctx)
 	if !ok {
 		return deployments_service.OverviewOptions{}, false
@@ -138,13 +138,13 @@ func overviewOptions(ctx *context.APIContext, q *query.Query) (deployments_servi
 	}, true
 }
 
-// GetOverview answers GET /overview.
-func GetOverview(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, overviewSpec)
+// GetInsights answers GET /insights.
+func GetInsights(ctx *context.APIContext) {
+	q, ok := hubapi.ParseQuery(ctx, insightsSpec)
 	if !ok {
 		return
 	}
-	opts, ok := overviewOptions(ctx, q)
+	opts, ok := insightsOptions(ctx, q)
 	if !ok {
 		return
 	}
@@ -156,13 +156,13 @@ func GetOverview(ctx *context.APIContext) {
 	ctx.JSON(http.StatusOK, overview)
 }
 
-// GetOverviewTrends answers GET /overview/trends.
-func GetOverviewTrends(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, overviewSpec)
+// GetInsightsTrends answers GET /insights/trends.
+func GetInsightsTrends(ctx *context.APIContext) {
+	q, ok := hubapi.ParseQuery(ctx, insightsSpec)
 	if !ok {
 		return
 	}
-	opts, ok := overviewOptions(ctx, q)
+	opts, ok := insightsOptions(ctx, q)
 	if !ok {
 		return
 	}
@@ -174,13 +174,13 @@ func GetOverviewTrends(ctx *context.APIContext) {
 	ctx.JSON(http.StatusOK, points)
 }
 
-// ListOverviewRepos answers GET /overview/repos.
-func ListOverviewRepos(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, overviewRepoSpec)
+// ListInsightsRepos answers GET /insights/repos.
+func ListInsightsRepos(ctx *context.APIContext) {
+	q, ok := hubapi.ParseQuery(ctx, insightsRepoSpec)
 	if !ok {
 		return
 	}
-	opts, ok := overviewOptions(ctx, q)
+	opts, ok := insightsOptions(ctx, q)
 	if !ok {
 		return
 	}

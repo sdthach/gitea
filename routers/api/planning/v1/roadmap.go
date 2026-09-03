@@ -25,11 +25,11 @@ import (
 	"xorm.io/builder"
 )
 
-// timelineSpec is the timeline projection's whitelist declaration. Like the grid and the
+// roadmapSpec is the timeline projection's whitelist declaration. Like the grid and the
 // board it is a projection rather than a table, so its parameters select what to project;
 // they still go through the one grammar, so an unknown one is refused.
-var timelineSpec = query.Spec{
-	Resource: "timeline",
+var roadmapSpec = query.Spec{
+	Resource: "roadmap",
 	Fields: []query.Field{
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt, Ops: []query.Op{query.OpEq}},
 		{Name: "epic", Column: "epic", Kind: query.KindString, Ops: []query.Op{query.OpEq}},
@@ -42,9 +42,9 @@ var timelineSpec = query.Spec{
 	Paging:     query.PagingOffset,
 }
 
-// timelineView is the pair of view settings the chart is read through. Neither is stored, so
+// roadmapView is the pair of view settings the chart is read through. Neither is stored, so
 // two people may read the same plan at different depths.
-type timelineView struct {
+type roadmapView struct {
 	grouping planning_service.Grouping
 	zoom     planning_service.Zoom
 	// epic narrows the chart to one epic. At zoom=epic the fetch selects epic issues
@@ -52,34 +52,34 @@ type timelineView struct {
 	epic string
 }
 
-// TimelineRuler is the chart's time axis: the unit follows the span being drawn, and every
+// RoadmapRuler is the chart's time axis: the unit follows the span being drawn, and every
 // tick sits on a unit boundary in UTC. The write granularity stays a day at every unit.
-type TimelineRuler struct {
+type RoadmapRuler struct {
 	Unit      string                  `json:"unit"`
 	StartUnix int64                   `json:"start_unix"`
 	EndUnix   int64                   `json:"end_unix"`
 	Ticks     []planning_service.Tick `json:"ticks"`
 }
 
-// Timeline is the timeline resource's response shape.
-type Timeline struct {
+// Roadmap is the roadmap resource's response shape.
+type Roadmap struct {
 	RepoID       int64                        `json:"repo_id"`
 	RepoFullName string                       `json:"repo_full_name"`
 	Bars         []planning_service.Bar       `json:"bars"`
 	Arrows       []planning_service.Arrow     `json:"arrows"`
-	Spans        []planning_service.SpanRow   `json:"spans"`
+	Rollups      []planning_service.RollupRow `json:"rollups"`
 	Unmanaged    []planning_service.Unmanaged `json:"unmanaged"`
 	// GroupBy and Zoom echo the view the chart was read at, so a client rendering the
 	// response does not have to remember what it asked for.
 	GroupBy string `json:"group_by"`
 	Zoom    string `json:"zoom"`
-	// Lanes group the bars by the board's own lane definition, empty when grouping is off.
-	Lanes []planning_service.Lane `json:"lanes"`
-	Ruler TimelineRuler           `json:"ruler"`
-	// Rows are the repository's milestones, which are the rows an issue can be filed under.
-	// A milestone holding no issue has no span, so the chart could not otherwise name it as
-	// a destination.
-	Rows []TimelineRow `json:"rows"`
+	// Groups group the bars by the board's own group definition, empty when grouping is off.
+	Groups []planning_service.Group `json:"groups"`
+	Ruler  RoadmapRuler             `json:"ruler"`
+	// Milestones are the repository's milestones, which are the rows an issue can be filed
+	// under. A milestone holding no issue has no rollup, so the chart could not otherwise
+	// name it as a destination.
+	Milestones []RoadmapMilestone `json:"milestones"`
 	// CanWrite says whether the caller may write on the Issues unit, so a client offers the
 	// chart's edits only to someone the endpoints will accept them from.
 	CanWrite bool `json:"can_write"`
@@ -89,18 +89,18 @@ type Timeline struct {
 	Truncated bool `json:"truncated"`
 }
 
-// TimelineRow is one milestone the chart draws as a row.
-type TimelineRow struct {
+// RoadmapMilestone is one milestone the chart draws as a row.
+type RoadmapMilestone struct {
 	MilestoneID int64  `json:"milestone_id"`
 	Title       string `json:"title"`
 	IsClosed    bool   `json:"is_closed"`
 }
 
-func getTimelineEndpoint() *hubapi.Endpoint {
+func getRoadmapEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "getTimeline", Method: http.MethodGet, Path: "/timeline",
-			Summary: "The delivery timeline: one bar per issue, with dependency arrows",
+			ID: "getRoadmap", Method: http.MethodGet, Path: "/roadmap",
+			Summary: "The delivery roadmap: one bar per issue, with dependency arrows",
 			Description: "Needs no Projects API, so it renders on a build the board cannot. " +
 				"Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: " +
 				"the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker " +
@@ -116,31 +116,31 @@ func getTimelineEndpoint() *hubapi.Endpoint {
 				"computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared " +
 				"window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup " +
 				"whose fetch hit its cap is marked partial and publishes no progress percentage. " +
-				"zoom selects the depth the chart is read at and group_by the lane dimension, reusing the board's own lanes. " +
+				"zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. " +
 				"A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone " +
 				"over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the " +
 				"page holds. An epic with no children yet is still listed, over its own declared window. " +
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
 				"Scoped by Gitea's own permission check on the Issues unit. " +
 				"The /delivery/timeline page is a client of this endpoint.",
-			Tag: "timeline", Query: &timelineSpec, Response: "Timeline", ResponseIs: "object",
+			Tag: "roadmap", Query: &roadmapSpec, Response: "Roadmap", ResponseIs: "object",
 		},
-		Handler: GetTimeline,
+		Handler: GetRoadmap,
 	}
 }
 
-// GetTimeline answers GET /timeline.
-func GetTimeline(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, timelineSpec)
+// GetRoadmap answers GET /roadmap.
+func GetRoadmap(ctx *context.APIContext) {
+	q, ok := hubapi.ParseQuery(ctx, roadmapSpec)
 	if !ok {
 		return
 	}
-	repo, perm, ok := timelineRepo(ctx, hubapi.EqualityFilterInt(q, "repo_id"))
+	repo, perm, ok := roadmapRepo(ctx, hubapi.EqualityFilterInt(q, "repo_id"))
 	if !ok {
 		return
 	}
 
-	state, ok := parseTimelineState(ctx, hubapi.EqualityFilterString(q, "state"))
+	state, ok := parseRoadmapState(ctx, hubapi.EqualityFilterString(q, "state"))
 	if !ok {
 		return
 	}
@@ -174,8 +174,8 @@ func GetTimeline(ctx *context.APIContext) {
 		opts.MilestoneIDs = []int64{milestoneID}
 	}
 
-	renderTimeline(ctx, repo, opts, q.Limit, perm.CanWrite(unit.TypeIssues),
-		timelineView{grouping: grouping, zoom: zoom, epic: epic})
+	renderRoadmap(ctx, repo, opts, q.Limit, perm.CanWrite(unit.TypeIssues),
+		roadmapView{grouping: grouping, zoom: zoom, epic: epic})
 }
 
 // parseZoom refuses an unknown depth naming what is accepted, exactly as the board refuses an
@@ -195,10 +195,10 @@ func parseZoom(ctx *context.APIContext, raw string) (planning_service.Zoom, bool
 	return zoom, true
 }
 
-// renderTimeline projects one repository's issues and answers with the chart. Every write
+// renderRoadmap projects one repository's issues and answers with the chart. Every write
 // endpoint replies through it, so a caller never has to re-fetch to see what its write did,
 // and the chart it gets back is the one GET would have produced.
-func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, canWrite bool, view timelineView) {
+func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, canWrite bool, view roadmapView) {
 	// A write endpoint replying through here states no view, and the defaults are the ones
 	// a caller that passes no parameter gets.
 	if view.grouping == "" {
@@ -208,11 +208,11 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		view.zoom = planning_service.ZoomIssue
 	}
 
-	out := &Timeline{
+	out := &Roadmap{
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		Bars: []planning_service.Bar{}, Arrows: []planning_service.Arrow{},
-		Spans: []planning_service.SpanRow{}, Unmanaged: []planning_service.Unmanaged{},
-		Lanes: []planning_service.Lane{}, Rows: []TimelineRow{},
+		Rollups: []planning_service.RollupRow{}, Unmanaged: []planning_service.Unmanaged{},
+		Groups: []planning_service.Group{}, Milestones: []RoadmapMilestone{},
 		GroupBy: string(view.grouping), Zoom: string(view.zoom),
 		CanWrite: canWrite,
 	}
@@ -223,20 +223,20 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 		return
 	}
 	for _, m := range milestones {
-		out.Rows = append(out.Rows, TimelineRow{MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed})
+		out.Milestones = append(out.Milestones, RoadmapMilestone{MilestoneID: m.ID, Title: m.Name, IsClosed: m.IsClosed})
 	}
 
 	if view.zoom == planning_service.ZoomMilestone {
 		children := newRolledChildren("milestone")
-		if out.Spans, out.Truncated, err = timelineMilestoneRollups(ctx, repo, opts, limit, children); err != nil {
+		if out.Rollups, out.Truncated, err = roadmapMilestoneRollups(ctx, repo, opts, limit, children); err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
-		if out.Arrows, err = timelineRolledArrows(ctx, children); err != nil {
+		if out.Arrows, err = roadmapRolledArrows(ctx, children); err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
-		out.Ruler = rulerOver(out.Bars, out.Spans)
+		out.Ruler = rulerOver(out.Bars, out.Rollups)
 		ctx.JSON(http.StatusOK, out)
 		return
 	}
@@ -276,7 +276,7 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 	}
 
 	children := newRolledChildren("epic")
-	spans, err := timelineRollups(ctx, repo, bars, opts.IsClosed, children)
+	rollups, err := roadmapRollups(ctx, repo, bars, opts.IsClosed, children)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -286,37 +286,37 @@ func renderTimeline(ctx *context.APIContext, repo *repo_model.Repository, opts *
 	// brackets alone: drawing the children beside them is the issue zoom. Its arrows are the
 	// children's edges re-keyed onto the brackets, so an edge does not vanish with the bar.
 	if view.zoom == planning_service.ZoomEpic {
-		out.Spans = spansOfKind(spans, "epic")
-		out.Arrows, err = timelineRolledArrows(ctx, children)
+		out.Rollups = rollupsOfKind(rollups, "epic")
+		out.Arrows, err = roadmapRolledArrows(ctx, children)
 	} else {
-		out.Bars, out.Spans = bars, spans
-		out.Arrows, err = timelineArrows(ctx, issues, drawn)
+		out.Bars, out.Rollups = bars, rollups
+		out.Arrows, err = roadmapArrows(ctx, issues, drawn)
 	}
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	// Lanes group the bars the response publishes, so a zoom that publishes none carries none.
+	// Groups group the bars the response publishes, so a zoom that publishes none carries none.
 	if view.grouping != planning_service.GroupNone && len(out.Bars) > 0 {
-		out.Lanes = planning_service.TimelineLanes(out.Bars, view.grouping)
+		out.Groups = planning_service.RoadmapGroups(out.Bars, view.grouping)
 	}
-	out.Ruler = rulerOver(out.Bars, out.Spans)
+	out.Ruler = rulerOver(out.Bars, out.Rollups)
 	ctx.JSON(http.StatusOK, out)
 }
 
-func spansOfKind(spans []planning_service.SpanRow, kind string) []planning_service.SpanRow {
-	out := make([]planning_service.SpanRow, 0, len(spans))
-	for _, span := range spans {
-		if span.Kind == kind {
-			out = append(out, span)
+func rollupsOfKind(rollups []planning_service.RollupRow, kind string) []planning_service.RollupRow {
+	out := make([]planning_service.RollupRow, 0, len(rollups))
+	for _, rollup := range rollups {
+		if rollup.Kind == kind {
+			out = append(out, rollup)
 		}
 	}
 	return out
 }
 
-// rulerOver lays the axis over what this zoom draws, so the unit follows the span on screen.
-func rulerOver(bars []planning_service.Bar, spans []planning_service.SpanRow) TimelineRuler {
-	ruler := TimelineRuler{Ticks: []planning_service.Tick{}}
+// rulerOver lays the axis over what this zoom draws, so the unit follows the range on screen.
+func rulerOver(bars []planning_service.Bar, rollups []planning_service.RollupRow) RoadmapRuler {
+	ruler := RoadmapRuler{Ticks: []planning_service.Tick{}}
 	seen := false
 	cover := func(startUnix, endUnix int64) {
 		if !seen || startUnix < ruler.StartUnix {
@@ -330,8 +330,8 @@ func rulerOver(bars []planning_service.Bar, spans []planning_service.SpanRow) Ti
 	for _, bar := range bars {
 		cover(bar.StartUnix, bar.EndUnix)
 	}
-	for _, span := range spans {
-		cover(span.StartUnix, span.EndUnix)
+	for _, rollup := range rollups {
+		cover(rollup.StartUnix, rollup.EndUnix)
 	}
 	if !seen {
 		// An axis invented over an empty chart would date a picture of nothing.
@@ -342,9 +342,9 @@ func rulerOver(bars []planning_service.Bar, spans []planning_service.SpanRow) Ti
 	return ruler
 }
 
-// timelineRollups folds each parent from its own fetch: over the drawn bars the containment
+// roadmapRollups folds each parent from its own fetch: over the drawn bars the containment
 // check goes vacuous at zoom=epic, where no child is drawn at all.
-func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []planning_service.Bar, state optional.Option[bool], children *rolledChildren) ([]planning_service.SpanRow, error) {
+func roadmapRollups(ctx *context.APIContext, repo *repo_model.Repository, bars []planning_service.Bar, state optional.Option[bool], children *rolledChildren) ([]planning_service.RollupRow, error) {
 	epics := make([]string, 0, 8)
 	milestones := make([]int64, 0, 8)
 	seenEpic, seenMilestone := map[string]bool{}, map[int64]bool{}
@@ -361,9 +361,9 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 	slices.Sort(epics)
 	slices.Sort(milestones)
 
-	rows := make([]planning_service.SpanRow, 0, len(epics)+len(milestones))
+	rows := make([]planning_service.RollupRow, 0, len(epics)+len(milestones))
 	for _, epic := range epics {
-		row, held, ok, err := timelineRollup(ctx, repo, state, "epic", epic, func(opts *issues_model.IssuesOptions) {
+		row, held, ok, err := roadmapRollup(ctx, repo, state, "epic", epic, func(opts *issues_model.IssuesOptions) {
 			opts.IncludedLabelNames = []string{planning_service.EpicLabelPrefix + epic}
 		})
 		if err != nil {
@@ -375,7 +375,7 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 		}
 	}
 	for _, milestoneID := range milestones {
-		row, held, ok, err := timelineRollup(ctx, repo, state, "milestone", strconv.FormatInt(milestoneID, 10),
+		row, held, ok, err := roadmapRollup(ctx, repo, state, "milestone", strconv.FormatInt(milestoneID, 10),
 			func(opts *issues_model.IssuesOptions) { opts.MilestoneIDs = []int64{milestoneID} })
 		if err != nil {
 			return nil, err
@@ -388,9 +388,9 @@ func timelineRollups(ctx *context.APIContext, repo *repo_model.Repository, bars 
 	return rows, nil
 }
 
-// timelineMilestoneRollups pages over the repository's milestones rather than its issues, so a
+// roadmapMilestoneRollups pages over the repository's milestones rather than its issues, so a
 // page of N holds N milestone rows and truncated means more milestones than the page holds.
-func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, children *rolledChildren) ([]planning_service.SpanRow, bool, error) {
+func roadmapMilestoneRollups(ctx *context.APIContext, repo *repo_model.Repository, opts *issues_model.IssuesOptions, limit int, children *rolledChildren) ([]planning_service.RollupRow, bool, error) {
 	// The milestone's OWN open/closed state is not the state filter: state narrows the
 	// ISSUES, here as everywhere else, so an open milestone holding closed work is listed
 	// at state=closed and a milestone whose children all fall outside it yields no row.
@@ -402,14 +402,14 @@ func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Reposito
 	if err != nil {
 		return nil, false, err
 	}
-	rows := make([]planning_service.SpanRow, 0, len(milestones))
+	rows := make([]planning_service.RollupRow, 0, len(milestones))
 	for _, milestone := range milestones {
 		// The milestone_id filter narrows the chart here, because this zoom's page is over
 		// milestones rather than over the issues it would otherwise have narrowed.
 		if len(opts.MilestoneIDs) > 0 && !slices.Contains(opts.MilestoneIDs, milestone.ID) {
 			continue
 		}
-		row, held, ok, err := timelineRollup(ctx, repo, opts.IsClosed, "milestone", strconv.FormatInt(milestone.ID, 10),
+		row, held, ok, err := roadmapRollup(ctx, repo, opts.IsClosed, "milestone", strconv.FormatInt(milestone.ID, 10),
 			func(o *issues_model.IssuesOptions) { o.MilestoneIDs = []int64{milestone.ID} })
 		if err != nil {
 			return nil, false, err
@@ -422,9 +422,9 @@ func timelineMilestoneRollups(ctx *context.APIContext, repo *repo_model.Reposito
 	return rows, len(opts.MilestoneIDs) == 0 && len(milestones) == limit, nil
 }
 
-// timelineRollup folds one parent's children into its row, one query per parent because a
+// roadmapRollup folds one parent's children into its row, one query per parent because a
 // child's window cannot be resolved in SQL. ok=false for a parent whose children draw no bar.
-func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], kind, key string, narrow func(*issues_model.IssuesOptions)) (planning_service.SpanRow, issues_model.IssueList, bool, error) {
+func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state optional.Option[bool], kind, key string, narrow func(*issues_model.IssuesOptions)) (planning_service.RollupRow, issues_model.IssueList, bool, error) {
 	opts := &issues_model.IssuesOptions{
 		RepoIDs:   []int64{repo.ID},
 		IsPull:    optional.Some(false),
@@ -436,14 +436,14 @@ func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, state 
 
 	issues, err := issues_model.Issues(ctx, opts)
 	if err != nil {
-		return planning_service.SpanRow{}, nil, false, err
+		return planning_service.RollupRow{}, nil, false, err
 	}
 	if err := issues.LoadAttributes(ctx); err != nil {
-		return planning_service.SpanRow{}, nil, false, err
+		return planning_service.RollupRow{}, nil, false, err
 	}
 	starts, err := ccpmStarts(ctx, issues)
 	if err != nil {
-		return planning_service.SpanRow{}, nil, false, err
+		return planning_service.RollupRow{}, nil, false, err
 	}
 	children := make([]planning_service.Bar, 0, len(issues))
 	for _, issue := range issues {
@@ -452,7 +452,7 @@ func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, state 
 		}
 	}
 
-	for _, row := range planning_service.BuildSpans(children) {
+	for _, row := range planning_service.BuildRollups(children) {
 		if row.Kind != kind || row.Key != key {
 			continue
 		}
@@ -461,15 +461,15 @@ func timelineRollup(ctx *context.APIContext, repo *repo_model.Repository, state 
 		}
 		return row, issues, true, nil
 	}
-	return planning_service.SpanRow{}, nil, false, nil
+	return planning_service.RollupRow{}, nil, false, nil
 }
 
-// timelineRepo resolves and authorizes the repository the chart covers.
-func timelineRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, access.Permission, bool) {
+// roadmapRepo resolves and authorizes the repository the chart covers.
+func roadmapRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, access.Permission, bool) {
 	var perm access.Permission
 	if repoID <= 0 {
 		hubapi.APIError(ctx, http.StatusBadRequest, "missing_repo_id",
-			"repo_id is required: a timeline covers one repository's issues",
+			"repo_id is required: a roadmap covers one repository's issues",
 			"Pass ?repo_id=<id>, listing "+BasePath+"/repos to find it.")
 		return nil, perm, false
 	}
@@ -494,10 +494,10 @@ func timelineRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository
 	return repo, perm, true
 }
 
-// timelineStates is the accepted set for ?state=.
-var timelineStates = []string{"open", "closed", "all"}
+// roadmapStates is the accepted set for ?state=.
+var roadmapStates = []string{"open", "closed", "all"}
 
-func parseTimelineState(ctx *context.APIContext, raw string) (optional.Option[bool], bool) {
+func parseRoadmapState(ctx *context.APIContext, raw string) (optional.Option[bool], bool) {
 	switch raw {
 	case "", "all":
 		return optional.None[bool](), true
@@ -510,7 +510,7 @@ func parseTimelineState(ctx *context.APIContext, raw string) (optional.Option[bo
 		Status: http.StatusBadRequest, Code: "unknown_state",
 		Message:         "no such issue state: " + raw,
 		Parameter:       "state",
-		Accepted:        timelineStates,
+		Accepted:        roadmapStates,
 		SuggestedAction: "Use state=open, state=closed or state=all; all is the default, because a chart that hid closed work would show no finished bar.",
 	})
 	return optional.None[bool](), false
@@ -622,7 +622,7 @@ func readArrowEdges(ctx *context.APIContext, issues issues_model.IssueList) ([]a
 	// same mapping the body-derived words go through.
 	gate, ok := planning_service.ArrowKindFor("depends_on")
 	if !ok {
-		return nil, errors.New("depends_on is not a relation the timeline can draw")
+		return nil, errors.New("depends_on is not a relation the roadmap can draw")
 	}
 	for _, dep := range deps {
 		// DependencyID blocks IssueID, so the blocker comes first on a schedule.
@@ -652,9 +652,9 @@ func readArrowEdges(ctx *context.APIContext, issues issues_model.IssueList) ([]a
 	return edges, nil
 }
 
-// timelineArrows attaches the page's edges to the bars it drew. An edge whose other end is
+// roadmapArrows attaches the page's edges to the bars it drew. An edge whose other end is
 // not drawn is dropped: an arrow to a bar that is not on the chart would point at nothing.
-func timelineArrows(ctx *context.APIContext, issues issues_model.IssueList, drawn map[int64]bool) ([]planning_service.Arrow, error) {
+func roadmapArrows(ctx *context.APIContext, issues issues_model.IssueList, drawn map[int64]bool) ([]planning_service.Arrow, error) {
 	edges, err := readArrowEdges(ctx, issues)
 	if err != nil {
 		return nil, err
@@ -678,32 +678,32 @@ func timelineArrows(ctx *context.APIContext, issues issues_model.IssueList, draw
 // rolledChildren records which bracket each of a page's rollup children falls in, so an edge
 // between two children can be re-keyed onto the brackets that hold them.
 type rolledChildren struct {
-	kind   string // only rows of this kind are on the page, so only they collect
-	span   map[int64]string
-	issues issues_model.IssueList
+	kind      string // only rows of this kind are on the page, so only they collect
+	rollupKey map[int64]string
+	issues    issues_model.IssueList
 }
 
 func newRolledChildren(kind string) *rolledChildren {
-	return &rolledChildren{kind: kind, span: map[int64]string{}}
+	return &rolledChildren{kind: kind, rollupKey: map[int64]string{}}
 }
 
-func (c *rolledChildren) collect(row planning_service.SpanRow, issues issues_model.IssueList) {
+func (c *rolledChildren) collect(row planning_service.RollupRow, issues issues_model.IssueList) {
 	if c == nil || row.Kind != c.kind {
 		return
 	}
 	for _, issue := range issues {
-		if _, seen := c.span[issue.ID]; seen {
+		if _, seen := c.rollupKey[issue.ID]; seen {
 			continue
 		}
-		c.span[issue.ID] = row.SpanKey()
+		c.rollupKey[issue.ID] = row.RollupKey()
 		c.issues = append(c.issues, issue)
 	}
 }
 
-// timelineRolledArrows re-keys the edges among a page's rollup children onto the brackets
+// roadmapRolledArrows re-keys the edges among a page's rollup children onto the brackets
 // that hold them, so an edge whose end is inside a bracket attaches to the bracket instead of
 // vanishing with the bar it pointed at. The gate/sequence distinction survives the re-keying.
-func timelineRolledArrows(ctx *context.APIContext, children *rolledChildren) ([]planning_service.Arrow, error) {
+func roadmapRolledArrows(ctx *context.APIContext, children *rolledChildren) ([]planning_service.Arrow, error) {
 	edges, err := readArrowEdges(ctx, children.issues)
 	if err != nil {
 		return nil, err
@@ -711,7 +711,7 @@ func timelineRolledArrows(ctx *context.APIContext, children *rolledChildren) ([]
 	arrows := make([]planning_service.Arrow, 0, len(edges))
 	seen := map[string]bool{}
 	for _, edge := range edges {
-		from, to := children.span[edge.from], children.span[edge.to]
+		from, to := children.rollupKey[edge.from], children.rollupKey[edge.to]
 		// An edge inside one bracket says nothing about the order of the brackets, and an
 		// end with no bracket on this page has nothing to attach to.
 		if from == "" || to == "" || from == to {
@@ -723,7 +723,7 @@ func timelineRolledArrows(ctx *context.APIContext, children *rolledChildren) ([]
 		}
 		seen[key] = true
 		arrow := planning_service.NewArrow(edge.from, edge.to, edge.kind)
-		arrow.FromSpan, arrow.ToSpan = from, to
+		arrow.FromRollup, arrow.ToRollup = from, to
 		arrows = append(arrows, arrow)
 	}
 	return arrows, nil

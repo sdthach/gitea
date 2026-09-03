@@ -32,7 +32,7 @@ var runSpec = query.Spec{
 		{Name: "id", Column: "id", Kind: query.KindInt},
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt},
 		{Name: "workflow_id", Column: "workflow_id", Kind: query.KindString},
-		// status is filtered by the state NAME the overview publishes, never by Gitea's
+		// status is filtered by the state NAME the insights publish, never by Gitea's
 		// internal integer. mapRunStatusFilters rewrites the value before the condition is
 		// rendered; declaring it here is what makes an unknown state a 400 that names the
 		// offender rather than a silently empty result.
@@ -53,7 +53,7 @@ var runSpec = query.Spec{
 }
 
 // Run is the delivery view of an Actions run. It carries run_url so every row links out to
-// Gitea's own run page: the overview duplicates no Gitea page.
+// Gitea's own run page: the insights duplicate no Gitea page.
 type Run struct {
 	ID              int64  `json:"id"`
 	RepoID          int64  `json:"repo_id"`
@@ -79,9 +79,9 @@ func listRunsEndpoint() *hubapi.Endpoint {
 			Summary: "List Actions runs across every repository the caller can see",
 			Description: "The cross-repository run list Gitea has no endpoint of its own for: its Actions API lists runs " +
 				"one repository and one workflow at a time. " +
-				"status filters on the state name the overview publishes — " + strings.Join(deployments_service.RunStateNames(), ", ") +
+				"status filters on the state name the insights publish — " + strings.Join(deployments_service.RunStateNames(), ", ") +
 				" — not on Gitea's internal integer. " +
-				"Every row carries run_url; the overview duplicates no Gitea page. " +
+				"Every row carries run_url; the insights duplicate no Gitea page. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit.",
 			Tag: "runs", Query: &runSpec, Response: "Run", ResponseIs: "array",
 		},
@@ -123,7 +123,7 @@ func ListRuns(ctx *context.APIContext) {
 	hubapi.RenderPage(ctx, q, total, out)
 }
 
-// mapRunStatusFilters rewrites a status filter's values from the state names the overview
+// mapRunStatusFilters rewrites a status filter's values from the state names the insights
 // publishes onto the Actions status integers the column stores, so the one grammar renders
 // the condition and this endpoint does not grow a second filter implementation.
 //

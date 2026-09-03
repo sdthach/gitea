@@ -28,14 +28,14 @@ func endpoints() []*hubapi.Endpoint {
 		listDeploymentsEndpoint(),
 		listAuditEndpoint(),
 		listReleasesEndpoint(),
-		getGridEndpoint(),
+		getDeploymentMatrixEndpoint(),
 		createDeploymentEndpoint(),
 		listRunsEndpoint(),
 		listWorkflowsEndpoint(),
-		getOverviewEndpoint(),
-		getOverviewTrendsEndpoint(),
-		listOverviewReposEndpoint(),
-		listApprovalsEndpoint(),
+		getInsightsEndpoint(),
+		getInsightsTrendsEndpoint(),
+		listInsightsReposEndpoint(),
+		listReviewsEndpoint(),
 		approveEndpoint(),
 		rejectEndpoint(),
 		createEnvironmentEndpoint(),
@@ -43,7 +43,7 @@ func endpoints() []*hubapi.Endpoint {
 		deleteEnvironmentEndpoint(),
 		createSecretScopeEndpoint(),
 		deleteSecretScopeEndpoint(),
-		getDeploymentSummaryEndpoint(),
+		getInsightsDeploymentsEndpoint(),
 	}
 }
 

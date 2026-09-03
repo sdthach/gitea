@@ -63,34 +63,34 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"board", "--filter", "repo_id=1", "--filter", "project_id=5", "--filter", "group_by=type"},
 			"/api/planning/v1/board", "",
 		},
-		"timeline": {[]string{"timeline", "--filter", "repo_id=1"}, "/api/planning/v1/timeline", ""},
+		"roadmap": {[]string{"roadmap", "--filter", "repo_id=1"}, "/api/planning/v1/roadmap", ""},
 		"board-move-column": {
 			[]string{"board-move-column", "--repo", "acme/web", "--project-id", "5", "--column-id", "12", "9042"},
 			"/api/planning/v1/board/cards/9042/column", http.MethodPost,
 		},
-		"board-move-lane": {
-			[]string{"board-move-lane", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--lane", "bug", "9042"},
-			"/api/planning/v1/board/cards/9042/lane", http.MethodPost,
+		"board-move-group": {
+			[]string{"board-move-group", "--repo", "acme/web", "--project-id", "5", "--group-by", "type", "--group", "bug", "9042"},
+			"/api/planning/v1/board/cards/9042/group", http.MethodPost,
 		},
-		"timeline-move-milestone": {
-			[]string{"timeline-move-milestone", "--repo", "acme/widgets", "--milestone-id", "2", "9042"},
-			"/api/planning/v1/timeline/issues/9042/milestone", http.MethodPost,
+		"issue-move-milestone": {
+			[]string{"issue-move-milestone", "--repo", "acme/widgets", "--milestone-id", "2", "9042"},
+			"/api/planning/v1/issues/9042/milestone", http.MethodPost,
 		},
-		"timeline-move-lane": {
-			[]string{"timeline-move-lane", "--repo", "acme/widgets", "--group-by", "type", "--lane", "bug", "9042"},
-			"/api/planning/v1/timeline/issues/9042/lane", http.MethodPost,
+		"issue-move-group": {
+			[]string{"issue-move-group", "--repo", "acme/widgets", "--group-by", "type", "--group", "bug", "9042"},
+			"/api/planning/v1/issues/9042/group", http.MethodPost,
 		},
-		"timeline-set-dates": {
-			[]string{"timeline-set-dates", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
-			"/api/planning/v1/timeline/issues/9042/dates", http.MethodPost,
+		"issue-set-dates": {
+			[]string{"issue-set-dates", "--repo", "acme/widgets", "--start", "2026-03-01", "9042"},
+			"/api/planning/v1/issues/9042/dates", http.MethodPost,
 		},
-		"timeline-create-milestone": {
-			[]string{"timeline-create-milestone", "--repo", "acme/widgets", "--title", "Sprint 9"},
-			"/api/planning/v1/timeline/milestones", http.MethodPost,
+		"milestone-create": {
+			[]string{"milestone-create", "--repo", "acme/widgets", "--title", "Sprint 9"},
+			"/api/planning/v1/milestones", http.MethodPost,
 		},
-		"timeline-create-issue": {
-			[]string{"timeline-create-issue", "--repo", "acme/widgets", "--title", "Wire it"},
-			"/api/planning/v1/timeline/issues", http.MethodPost,
+		"issue-create": {
+			[]string{"issue-create", "--repo", "acme/widgets", "--title", "Wire it"},
+			"/api/planning/v1/issues", http.MethodPost,
 		},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")

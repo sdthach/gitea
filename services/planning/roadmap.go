@@ -148,7 +148,7 @@ type BarInput struct {
 	// Type is ccpm's type:<t> value. Empty means the caller has not resolved one and
 	// ResolveBar reads it off Labels.
 	Type string
-	// Labels and Assignees are what lane assignment reads, so the chart groups by the same
+	// Labels and Assignees are what group assignment reads, so the chart groups by the same
 	// definition the board does.
 	Labels    []string
 	Assignees []string
@@ -176,8 +176,8 @@ type Bar struct {
 	MilestoneID int64  `json:"milestone_id,omitempty"`
 	StartUnix   int64  `json:"start_unix"`
 	EndUnix     int64  `json:"end_unix"`
-	// Labels and Assignees carry lane assignment onto the chart, so a vertical drag and a
-	// board lane move write the same field.
+	// Labels and Assignees carry group assignment onto the chart, so a vertical drag and a
+	// board group move write the same field.
 	Labels    []string `json:"labels,omitempty"`
 	Assignees []string `json:"assignees,omitempty"`
 	// StartSource and EndSource are on every bar: declaring where an endpoint came from is
@@ -299,10 +299,10 @@ type Arrow struct {
 	// Enforced is whether the forge itself acts on the edge, which is the whole
 	// difference between the two kinds.
 	Enforced bool `json:"enforced"`
-	// FromSpan and ToSpan name the brackets an edge joins at a rolled-up zoom, as
+	// FromRollup and ToRollup name the brackets an edge joins at a rolled-up zoom, as
 	// kind:key. Empty at issue zoom, where the edge already joins two drawn bars.
-	FromSpan string `json:"from_span,omitempty"`
-	ToSpan   string `json:"to_span,omitempty"`
+	FromRollup string `json:"from_rollup,omitempty"`
+	ToRollup   string `json:"to_rollup,omitempty"`
 }
 
 // NewArrow builds an edge, filling in whether the forge enforces it.
@@ -329,10 +329,10 @@ func ParseSequenceRelations(body string) [][2]string {
 	return out
 }
 
-// SpanRow is an epic or milestone row: it spans the earliest start to the latest end of its
+// RollupRow is an epic or milestone row: it rolls up the earliest start to the latest end of its
 // children, and its progress is ccpm's existing task-close percentage. No second definition
 // of progress is introduced.
-type SpanRow struct {
+type RollupRow struct {
 	Kind      string `json:"kind"` // "epic" or "milestone"
 	Key       string `json:"key"`
 	Label     string `json:"label"`
@@ -343,7 +343,7 @@ type SpanRow struct {
 	// Progress is closed children over all children, as a whole percentage. It is 0 on a
 	// partial row: a fraction of an unknown denominator is not a measurement.
 	Progress int `json:"progress"`
-	// EndInferred is true when ANY child's end is inferred, so a span is never drawn as
+	// EndInferred is true when ANY child's end is inferred, so a rollup is never drawn as
 	// firmer than the bars it is made of.
 	EndInferred bool `json:"end_inferred"`
 	// Partial is true when the fetch behind this row hit its cap, so the row covers a
@@ -396,13 +396,13 @@ func ParseZoom(s string) (Zoom, bool) {
 	return ZoomIssue, false
 }
 
-// BuildSpan folds a set of bars into one row. A span over no bars is not a row: it returns
+// BuildRollup folds a set of bars into one row. A rollup over no bars is not a row: it returns
 // ok=false rather than a zero-width bar at the epoch.
-func BuildSpan(kind, key, label string, bars []Bar) (SpanRow, bool) {
+func BuildRollup(kind, key, label string, bars []Bar) (RollupRow, bool) {
 	if len(bars) == 0 {
-		return SpanRow{}, false
+		return RollupRow{}, false
 	}
-	row := SpanRow{Kind: kind, Key: key, Label: label, StartUnix: bars[0].StartUnix, EndUnix: bars[0].EndUnix}
+	row := RollupRow{Kind: kind, Key: key, Label: label, StartUnix: bars[0].StartUnix, EndUnix: bars[0].EndUnix}
 	for _, bar := range bars {
 		if bar.StartUnix < row.StartUnix {
 			row.StartUnix = bar.StartUnix
@@ -422,9 +422,9 @@ func BuildSpan(kind, key, label string, bars []Bar) (SpanRow, bool) {
 	return row, true
 }
 
-// BuildSpans folds bars into epic and milestone rows, epics first, each set ordered by key.
+// BuildRollups folds bars into epic and milestone rows, epics first, each set ordered by key.
 // An epic's own issue is its declared window, not one of its children; milestones count it.
-func BuildSpans(bars []Bar) []SpanRow {
+func BuildRollups(bars []Bar) []RollupRow {
 	byEpic := map[string][]Bar{}
 	declared := map[string]Bar{}
 	byMilestone := map[string][]Bar{}
@@ -447,16 +447,16 @@ func BuildSpans(bars []Bar) []SpanRow {
 		}
 	}
 
-	rows := make([]SpanRow, 0, len(byEpic)+len(byMilestone))
+	rows := make([]RollupRow, 0, len(byEpic)+len(byMilestone))
 	for _, key := range sortedKeys(byEpic) {
-		row, ok := BuildSpan("epic", key, key, byEpic[key])
+		row, ok := BuildRollup("epic", key, key, byEpic[key])
 		if !ok {
 			// A freshly filed epic has a window and no children yet; drawing nothing for
 			// it would say nothing about it.
 			if declared[key].IssueID == 0 {
 				continue
 			}
-			row = SpanRow{
+			row = RollupRow{
 				Kind: "epic", Key: key, Label: key,
 				StartUnix: declared[key].StartUnix, EndUnix: declared[key].EndUnix,
 				EndInferred: declared[key].EndInferred,
@@ -466,7 +466,7 @@ func BuildSpans(bars []Bar) []SpanRow {
 		rows = append(rows, row)
 	}
 	for _, key := range sortedKeys(byMilestone) {
-		if row, ok := BuildSpan("milestone", key, milestoneLabel[key], byMilestone[key]); ok {
+		if row, ok := BuildRollup("milestone", key, milestoneLabel[key], byMilestone[key]); ok {
 			row.ContainsChildren = true
 			rows = append(rows, row)
 		}
@@ -474,19 +474,19 @@ func BuildSpans(bars []Bar) []SpanRow {
 	return rows
 }
 
-// SpanKey names a rollup as kind:key, which is what an arrow attaches to when the row it
+// RollupKey names a rollup as kind:key, which is what an arrow attaches to when the row it
 // points at is a bracket rather than a bar.
-func (r SpanRow) SpanKey() string { return r.Kind + ":" + r.Key }
+func (r RollupRow) RollupKey() string { return r.Kind + ":" + r.Key }
 
 // MarkPartial withdraws the progress figure: a fraction of an unknown denominator is not a
 // measurement.
-func (r *SpanRow) MarkPartial() {
+func (r *RollupRow) MarkPartial() {
 	r.Partial, r.Progress = true, 0
 }
 
 // applyContainment warns when an epic's declared window does not contain its children's.
 // Containment, not a sum of effort: children run in parallel, so a sum warns on every plan.
-func applyContainment(row *SpanRow, declared Bar, children []Bar) {
+func applyContainment(row *RollupRow, declared Bar, children []Bar) {
 	row.ContainsChildren = true
 	if declared.IssueID == 0 {
 		return

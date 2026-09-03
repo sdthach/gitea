@@ -161,12 +161,12 @@ test('delivery environment editor creates an environment and gates it', async ({
   await expect(page.locator('#delivery-token-box')).toBeHidden();
 
   // Removing a check must reset its fields, because PUT replaces the whole row.
-  await page.getByLabel('Add check').selectOption('approvals');
-  const approvals = page.locator('[data-check="approvals"]');
-  await approvals.getByRole('button', {name: 'Save'}).click();
-  await expect(approvals).toContainText('1 approval');
-  await approvals.getByRole('button', {name: 'Remove'}).click();
-  await expect(approvals).toHaveCount(0);
+  await page.getByLabel('Add check').selectOption('reviews');
+  const reviews = page.locator('[data-check="reviews"]');
+  await reviews.getByRole('button', {name: 'Save'}).click();
+  await expect(reviews).toContainText('1 review');
+  await reviews.getByRole('button', {name: 'Remove'}).click();
+  await expect(reviews).toHaveCount(0);
 
   const environmentID = /environments\/(\d+)\/edit/.exec(page.url())![1];
   const row = await page.request.get(`${baseUrl()}/api/deployments/v1/environments/${environmentID}`, {headers: apiHeaders()});
@@ -281,14 +281,14 @@ test('delivery timeline offers a reader no handle and no drop target', async ({p
     await page.getByLabel('Repository id').fill(String(repoID));
     await page.getByLabel('Group by').selectOption('type');
 
-    // The reader sees the whole chart and every lane it is grouped into...
+    // The reader sees the whole chart and every group it is grouped into...
     const chart = page.locator('#delivery-timeline-body');
     await expect(chart).toContainText('checkout story one');
-    await expect(chart.locator('tr.delivery-lane').first()).toBeVisible();
+    await expect(chart.locator('tr.delivery-group').first()).toBeVisible();
 
-    // ...and no way to move anything: no bar is a handle and no lane is a drop target.
+    // ...and no way to move anything: no bar is a handle and no group is a drop target.
     await expect(chart.locator('[data-drag]')).toHaveCount(0);
-    await expect(chart.locator('tr[data-lane]')).toHaveCount(0);
+    await expect(chart.locator('tr[data-group]')).toHaveCount(0);
     await expect(page.locator('#delivery-token-box')).toBeHidden();
     await expect(page.locator('#delivery-error')).toBeHidden();
   } finally {

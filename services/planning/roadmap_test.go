@@ -153,32 +153,32 @@ func TestDeliveryParseSequenceRelationsReadsOnlyTheUnenforcedWords(t *testing.T)
 
 // An epic or milestone row spans earliest start to latest end of its children, and its
 // progress is ccpm's existing task-close percentage.
-func TestDeliveryBuildSpanCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) {
+func TestDeliveryBuildRollupCoversItsChildrenAndUsesCcpmsProgress(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 1, StartUnix: 300, EndUnix: 900, IsClosed: true},
 		{IssueID: 2, StartUnix: 100, EndUnix: 400},
 		{IssueID: 3, StartUnix: 500, EndUnix: 1200, EndInferred: true},
 	}
-	row, ok := BuildSpan("epic", "checkout", "checkout", bars)
+	row, ok := BuildRollup("epic", "checkout", "checkout", bars)
 	require.True(t, ok)
 	assert.Equal(t, int64(100), row.StartUnix)
 	assert.Equal(t, int64(1200), row.EndUnix)
 	assert.Equal(t, 3, row.Children)
 	assert.Equal(t, 1, row.Closed)
 	assert.Equal(t, 33, row.Progress, "closed over total, ccpm's own definition and no second one")
-	assert.True(t, row.EndInferred, "a span is never firmer than the bars it is made of")
+	assert.True(t, row.EndInferred, "a rollup is never firmer than the bars it is made of")
 
-	_, ok = BuildSpan("epic", "empty", "empty", nil)
-	assert.False(t, ok, "a span over no bars is not a row")
+	_, ok = BuildRollup("epic", "empty", "empty", nil)
+	assert.False(t, ok, "a rollup over no bars is not a row")
 }
 
-func TestDeliveryBuildSpansEmitsEpicsThenMilestones(t *testing.T) {
+func TestDeliveryBuildRollupsEmitsEpicsThenMilestones(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 1, Epic: "checkout", StartUnix: 100, EndUnix: 200, MilestoneID: 4, Milestone: "beta"},
 		{IssueID: 2, Epic: "billing", StartUnix: 150, EndUnix: 900, IsClosed: true},
 		{IssueID: 3, StartUnix: 50, EndUnix: 60},
 	}
-	rows := BuildSpans(bars)
+	rows := BuildRollups(bars)
 	require.Len(t, rows, 3)
 	assert.Equal(t, []string{"epic", "epic", "milestone"}, []string{rows[0].Kind, rows[1].Kind, rows[2].Kind})
 	assert.Equal(t, "billing", rows[0].Key)
@@ -188,17 +188,17 @@ func TestDeliveryBuildSpansEmitsEpicsThenMilestones(t *testing.T) {
 	assert.Equal(t, 0, rows[1].Progress)
 }
 
-// TestDeliveryBuildSpansExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
+// TestDeliveryBuildRollupsExcludesTheEpicIssueFromItsOwnRollup is what makes the containment
 // check meaningful: ccpm puts epic:<name> on the epic's own issue beside type:epic, so
 // without the exclusion the parent counts among its own children and its declared window has
 // nothing left to be compared against.
-func TestDeliveryBuildSpansExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
+func TestDeliveryBuildRollupsExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
 	bars := []Bar{
 		{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 100, EndUnix: 5000},
 		{IssueID: 1, Number: 57, Epic: "checkout", Type: "story", StartUnix: 300, EndUnix: 900, IsClosed: true},
 		{IssueID: 2, Number: 58, Epic: "checkout", Type: "task", StartUnix: 200, EndUnix: 400},
 	}
-	rows := BuildSpans(bars)
+	rows := BuildRollups(bars)
 	require.Len(t, rows, 1)
 	assert.Equal(t, 2, rows[0].Children, "the epic issue is not one of its own children")
 	assert.Equal(t, 50, rows[0].Progress, "progress is over the children, not over the parent too")
@@ -211,7 +211,7 @@ func TestDeliveryBuildSpansExcludesTheEpicIssueFromItsOwnRollup(t *testing.T) {
 	for i := range bars {
 		bars[i].MilestoneID, bars[i].Milestone = 4, "beta"
 	}
-	rows = BuildSpans(bars)
+	rows = BuildRollups(bars)
 	require.Len(t, rows, 2)
 	assert.Equal(t, 3, rows[1].Children, "a milestone counts every issue filed under it")
 }
@@ -224,7 +224,7 @@ func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
 	declared := Bar{IssueID: 42, Number: 42, Epic: "checkout", Type: TypeEpic, StartUnix: 1772323200, EndUnix: 1773187200}
 	child := Bar{IssueID: 7, Number: 57, Epic: "checkout", Type: "story", StartUnix: 1772323200, EndUnix: 1774396800}
 
-	rows := BuildSpans([]Bar{declared, child})
+	rows := BuildRollups([]Bar{declared, child})
 	require.Len(t, rows, 1)
 	row := rows[0]
 	assert.False(t, row.ContainsChildren)
@@ -238,7 +238,7 @@ func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
 	declared.EndUnix = 1774396800
 	second := child
 	second.IssueID, second.Number = 8, 58
-	rows = BuildSpans([]Bar{declared, child, second})
+	rows = BuildRollups([]Bar{declared, child, second})
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].ContainsChildren)
 	assert.Empty(t, rows[0].Warning)
@@ -246,23 +246,23 @@ func TestDeliveryContainmentFlagsAnEpicThatEndsBeforeItsChildren(t *testing.T) {
 
 	// Work that starts before the epic it belongs to is the other half of containment.
 	declared.StartUnix = 1772928000 // 2026-03-08
-	rows = BuildSpans([]Bar{declared, child})
+	rows = BuildRollups([]Bar{declared, child})
 	require.Len(t, rows, 1)
 	assert.False(t, rows[0].ContainsChildren)
 	assert.Equal(t, "epic checkout (#42) starts 7 days after the work filed under it", rows[0].Warning)
 	assert.Contains(t, rows[0].SuggestedAction, "Move the epic's start to 2026-03-01")
 
 	// An epic label naming no epic issue has no declared window to contradict.
-	rows = BuildSpans([]Bar{child})
+	rows = BuildRollups([]Bar{child})
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].ContainsChildren)
 	assert.Zero(t, rows[0].IssueID)
 }
 
-// TestDeliverySpanRowPartialWithdrawsItsProgress: a fraction of an unknown denominator is not
+// TestDeliveryRollupRowPartialWithdrawsItsProgress: a fraction of an unknown denominator is not
 // a measurement, so a capped rollup publishes no percentage.
-func TestDeliverySpanRowPartialWithdrawsItsProgress(t *testing.T) {
-	row, ok := BuildSpan("epic", "checkout", "checkout", []Bar{
+func TestDeliveryRollupRowPartialWithdrawsItsProgress(t *testing.T) {
+	row, ok := BuildRollup("epic", "checkout", "checkout", []Bar{
 		{IssueID: 1, StartUnix: 100, EndUnix: 200, IsClosed: true},
 		{IssueID: 2, StartUnix: 100, EndUnix: 200},
 	})
@@ -284,8 +284,8 @@ func TestDeliveryResolveBarReadsItsTypeOffTheLabels(t *testing.T) {
 	assert.Equal(t, "story", bar.Type)
 	assert.Equal(t, []string{"epic:checkout", "type:story"}, bar.Labels)
 	assert.Equal(t, []string{"jo"}, bar.Assignees)
-	assert.Equal(t, "story", LaneKeyFor(bar.Labels, bar.Assignees, GroupType),
-		"the chart's lanes and the board's are one definition")
+	assert.Equal(t, "story", GroupKeyFor(bar.Labels, bar.Assignees, GroupType),
+		"the chart's groups and the board's are one definition")
 
 	bar, ok = ResolveBar(managed(BarInput{Labels: []string{"epic:checkout"}}))
 	require.True(t, ok)
@@ -310,12 +310,12 @@ func TestDeliveryParseZoomAcceptsTheDeclaredSetAndRefusesTheRest(t *testing.T) {
 	assert.Equal(t, ZoomIssue, zoom)
 }
 
-// TestDeliveryBuildSpansListsAnEpicThatHasNoChildrenYet: a freshly filed epic has a window
+// TestDeliveryBuildRollupsListsAnEpicThatHasNoChildrenYet: a freshly filed epic has a window
 // and no children, and drawing nothing for it would say nothing about it.
-func TestDeliveryBuildSpansListsAnEpicThatHasNoChildrenYet(t *testing.T) {
+func TestDeliveryBuildRollupsListsAnEpicThatHasNoChildrenYet(t *testing.T) {
 	declared := Bar{IssueID: 42, Number: 42, Epic: "lonely", Type: TypeEpic, StartUnix: 100, EndUnix: 900, EndInferred: true}
 
-	rows := BuildSpans([]Bar{declared})
+	rows := BuildRollups([]Bar{declared})
 	require.Len(t, rows, 1)
 	assert.Equal(t, "epic", rows[0].Kind)
 	assert.Equal(t, "lonely", rows[0].Key)
@@ -332,5 +332,5 @@ func TestDeliveryBuildSpansListsAnEpicThatHasNoChildrenYet(t *testing.T) {
 	assert.True(t, rows[0].EndInferred, "the declared bar's own end is an estimate")
 
 	// An epic label carried by no epic issue and no child is still not a row.
-	assert.Empty(t, BuildSpans([]Bar{{IssueID: 7, Epic: "", Type: "story", StartUnix: 1, EndUnix: 2}}))
+	assert.Empty(t, BuildRollups([]Bar{{IssueID: 7, Epic: "", Type: "story", StartUnix: 1, EndUnix: 2}}))
 }

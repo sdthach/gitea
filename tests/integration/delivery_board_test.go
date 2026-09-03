@@ -34,7 +34,7 @@ type boardPayload struct {
 		ColumnID int64  `json:"column_id"`
 		Title    string `json:"title"`
 	} `json:"columns"`
-	Lanes []struct {
+	Groups []struct {
 		Key          string `json:"key"`
 		Label        string `json:"label"`
 		IsEmptyValue bool   `json:"is_empty_value"`
@@ -48,7 +48,7 @@ type boardPayload struct {
 				ColumnID int64 `json:"column_id"`
 			} `json:"cards"`
 		} `json:"columns"`
-	} `json:"lanes"`
+	} `json:"groups"`
 	CanWrite     bool `json:"can_write"`
 	CanEditIssue bool `json:"can_edit_issue"`
 }
@@ -60,34 +60,34 @@ type deliveryRefusal struct {
 	Accepted        []string `json:"accepted"`
 }
 
-// labelForLane creates a lane label in the repository, which is what ccpm's init.sh does
-// before an epic sync. The board's lane move applies an existing label; it never invents one.
-func labelForLane(t *testing.T, repoID int64, name string) *issues_model.Label {
+// labelForGroup creates a group label in the repository, which is what ccpm's init.sh does
+// before an epic sync. The board's group move applies an existing label; it never invents one.
+func labelForGroup(t *testing.T, repoID int64, name string) *issues_model.Label {
 	t.Helper()
 	label := &issues_model.Label{RepoID: repoID, Name: name, Color: "#112233"}
 	require.NoError(t, issues_model.NewLabel(t.Context(), label))
 	return label
 }
 
-func laneOf(t *testing.T, board boardPayload, issueID int64) string {
+func groupOf(t *testing.T, board boardPayload, issueID int64) string {
 	t.Helper()
-	for _, lane := range board.Lanes {
-		for _, column := range lane.Columns {
+	for _, group := range board.Groups {
+		for _, column := range group.Columns {
 			for _, card := range column.Cards {
 				if card.IssueID == issueID {
-					return lane.Key
+					return group.Key
 				}
 			}
 		}
 	}
-	t.Fatalf("issue %d is on no lane of the board", issueID)
+	t.Fatalf("issue %d is on no group of the board", issueID)
 	return ""
 }
 
 func columnOf(t *testing.T, board boardPayload, issueID int64) int64 {
 	t.Helper()
-	for _, lane := range board.Lanes {
-		for _, column := range lane.Columns {
+	for _, group := range board.Groups {
+		for _, column := range group.Columns {
 			for _, card := range column.Cards {
 				if card.IssueID == issueID {
 					return column.ColumnID
@@ -108,9 +108,9 @@ func getBoard(t *testing.T, token, query string) boardPayload {
 	return board
 }
 
-// TestAPIDeliveryBoardRendersLanesOverGiteasColumns: the columns are Gitea's own and
-// the lanes are a rendering over rows it already returns. Nothing is stored to make a lane.
-func TestAPIDeliveryBoardRendersLanesOverGiteasColumns(t *testing.T) {
+// TestAPIDeliveryBoardRendersGroupsOverGiteasColumns: the columns are Gitea's own and
+// the groups are a rendering over rows it already returns. Nothing is stored to make a group.
+func TestAPIDeliveryBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	session := loginUser(t, "user2")
@@ -123,10 +123,10 @@ func TestAPIDeliveryBoardRendersLanesOverGiteasColumns(t *testing.T) {
 	assert.Equal(t, []string{"To Do", "In Progress", "Done"},
 		[]string{board.Columns[0].Title, board.Columns[1].Title, board.Columns[2].Title})
 
-	require.Len(t, board.Lanes, 1, "grouping off is Gitea's own board: one lane")
-	assert.Equal(t, "All issues", board.Lanes[0].Label)
-	assert.Positive(t, board.Lanes[0].Cards)
-	require.Len(t, board.Lanes[0].Columns, 3, "the lane carries every column")
+	require.Len(t, board.Groups, 1, "grouping off is Gitea's own board: one group")
+	assert.Equal(t, "All issues", board.Groups[0].Label)
+	assert.Positive(t, board.Groups[0].Cards)
+	require.Len(t, board.Groups[0].Columns, 3, "the group carries every column")
 
 	// A legacy row with no column renders in the default one rather than vanishing.
 	assert.Equal(t, board.Columns[0].ColumnID, columnOf(t, board, 2),
@@ -137,8 +137,8 @@ func TestAPIDeliveryBoardRendersLanesOverGiteasColumns(t *testing.T) {
 func TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	bug := labelForLane(t, 1, "type:bug")
-	epic := labelForLane(t, 1, "epic:checkout")
+	bug := labelForGroup(t, 1, "type:bug")
+	epic := labelForGroup(t, 1, "epic:checkout")
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, bug))
@@ -148,22 +148,22 @@ func TestAPIDeliveryBoardGroupsByTypeAssigneeAndEpic(t *testing.T) {
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
 	byType := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
-	assert.Equal(t, "bug", laneOf(t, byType, 1))
+	assert.Equal(t, "bug", groupOf(t, byType, 1))
 
 	byEpic := getBoard(t, token, "repo_id=1&project_id=1&group_by=epic")
-	assert.Equal(t, "checkout", laneOf(t, byEpic, 1))
+	assert.Equal(t, "checkout", groupOf(t, byEpic, 1))
 
-	// issue 1 is assigned to user1 in the fixtures, so assignee grouping names a lane too.
+	// issue 1 is assigned to user1 in the fixtures, so assignee grouping names a group too.
 	byAssignee := getBoard(t, token, "repo_id=1&project_id=1&group_by=assignee")
-	assert.Equal(t, "user1", laneOf(t, byAssignee, 1))
+	assert.Equal(t, "user1", groupOf(t, byAssignee, 1))
 }
 
-// TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane: nothing disappears from
+// TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitGroup: nothing disappears from
 // a board because a field is unset.
-func TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane(t *testing.T) {
+func TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitGroup(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	bug := labelForLane(t, 1, "type:bug")
+	bug := labelForGroup(t, 1, "type:bug")
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, bug))
@@ -175,14 +175,14 @@ func TestAPIDeliveryBoardKeepsAnUnsetValueInAnExplicitLane(t *testing.T) {
 	grouped := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 
 	total := 0
-	for _, lane := range grouped.Lanes {
-		total += lane.Cards
+	for _, group := range grouped.Groups {
+		total += group.Cards
 	}
-	assert.Equal(t, ungrouped.Lanes[0].Cards, total, "grouping loses no card")
+	assert.Equal(t, ungrouped.Groups[0].Cards, total, "grouping loses no card")
 
-	last := grouped.Lanes[len(grouped.Lanes)-1]
-	assert.True(t, last.IsEmptyValue, "the empty-value lane is explicit and sorts last")
-	assert.Equal(t, "no type label", last.Label, "the lane says why it is empty")
+	last := grouped.Groups[len(grouped.Groups)-1]
+	assert.True(t, last.IsEmptyValue, "the empty-value group is explicit and sorts last")
+	assert.Equal(t, "no type label", last.Label, "the group says why it is empty")
 	assert.Positive(t, last.Cards)
 }
 
@@ -205,12 +205,12 @@ func TestAPIDeliveryBoardRefusesAnUnknownGrouping(t *testing.T) {
 }
 
 // TestAPIDeliveryBoardPerformsExactlyTwoWrites: a card moved between columns and
-// a card moved between lanes, the second rewriting the underlying label.
+// a card moved between groups, the second rewriting the underlying label.
 func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForLane(t, 1, "type:bug")
-	task := labelForLane(t, 1, "type:task")
+	labelForGroup(t, 1, "type:bug")
+	task := labelForGroup(t, 1, "type:task")
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, doer, task))
@@ -221,7 +221,7 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	before := getBoard(t, token, "repo_id=1&project_id=1&group_by=type")
 	assert.True(t, before.CanWrite)
 	assert.True(t, before.CanEditIssue)
-	assert.Equal(t, "task", laneOf(t, before, 1))
+	assert.Equal(t, "task", groupOf(t, before, 1))
 	assert.Equal(t, int64(1), columnOf(t, before, 1))
 
 	// Write one: between columns.
@@ -232,15 +232,15 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	DecodeJSON(t, resp, &moved)
 	assert.Equal(t, int64(3), columnOf(t, moved, 1), "the write answers with the board as it now stands")
 
-	// Write two: between lanes, which edits the grouping field itself.
-	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/lane",
-		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "bug"}).AddTokenAuth(token)
+	// Write two: between groups, which edits the grouping field itself.
+	req = NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/group",
+		map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "bug"}).AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
 	DecodeJSON(t, resp, &moved)
-	assert.Equal(t, "bug", laneOf(t, moved, 1))
-	assert.Equal(t, int64(3), columnOf(t, moved, 1), "a lane move does not move the card between columns")
+	assert.Equal(t, "bug", groupOf(t, moved, 1))
+	assert.Equal(t, int64(3), columnOf(t, moved, 1), "a group move does not move the card between columns")
 
-	// The label itself was rewritten: the lane is not stored anywhere else.
+	// The label itself was rewritten: the group is not stored anywhere else.
 	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	require.NoError(t, reloaded.LoadLabels(t.Context()))
 	names := make([]string, 0, len(reloaded.Labels))
@@ -251,17 +251,17 @@ func TestAPIDeliveryBoardPerformsExactlyTwoWrites(t *testing.T) {
 	assert.NotContains(t, names, "type:task", "a card never carries two labels of the same grouping")
 }
 
-// TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff: with grouping off there
+// TestAPIDeliveryBoardRefusesAGroupMoveWhenGroupingIsOff: with grouping off there
 // is nothing to write, and the refusal says which write does still work.
-func TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff(t *testing.T) {
+func TestAPIDeliveryBoardRefusesAGroupMoveWhenGroupingIsOff(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
 	for _, groupBy := range []string{"none", ""} {
-		req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/lane",
-			map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": groupBy, "lane": "bug"}).AddTokenAuth(token)
+		req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/board/cards/1/group",
+			map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": groupBy, "group": "bug"}).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusBadRequest)
 		var refusal deliveryRefusal
 		DecodeJSON(t, resp, &refusal)
@@ -271,13 +271,13 @@ func TestAPIDeliveryBoardRefusesALaneMoveWhenGroupingIsOff(t *testing.T) {
 	}
 }
 
-// TestDeliveryBoardDegradesWhileTheTimelineStillRenders: against a repository whose
-// Projects unit is absent the board states the reason, and the timeline renders from the same
+// TestDeliveryBoardDegradesWhileTheRoadmapStillRenders: against a repository whose
+// Projects unit is absent the board states the reason, and the roadmap renders from the same
 // dataset — the two views are independently deliverable.
 //
 // repo4 carries the Issues unit and no Projects unit in the fixtures, which is exactly the
 // runtime shape a build without the Projects API presents to this endpoint.
-func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
+func TestDeliveryBoardDegradesWhileTheRoadmapStillRenders(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
@@ -294,24 +294,24 @@ func TestDeliveryBoardDegradesWhileTheTimelineStillRenders(t *testing.T) {
 	assert.Equal(t, "projects_unavailable", refusal.Code)
 	assert.Contains(t, refusal.Message, repo.FullName())
 	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it")
-	assert.Contains(t, refusal.SuggestedAction, "/timeline",
+	assert.Contains(t, refusal.SuggestedAction, "/roadmap",
 		"the reason points at the view that still works")
 
-	// Same repository, same moment: the timeline answers.
-	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=4").AddTokenAuth(token)
+	// Same repository, same moment: the roadmap answers.
+	req = NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=4").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 }
 
-// TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI keeps both pages readers of the
+// TestDeliveryBoardAndRoadmapPagesAreClientsOfTheAPI keeps both pages readers of the
 // published endpoints rather than second implementations of them: a page that computed its
 // own rows would disagree with the CLI reading the same repository.
-func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
+func TestDeliveryBoardAndRoadmapPagesAreClientsOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	session := loginUser(t, "user2")
 	for path, endpoint := range map[string]string{
 		"/delivery/board":    "/board",
-		"/delivery/timeline": "/timeline",
+		"/delivery/timeline": "/roadmap",
 	} {
 		req := NewRequest(t, "GET", path)
 		MakeRequest(t, req, http.StatusSeeOther)
@@ -323,21 +323,21 @@ func TestDeliveryBoardAndTimelinePagesAreClientsOfTheAPI(t *testing.T) {
 	}
 
 	// The chart's three axes are read from the response and written back to the endpoints
-	// that own them: zoom and grouping are query parameters, a vertical drag is the lane
+	// that own them: zoom and grouping are query parameters, a vertical drag is the group
 	// move, and the time axis is the ruler the server decided.
 	req := NewRequest(t, "GET", "/delivery/timeline")
 	page := session.MakeRequest(t, req, http.StatusOK).Body.String()
 	for _, control := range []string{`id="delivery-zoom"`, `id="delivery-group"`, `id="delivery-ruler"`} {
 		assert.Contains(t, page, control, "the chart offers the control the response's fields are read through")
 	}
-	assert.Contains(t, page, "/timeline/issues/{issue_id}/lane",
-		"a vertical drag posts the published lane move, so it writes what the board's lane move writes")
+	assert.Contains(t, page, "/issues/{issue_id}/group",
+		"a vertical drag posts the published group move, so it writes what the board's group move writes")
 	assert.Contains(t, page, "payload.ruler",
 		"the time axis comes from the response; a unit computed here would disagree with every other client")
 }
 
-// timelinePayload is the shape GET /timeline answers with.
-type timelinePayload struct {
+// roadmapPayload is the shape GET /roadmap answers with.
+type roadmapPayload struct {
 	Bars []struct {
 		IssueID     int64  `json:"issue_id"`
 		MilestoneID int64  `json:"milestone_id"`
@@ -353,10 +353,10 @@ type timelinePayload struct {
 		ToIssueID   int64  `json:"to_issue_id"`
 		Kind        string `json:"kind"`
 		Enforced    bool   `json:"enforced"`
-		FromSpan    string `json:"from_span"`
-		ToSpan      string `json:"to_span"`
+		FromRollup  string `json:"from_rollup"`
+		ToRollup    string `json:"to_rollup"`
 	} `json:"arrows"`
-	Spans []struct {
+	Rollups []struct {
 		Kind             string `json:"kind"`
 		Key              string `json:"key"`
 		Progress         int    `json:"progress"`
@@ -369,18 +369,18 @@ type timelinePayload struct {
 		ContainsChildren bool   `json:"contains_children"`
 		Warning          string `json:"warning"`
 		SuggestedAction  string `json:"suggested_action"`
-	} `json:"spans"`
-	Rows []struct {
+	} `json:"rollups"`
+	Milestones []struct {
 		MilestoneID int64  `json:"milestone_id"`
 		Title       string `json:"title"`
-	} `json:"rows"`
+	} `json:"milestones"`
 	GroupBy string `json:"group_by"`
 	Zoom    string `json:"zoom"`
-	Lanes   []struct {
+	Groups  []struct {
 		Key   string `json:"key"`
 		Label string `json:"label"`
 		Cards int    `json:"cards"`
-	} `json:"lanes"`
+	} `json:"groups"`
 	Ruler struct {
 		Unit      string `json:"unit"`
 		StartUnix int64  `json:"start_unix"`
@@ -399,13 +399,13 @@ type timelinePayload struct {
 	} `json:"unmanaged"`
 }
 
-// TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource, over the wire: a task
+// TestAPIDeliveryRoadmapDrawsFromActualsAndLabelsEverySource, over the wire: a task
 // with a recorded start and a close time draws from actuals; one with neither draws from
 // created plus estimate and is marked inferred; each bar names its start and end source.
-func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
+func TestAPIDeliveryRoadmapDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForLane(t, 1, "epic:checkout")
+	epic := labelForGroup(t, 1, "epic:checkout")
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
 	// Issue 1 is managed, has a ccpm start marker on a comment, and is closed: actuals.
@@ -428,9 +428,9 @@ func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var payload timelinePayload
+	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)
 
 	bars := map[int64]int{}
@@ -453,21 +453,21 @@ func TestAPIDeliveryTimelineDrawsFromActualsAndLabelsEverySource(t *testing.T) {
 	assert.Equal(t, "effort_estimate", guess.EndSource)
 	assert.True(t, guess.EndInferred, "an inferred end is distinguishable from a recorded one")
 
-	require.NotEmpty(t, payload.Spans)
-	assert.Equal(t, "epic", payload.Spans[0].Kind)
-	assert.Equal(t, "checkout", payload.Spans[0].Key)
+	require.NotEmpty(t, payload.Rollups)
+	assert.Equal(t, "epic", payload.Rollups[0].Kind)
+	assert.Equal(t, "checkout", payload.Rollups[0].Key)
 }
 
-// TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason: never a fabricated bar.
-func TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason(t *testing.T) {
+// TestAPIDeliveryRoadmapListsAnUnmanagedIssueWithItsReason: never a fabricated bar.
+func TestAPIDeliveryRoadmapListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var payload timelinePayload
+	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)
 
 	assert.Empty(t, payload.Bars, "no fixture issue carries an epic label, so nothing is drawn")
@@ -478,12 +478,12 @@ func TestAPIDeliveryTimelineListsAnUnmanagedIssueWithItsReason(t *testing.T) {
 	}
 }
 
-// TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint: they do not read
+// TestAPIDeliveryRoadmapDistinguishesAGateFromASequencingHint: they do not read
 // the same on a schedule, so they are not the same arrow.
-func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) {
+func TestAPIDeliveryRoadmapDistinguishesAGateFromASequencingHint(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	epic := labelForLane(t, 1, "epic:checkout")
+	epic := labelForGroup(t, 1, "epic:checkout")
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	for _, id := range []int64{1, 4, 5} {
 		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: id})
@@ -506,9 +506,9 @@ func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&epic=checkout&limit=200").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
-	var payload timelinePayload
+	var payload roadmapPayload
 	DecodeJSON(t, resp, &payload)
 
 	kinds := map[string]bool{}
@@ -539,8 +539,8 @@ func TestAPIDeliveryTimelineDistinguishesAGateFromASequencingHint(t *testing.T) 
 func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	labelForLane(t, 1, "type:bug")
-	task := labelForLane(t, 1, "type:task")
+	labelForGroup(t, 1, "type:bug")
+	task := labelForGroup(t, 1, "type:task")
 	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	require.NoError(t, issue_service.AddLabel(t.Context(), issue1, owner, task))
@@ -550,13 +550,13 @@ func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 
 	before := getBoard(t, ownerToken, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, int64(1), columnOf(t, before, 1))
-	assert.Equal(t, "task", laneOf(t, before, 1))
+	assert.Equal(t, "task", groupOf(t, before, 1))
 
 	// The outsider can read the board — this is a permission answer about writing, not
 	// about seeing.
 	outsiderView := getBoard(t, outsiderToken, "repo_id=1&project_id=1&group_by=type")
 	assert.False(t, outsiderView.CanWrite, "the board tells the outsider it offers no column move")
-	assert.False(t, outsiderView.CanEditIssue, "and no lane move")
+	assert.False(t, outsiderView.CanEditIssue, "and no group move")
 
 	for _, tc := range []struct {
 		name string
@@ -571,9 +571,9 @@ func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 			unit: "projects",
 		},
 		{
-			name: "lane",
-			path: "/board/cards/1/lane",
-			body: map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "bug"},
+			name: "group",
+			path: "/board/cards/1/group",
+			body: map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "bug"},
 			unit: "issues",
 		},
 	} {
@@ -589,11 +589,11 @@ func TestAPIDeliveryBoardRefusesBothWritesWithoutPermission(t *testing.T) {
 		})
 	}
 
-	// The card is where it was, in the column it was in and the lane it was in. A refusal
+	// The card is where it was, in the column it was in and the group it was in. A refusal
 	// that had already written would pass the status assertions above and still be a defect.
 	after := getBoard(t, ownerToken, "repo_id=1&project_id=1&group_by=type")
 	assert.Equal(t, int64(1), columnOf(t, after, 1), "the refused column move wrote nothing")
-	assert.Equal(t, "task", laneOf(t, after, 1), "the refused lane move wrote nothing")
+	assert.Equal(t, "task", groupOf(t, after, 1), "the refused group move wrote nothing")
 
 	reloaded := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
 	require.NoError(t, reloaded.LoadLabels(t.Context()))
@@ -641,17 +641,17 @@ func TestAPIDeliveryBoardRefusesAReadOfARepositoryTheCallerCannotSee(t *testing.
 	MakeRequest(t, req, http.StatusOK)
 }
 
-// TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead is the timeline's own guard:
+// TestAPIDeliveryRoadmapRefusesARepositoryTheCallerCannotRead is the roadmap's own guard:
 // the chart is scoped by Gitea's permission check on the Issues unit.
 //
-// It answers 403 where the board answers 404, because the timeline has no visibility
+// It answers 403 where the board answers 404, because the roadmap has no visibility
 // pre-check of its own — the Issues unit read IS its visibility check.
-func TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead(t *testing.T) {
+func TestAPIDeliveryRoadmapRefusesARepositoryTheCallerCannotRead(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user8"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(outsiderToken)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=3").AddTokenAuth(outsiderToken)
 	resp := MakeRequest(t, req, http.StatusForbidden)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -662,14 +662,14 @@ func TestAPIDeliveryTimelineRefusesARepositoryTheCallerCannotRead(t *testing.T) 
 
 	// A member of the org reads the same chart.
 	memberToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
-	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=3").AddTokenAuth(memberToken)
+	req = NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=3").AddTokenAuth(memberToken)
 	MakeRequest(t, req, http.StatusOK)
 }
 
-// TestAPIDeliveryBoardAndTimelineRefuseAMissingScope covers the two 400s every request can
+// TestAPIDeliveryBoardAndRoadmapRefuseAMissingScope covers the two 400s every request can
 // hit: a board belongs to a repository and a chart covers one, so neither renders without
 // being told which.
-func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
+func TestAPIDeliveryBoardAndRoadmapRefuseAMissingScope(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
@@ -677,7 +677,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 	for _, tc := range []struct{ path, code string }{
 		{"/board", "missing_repo_id"},
 		{"/board?repo_id=1", "missing_project_id"},
-		{"/timeline", "missing_repo_id"},
+		{"/roadmap", "missing_repo_id"},
 	} {
 		req := NewRequest(t, "GET", planningv1.BasePath+tc.path).AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusBadRequest)
@@ -691,7 +691,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 	// repository, are both not-found rather than empty results.
 	for _, tc := range []struct{ path, code string }{
 		{"/board?repo_id=999999&project_id=1", "repo_not_found"},
-		{"/timeline?repo_id=999999", "repo_not_found"},
+		{"/roadmap?repo_id=999999", "repo_not_found"},
 		{"/board?repo_id=1&project_id=2", "board_not_found"},
 		{"/board?repo_id=1&project_id=999999", "board_not_found"},
 	} {
@@ -705,7 +705,7 @@ func TestAPIDeliveryBoardAndTimelineRefuseAMissingScope(t *testing.T) {
 }
 
 // TestAPIDeliveryBoardWriteRefusesAMalformedRequest covers the write path's own 400s and its
-// two 422s: a card that is not on the board, and a lane whose label does not exist.
+// two 422s: a card that is not on the board, and a group whose label does not exist.
 func TestAPIDeliveryBoardWriteRefusesAMalformedRequest(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -723,9 +723,9 @@ func TestAPIDeliveryBoardWriteRefusesAMalformedRequest(t *testing.T) {
 		{"/board/cards/1/column", map[string]any{"repo": "user2/repo1", "project_id": 999999, "column_id": 3}, http.StatusNotFound, "board_not_found"},
 		{"/board/cards/999999/column", map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3}, http.StatusNotFound, "card_not_found"},
 		{"/board/cards/1/column", map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 999999}, http.StatusUnprocessableEntity, "column_not_found"},
-		{"/board/cards/1/lane", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "lane": "nosuchtype"}, http.StatusUnprocessableEntity, "label_not_found"},
-		{"/board/cards/1/lane", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "assignee", "lane": "nosuchuser"}, http.StatusUnprocessableEntity, "assignee_not_found"},
-		{"/board/cards/1/lane", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "milestone", "lane": "x"}, http.StatusBadRequest, "unknown_grouping"},
+		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "type", "group": "nosuchtype"}, http.StatusUnprocessableEntity, "label_not_found"},
+		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "assignee", "group": "nosuchuser"}, http.StatusUnprocessableEntity, "assignee_not_found"},
+		{"/board/cards/1/group", map[string]any{"repo": "user2/repo1", "project_id": 1, "group_by": "milestone", "group": "x"}, http.StatusBadRequest, "unknown_grouping"},
 	} {
 		req := NewRequestWithJSON(t, "POST", planningv1.BasePath+tc.path, tc.body).AddTokenAuth(token)
 		resp := MakeRequest(t, req, tc.status)
@@ -736,13 +736,13 @@ func TestAPIDeliveryBoardWriteRefusesAMalformedRequest(t *testing.T) {
 	}
 }
 
-// TestAPIDeliveryTimelineRefusesAnUnknownState is the last of the timeline's own refusals.
-func TestAPIDeliveryTimelineRefusesAnUnknownState(t *testing.T) {
+// TestAPIDeliveryRoadmapRefusesAnUnknownState is the last of the roadmap's own refusals.
+func TestAPIDeliveryRoadmapRefusesAnUnknownState(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
 
-	req := NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1&state=archived").AddTokenAuth(token)
+	req := NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1&state=archived").AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusBadRequest)
 	var refusal deliveryRefusal
 	DecodeJSON(t, resp, &refusal)
@@ -756,7 +756,7 @@ func TestAPIDeliveryTimelineRefusesAnUnknownState(t *testing.T) {
 // the degradation: not one repository missing the unit, but the whole instance
 // switching Projects off — which is what a rollback to a build without them looks like.
 //
-// The board states the reason and points at the view that still works; the timeline renders
+// The board states the reason and points at the view that still works; the roadmap renders
 // from the same dataset at the same moment. The two views are independently deliverable.
 func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -778,20 +778,20 @@ func TestDeliveryBoardDegradesWhenProjectsAreDisabledInstanceWide(t *testing.T) 
 	assert.Equal(t, "projects_unavailable", refusal.Code)
 	assert.Contains(t, refusal.Message, "this instance disables the Projects unit")
 	assert.NotEmpty(t, refusal.SuggestedAction, "the degradation states what to do about it")
-	assert.Contains(t, refusal.SuggestedAction, "/timeline",
+	assert.Contains(t, refusal.SuggestedAction, "/roadmap",
 		"the reason points at the view that still works")
 
 	// Both writes degrade the same way, and neither is reported as a permission problem.
-	for _, path := range []string{"/board/cards/1/column", "/board/cards/1/lane"} {
+	for _, path := range []string{"/board/cards/1/column", "/board/cards/1/group"} {
 		req = NewRequestWithJSON(t, "POST", planningv1.BasePath+path,
-			map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3, "group_by": "type", "lane": "bug"}).AddTokenAuth(token)
+			map[string]any{"repo": "user2/repo1", "project_id": 1, "column_id": 3, "group_by": "type", "group": "bug"}).AddTokenAuth(token)
 		resp = MakeRequest(t, req, http.StatusNotFound)
 		DecodeJSON(t, resp, &refusal)
 		assert.Equal(t, "projects_unavailable", refusal.Code, "POST %s", path)
 	}
 
-	// Same instant, same dataset: the timeline needs no Projects API and answers.
-	req = NewRequest(t, "GET", planningv1.BasePath+"/timeline?repo_id=1").AddTokenAuth(token)
+	// Same instant, same dataset: the roadmap needs no Projects API and answers.
+	req = NewRequest(t, "GET", planningv1.BasePath+"/roadmap?repo_id=1").AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
 
 	req = NewRequest(t, "GET", "/delivery/timeline")

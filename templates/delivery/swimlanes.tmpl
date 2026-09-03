@@ -12,9 +12,9 @@
 	<span class="tw-ml-2 tw-text-12" id="delivery-swimlane-note"></span>
 </div>
 <script type="module" nonce="{{ctx.CspScriptNonce}}">
-// The project board is Gitea's. This groups the cards it already rendered into lanes and
+// The project board is Gitea's. This groups the cards it already rendered into swimlanes and
 // puts them back when grouping is off, so the page a build without ENABLE_SWIMLANES renders
-// is untouched. Lane membership and the lane move both come from the delivery API, which is
+// is untouched. Group membership and the group move both come from the delivery API, which is
 // the same source and the same write the fork's own board page uses.
 const root = document.querySelector('#delivery-swimlanes');
 const board = document.querySelector('#project-board');
@@ -38,20 +38,20 @@ if (root && board) {
 		say('');
 	}
 
-	// laneRow builds one lane: its heading, then a copy of every column holding only the
-	// cards this lane owns. A card is moved, never cloned, so nothing appears twice.
-	function laneRow(lane, cards) {
+	// groupRow builds one swimlane: its heading, then a copy of every column holding only
+	// the cards this group owns. A card is moved, never cloned, so nothing appears twice.
+	function groupRow(group, cards) {
 		const row = document.createElement('div');
 		row.className = 'delivery-swimlane tw-mb-4';
 
 		const heading = document.createElement('h4');
 		heading.className = 'ui header tw-mb-1';
-		heading.textContent = `${lane.label} (${lane.cards})`;
+		heading.textContent = `${group.label} (${group.cards})`;
 		row.append(heading);
 
 		const columns = document.createElement('div');
 		columns.className = 'board';
-		for (const column of lane.columns) {
+		for (const column of group.columns) {
 			const source = ungrouped.querySelector(`.project-column[data-id="${column.column_id}"]`);
 			if (!source) continue;
 			const shell = source.cloneNode(false);
@@ -99,19 +99,19 @@ if (root && board) {
 			return;
 		}
 
-		// Cards are taken out of the board Gitea drew and placed into lanes. One that the
+		// Cards are taken out of the board Gitea drew and placed into swimlanes. One that the
 		// API does not mention stays out, and the count says so rather than hiding it.
 		const cards = new Map();
 		for (const node of board.querySelectorAll('.issue-card[data-issue]')) {
 			cards.set(Number(node.dataset.issue), node);
 		}
-		const rows = payload.lanes.map((lane) => laneRow(lane, cards));
+		const rows = payload.groups.map((group) => groupRow(group, cards));
 		const placed = rows.reduce((n, row) => n + row.querySelectorAll('.issue-card').length, 0);
 		board.replaceChildren(...rows);
 		board.classList.remove('sortable');
 		say(placed === cards.size
-			? `${payload.lanes.length} lanes. Dragging is off while grouped; move a card on the delivery board.`
-			: `${placed} of ${cards.size} cards placed; the rest are not on this grouping's lanes.`);
+			? `${payload.groups.length} swimlanes. Dragging is off while grouped; move a card on the delivery board.`
+			: `${placed} of ${cards.size} cards placed; the rest are not on this grouping's swimlanes.`);
 	}
 
 	select.addEventListener('change', () => group(select.value));

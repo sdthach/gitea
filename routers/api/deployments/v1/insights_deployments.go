@@ -41,7 +41,7 @@ var summaryOptionalFields = map[string]bool{
 }
 
 var deploymentSummarySpec = query.Spec{
-	Resource: "deployment-summary",
+	Resource: "insights-deployments",
 	Fields: []query.Field{
 		{Name: "id", Column: "id", Kind: query.KindInt},
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt},
@@ -66,23 +66,23 @@ var summaryFieldsParam = []hubapi.Param{
 	},
 }
 
-func getDeploymentSummaryEndpoint() *hubapi.Endpoint {
+func getInsightsDeploymentsEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "getDeploymentSummary", Method: http.MethodGet, Path: "/deployment-summary",
+			ID: "getInsightsDeployments", Method: http.MethodGet, Path: "/insights/deployments",
 			Summary: "Deployment summary view",
 			Description: "A denormalized projection of deployments with audit data joined. Default columns " +
 				"(environment, release, status, branch, deployed_by, deployed_at) are always present; add " +
 				"optional ones with ?fields=sha,run,approved_by,approved_at,duration.",
-			Tag: "deployments", QueryParams: summaryFieldsParam,
+			Tag: "insights", QueryParams: summaryFieldsParam,
 			Query: &deploymentSummarySpec, Response: "DeploymentSummary", ResponseIs: "array",
 		},
-		Handler: GetDeploymentSummary,
+		Handler: GetInsightsDeployments,
 	}
 }
 
-// GetDeploymentSummary answers GET /deployment-summary.
-func GetDeploymentSummary(ctx *context.APIContext) {
+// GetInsightsDeployments answers GET /insights/deployments.
+func GetInsightsDeployments(ctx *context.APIContext) {
 	wantFields := parseSummaryFields(ctx.Req.URL.Query().Get("fields"))
 
 	q, ok := hubapi.ParseCursorQuery(ctx, deploymentSummarySpec)

@@ -20,14 +20,14 @@ import (
 	"xorm.io/builder"
 )
 
-// approvalSpec is the approvals resource's whitelist declaration.
+// reviewSpec is the reviews resource's whitelist declaration.
 //
 // A hold is one row per held job and nothing rewrites it, so the set is finite and stable
 // and pages by page+limit rather than by cursor. `state` is NOT a filterable field: it
 // is projected from the append-only audit log at render time, so there is no column to put
 // in a WHERE clause.
-var approvalSpec = query.Spec{
-	Resource: "approvals",
+var reviewSpec = query.Spec{
+	Resource: "reviews",
 	Fields: []query.Field{
 		{Name: "id", Column: "id", Kind: query.KindInt},
 		{Name: "repo_id", Column: "repo_id", Kind: query.KindInt},
@@ -48,14 +48,14 @@ var approvalSpec = query.Spec{
 	Paging:       query.PagingOffset,
 }
 
-// Approval is the approvals resource's response shape: the hold row, plus the state
+// Review is the reviews resource's response shape: the hold row, plus the state
 // projected over the audit log and what the calling user is allowed to do about it.
-type Approval struct {
+type Review struct {
 	deployments_model.Review
 	// State is pending, approved or rejected. It is a projection, never a stored column.
 	State             string `json:"state"`
 	ReviewPolicy      string `json:"review_policy"`
-	ApprovalsCount    int64  `json:"approvals_count"`
+	ReviewsCount      int64  `json:"reviews_count"`
 	RequiredReviewers int64  `json:"required_reviewers"`
 	// AgeSeconds is how long the deploy has been held, which is what the pending list
 	// sorts a reviewer's attention by.
@@ -66,57 +66,57 @@ type Approval struct {
 	Deployment *deployments_model.Deployment `json:"deployment,omitempty"`
 }
 
-var approvalIDParam = []hubapi.Param{
-	{Name: "id", In: "path", Type: "integer", Description: "Approval id.", Required: true},
+var reviewIDParam = []hubapi.Param{
+	{Name: "id", In: "path", Type: "integer", Description: "Review id.", Required: true},
 }
 
-func listApprovalsEndpoint() *hubapi.Endpoint {
+func listReviewsEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "listApprovals", Method: http.MethodGet, Path: "/approvals",
-			Summary: "List held deploys and their approval state",
-			Description: "One row per deploy the approval gate is holding, each carrying the state projected over the " +
+			ID: "listReviews", Method: http.MethodGet, Path: "/reviews",
+			Summary: "List held deploys and their review state",
+			Description: "One row per deploy the review gate is holding, each carrying the state projected over the " +
 				"append-only audit log: pending, approved or rejected. A row whose state is pending is " +
-				"waiting for an approver; can_approve says whether the calling user is one of them, resolved by the same " +
-				"check the approve endpoint enforces. The environment view and the grid are clients of this " +
+				"waiting for a reviewer; can_approve says whether the calling user is one of them, resolved by the same " +
+				"check the approve endpoint enforces. The environment view and the deployment matrix are clients of this " +
 				"endpoint. Finite and stable, so it pages by page+limit.",
-			Tag: "approvals", Query: &approvalSpec, Response: "Approval", ResponseIs: "array",
+			Tag: "reviews", Query: &reviewSpec, Response: "Review", ResponseIs: "array",
 		},
-		Handler: ListApprovals,
+		Handler: ListReviews,
 	}
 }
 
 func approveEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "approve", Method: http.MethodPost, Path: "/approvals/{id}/approve",
+			ID: "approve", Method: http.MethodPost, Path: "/reviews/{id}/approve",
 			Summary: "Approve a held deploy",
-			Description: "Appends an approval to the audit log naming the approver and the time, which is the only " +
+			Description: "Appends a review to the audit log naming the reviewer and the time, which is the only " +
 				"thing that releases the held job — there is no flag anywhere that says let it through, and no CLI path " +
 				"around the gate. A user the forge does not permit to approve is refused HERE with 403, not " +
-				"merely offered no button. Under others_only the requester's own approval is refused.",
-			Tag: "approvals", PathParams: approvalIDParam, Response: "Approval", ResponseIs: "object",
+				"merely offered no button. Under others_only the requester's own review is refused.",
+			Tag: "reviews", PathParams: reviewIDParam, Response: "Review", ResponseIs: "object",
 		},
-		Handler: ApproveApproval,
+		Handler: ApproveReview,
 	}
 }
 
 func rejectEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "reject", Method: http.MethodPost, Path: "/approvals/{id}/reject",
+			ID: "reject", Method: http.MethodPost, Path: "/reviews/{id}/reject",
 			Summary: "Reject a held deploy",
 			Description: "Ends the deploy: the run does not proceed later, and the rejection is an audit event naming the " +
-				"approver and the time. Authorized by the same check as approve.",
-			Tag: "approvals", PathParams: approvalIDParam, Response: "Approval", ResponseIs: "object",
+				"reviewer and the time. Authorized by the same check as approve.",
+			Tag: "reviews", PathParams: reviewIDParam, Response: "Review", ResponseIs: "object",
 		},
-		Handler: RejectApproval,
+		Handler: RejectReview,
 	}
 }
 
-// ListApprovals answers GET /approvals.
-func ListApprovals(ctx *context.APIContext) {
-	q, ok := hubapi.ParseQuery(ctx, approvalSpec)
+// ListReviews answers GET /reviews.
+func ListReviews(ctx *context.APIContext) {
+	q, ok := hubapi.ParseQuery(ctx, reviewSpec)
 	if !ok {
 		return
 	}
@@ -125,7 +125,7 @@ func ListApprovals(ctx *context.APIContext) {
 		return
 	}
 	if len(repoIDs) == 0 {
-		hubapi.RenderPage(ctx, q, 0, []*Approval{})
+		hubapi.RenderPage(ctx, q, 0, []*Review{})
 		return
 	}
 
@@ -136,7 +136,7 @@ func ListApprovals(ctx *context.APIContext) {
 		return
 	}
 
-	out := make([]*Approval, 0, len(rows))
+	out := make([]*Review, 0, len(rows))
 	now := int64(timeutil.TimeStampNow())
 	// Permission is resolved once per repository rather than once per row: a page of holds
 	// otherwise costs one permission lookup per hold.
@@ -153,26 +153,26 @@ func ListApprovals(ctx *context.APIContext) {
 			allowed = callerMayApprove(ctx, row.RepoID, row.Environment)
 			canApprove[row.RepoID] = allowed
 		}
-		out = append(out, &Approval{
+		out = append(out, &Review{
 			Review:            *row,
 			State:             state,
-			ReviewPolicy:      approvalPolicyOf(ctx, row),
-			ApprovalsCount:    count,
+			ReviewPolicy:      reviewPolicyOf(ctx, row),
+			ReviewsCount:      count,
 			RequiredReviewers: required,
 			AgeSeconds:        now - int64(row.CreatedUnix),
 			CanApprove:        allowed && state == deployments_model.ReviewPending,
 		})
 	}
-	if err := expandApprovals(ctx, q.Expand, out); err != nil {
+	if err := expandReviews(ctx, q.Expand, out); err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 	hubapi.RenderPage(ctx, q, total, out)
 }
 
-// approvalPolicyOf reports the live policy of a hold's environment, so a client can explain
+// reviewPolicyOf reports the live policy of a hold's environment, so a client can explain
 // why a deploy is held without a second request.
-func approvalPolicyOf(ctx *context.APIContext, a *deployments_model.Review) string {
+func reviewPolicyOf(ctx *context.APIContext, a *deployments_model.Review) string {
 	env, err := deployments_model.GetEnvironment(ctx, a.RepoID, a.Environment)
 	if err != nil {
 		return ""
@@ -198,8 +198,8 @@ func callerMayApprove(ctx *context.APIContext, repoID int64, environment string)
 	return deployments_service.CanApproveEnvironment(ctx, env, ctx.Doer, perm.IsAdmin(), perm.CanWrite(unit.TypeActions))
 }
 
-// expandApprovals fills the whitelisted sub-resources, one level deep.
-func expandApprovals(ctx *context.APIContext, expand []string, rows []*Approval) error {
+// expandReviews fills the whitelisted sub-resources, one level deep.
+func expandReviews(ctx *context.APIContext, expand []string, rows []*Review) error {
 	if len(rows) == 0 || len(expand) == 0 {
 		return nil
 	}
@@ -221,32 +221,32 @@ func expandApprovals(ctx *context.APIContext, expand []string, rows []*Approval)
 	return nil
 }
 
-// ApproveApproval answers POST /approvals/{id}/approve.
-func ApproveApproval(ctx *context.APIContext) { decide(ctx, deployments_model.AuditApproved) }
+// ApproveReview answers POST /reviews/{id}/approve.
+func ApproveReview(ctx *context.APIContext) { decide(ctx, deployments_model.AuditApproved) }
 
-// RejectApproval answers POST /approvals/{id}/reject.
-func RejectApproval(ctx *context.APIContext) { decide(ctx, deployments_model.AuditRejected) }
+// RejectReview answers POST /reviews/{id}/reject.
+func RejectReview(ctx *context.APIContext) { decide(ctx, deployments_model.AuditRejected) }
 
 // decide is the shared body of approve and reject: they differ only in the event they append.
 func decide(ctx *context.APIContext, event string) {
 	id, err := strconv.ParseInt(ctx.PathParam("id"), 10, 64)
 	if err != nil || id <= 0 {
-		hubapi.APIError(ctx, http.StatusBadRequest, "bad_approval_id",
-			"the approval id in the path is not a number",
-			"Call POST "+BasePath+"/approvals/{id}/approve with an id from "+BasePath+"/approvals.")
+		hubapi.APIError(ctx, http.StatusBadRequest, "bad_review_id",
+			"the review id in the path is not a number",
+			"Call POST "+BasePath+"/reviews/{id}/approve with an id from "+BasePath+"/reviews.")
 		return
 	}
 
-	approval, err := deployments_model.GetReviewByID(ctx, id)
+	review, err := deployments_model.GetReviewByID(ctx, id)
 	if err != nil {
 		hubapi.RenderHubError(ctx, http.StatusNotFound, err)
 		return
 	}
 
-	repo, err := repo_model.GetRepositoryByID(ctx, approval.RepoID)
+	repo, err := repo_model.GetRepositoryByID(ctx, review.RepoID)
 	if err != nil {
 		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
-			"the repository this approval belongs to is not visible to you",
+			"the repository this review belongs to is not visible to you",
 			"Check your token's account can see the repository the held run belongs to.")
 		return
 	}
@@ -262,14 +262,14 @@ func decide(ctx *context.APIContext, event string) {
 		return
 	}
 
-	env, err := deployments_model.GetEnvironment(ctx, approval.RepoID, approval.Environment)
+	env, err := deployments_model.GetEnvironment(ctx, review.RepoID, review.Environment)
 	if err != nil {
 		hubapi.RenderHubError(ctx, http.StatusNotFound, err)
 		return
 	}
 
 	decision, err := deployments_service.Decide(ctx, deployments_service.ReviewRequest{
-		Review:      approval,
+		Review:      review,
 		Environment: env,
 		Actor:       ctx.Doer,
 		Event:       event,
@@ -286,11 +286,11 @@ func decide(ctx *context.APIContext, event string) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, &Approval{
+	ctx.JSON(http.StatusOK, &Review{
 		Review:            *decision.Review,
 		State:             decision.State,
 		ReviewPolicy:      env.ReviewPolicy,
-		ApprovalsCount:    decision.ReviewsCount,
+		ReviewsCount:      decision.ReviewsCount,
 		RequiredReviewers: decision.RequiredReviewers,
 		AgeSeconds:        int64(timeutil.TimeStampNow()) - int64(decision.Review.CreatedUnix),
 		CanApprove:        false,

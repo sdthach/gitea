@@ -5,7 +5,7 @@
 		<p class="tw-text-14">
 			Releases are rows, environments are columns in configured order. Every cell state is
 			projected from the append-only audit log by
-			<code>{{.DeliveryAPIBase}}/grid</code>; this page is a client of that endpoint and reads
+			<code>{{.DeliveryAPIBase}}/deployments/matrix</code>; this page is a client of that endpoint and reads
 			nothing the API does not serve.
 		</p>
 
@@ -158,8 +158,8 @@ async function showHistory(row, tr) {
 // decideHeld approves or rejects a held deploy from the cell holding it. The endpoint
 // is the only thing that releases the job, so its refusal is the real answer and is shown
 // with the next action it suggests.
-async function decideHeld(approval, verb) {
-	const resp = await fetch(`${base}/approvals/${approval.id}/${verb}`, {method: 'POST', headers: headers()});
+async function decideHeld(review, verb) {
+	const resp = await fetch(`${base}/reviews/${review.id}/${verb}`, {method: 'POST', headers: headers()});
 	if (!resp.ok) {
 		const payload = await resp.json().catch(() => ({}));
 		if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
@@ -170,15 +170,15 @@ async function decideHeld(approval, verb) {
 	window.location.reload();
 }
 
-// heldByRun indexes the deploys the approval gate is holding, so a `⏸` cell can offer the
+// heldByRun indexes the deploys the review gate is holding, so a `⏸` cell can offer the
 // actions that release it. can_approve is the server's own answer, resolved by the same
 // check the approve endpoint enforces, so no action is offered that would be refused.
 const heldByRun = new Map();
 try {
-	const resp = await fetch(`${base}/approvals?limit=200`, {headers: headers()});
+	const resp = await fetch(`${base}/reviews?limit=200`, {headers: headers()});
 	if (resp.ok) {
-		for (const approval of await resp.json()) {
-			if (approval.state === 'pending') heldByRun.set(approval.run_id, approval);
+		for (const review of await resp.json()) {
+			if (review.state === 'pending') heldByRun.set(review.run_id, review);
 		}
 	}
 } catch {
@@ -187,7 +187,7 @@ try {
 }
 
 try {
-	const resp = await fetch(`${base}/grid?limit=50`, {headers: headers()});
+	const resp = await fetch(`${base}/deployments/matrix?limit=50`, {headers: headers()});
 	const payload = await resp.json();
 	if (!resp.ok) {
 		fail(payload.message ?? `the API returned ${resp.status}`,

@@ -25,7 +25,7 @@ import (
 	project_service "gitea.dev/services/projects"
 )
 
-// maxBoardMoveBody caps a board write's body. A card move carries ids and a lane name; it is
+// maxBoardMoveBody caps a board write's body. A card move carries ids and a group name; it is
 // never an upload.
 const maxBoardMoveBody = 16 << 10
 
@@ -46,7 +46,7 @@ var boardSpec = query.Spec{
 	Paging:     query.PagingOffset,
 }
 
-// Board is the board resource's response shape: the columns Gitea models and the lanes it
+// Board is the board resource's response shape: the columns Gitea models and the groups it
 // does not.
 type Board struct {
 	RepoID       int64                          `json:"repo_id"`
@@ -55,7 +55,7 @@ type Board struct {
 	Title        string                         `json:"title"`
 	GroupBy      string                         `json:"group_by"`
 	Columns      []planning_service.BoardColumn `json:"columns"`
-	Lanes        []planning_service.Lane        `json:"lanes"`
+	Groups       []planning_service.Group       `json:"groups"`
 	// CanWrite is whether the calling user may perform either of the two writes, resolved
 	// by the same checks the write endpoints enforce, so the page offers no action it
 	// would be refused for.
@@ -67,13 +67,13 @@ func getBoardEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
 			ID: "getBoard", Method: http.MethodGet, Path: "/board",
-			Summary: "A project board with horizontal swimlanes",
-			Description: "Gitea's project columns rendered vertically, with horizontal lanes it does not model at all: " +
-				"project.Column carries title, sorting, colour and project and no lane, row or group field, so lanes are a " +
+			Summary: "A project board with horizontal groups",
+			Description: "Gitea's project columns rendered vertically, with horizontal groups it does not model at all: " +
+				"project.Column carries title, sorting, colour and project and no group or row field, so groups are a " +
 				"rendering over rows the Projects API already returns — no schema change and no fork change. " +
-				"group_by selects the lane dimension at view time and is never stored on the project, so two people may " +
+				"group_by selects the group dimension at view time and is never stored on the project, so two people may " +
 				"group the same board differently. An issue with no value for the active grouping falls into an " +
-				"explicit empty-value lane; nothing disappears from a board because a field is unset. " +
+				"explicit empty-value group; nothing disappears from a board because a field is unset. " +
 				"Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that " +
 				"disables it globally, is answered with the reason and what to do about it rather than an empty board. " +
 				"The /delivery/board page is a client of this endpoint.",
@@ -97,16 +97,16 @@ var boardColumnMoveParams = []hubapi.Param{
 	{Name: "sorting", In: "body", Type: "integer", Description: "Position within the column. Omit to append."},
 }
 
-var boardLaneMoveParams = []hubapi.Param{
+var boardGroupMoveParams = []hubapi.Param{
 	{Name: "repo", In: "body", Type: "string", Required: true, Description: "Repository as owner/name."},
 	{Name: "project_id", In: "body", Type: "integer", Required: true, Description: "The board the card is on."},
 	{
 		Name: "group_by", In: "body", Type: "string", Required: true, Enum: planning_service.Groupings,
-		Description: "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
+		Description: "The active grouping. A group move is refused when this is none, because there is nothing to write.",
 	},
 	{
-		Name: "lane", In: "body", Type: "string",
-		Description: "The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.",
+		Name: "group", In: "body", Type: "string",
+		Description: "The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.",
 	},
 }
 
@@ -126,20 +126,20 @@ func moveBoardCardColumnEndpoint() *hubapi.Endpoint {
 	}
 }
 
-func moveBoardCardLaneEndpoint() *hubapi.Endpoint {
+func moveBoardCardGroupEndpoint() *hubapi.Endpoint {
 	return &hubapi.Endpoint{
 		Op: &hubapi.Operation{
-			ID: "moveBoardCardLane", Method: http.MethodPost, Path: "/board/cards/{issue_id}/lane",
-			Summary: "Move a card between the board's lanes",
-			Description: "The second and last of the board's writes. A lane IS the grouping value, so moving between " +
-				"lanes edits the field itself: the type: label, the epic: label, or the assignee. " +
+			ID: "moveBoardCardGroup", Method: http.MethodPost, Path: "/board/cards/{issue_id}/group",
+			Summary: "Move a card between the board's groups",
+			Description: "The second and last of the board's writes. A group IS the grouping value, so moving between " +
+				"groups edits the field itself: the type: label, the epic: label, or the assignee. " +
 				"It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. " +
 				"Authorized by Gitea's own write check on the Issues unit.",
-			Tag: "board", PathParams: boardCardParams, Body: boardLaneMoveParams,
-			CLINames: []string{"board-move-lane"},
+			Tag: "board", PathParams: boardCardParams, Body: boardGroupMoveParams,
+			CLINames: []string{"board-move-group"},
 			Response: "Board", ResponseIs: "object",
 		},
-		Handler: MoveBoardCardLane,
+		Handler: MoveBoardCardGroup,
 	}
 }
 
@@ -153,14 +153,14 @@ func boardAvailable(ctx *context.APIContext, repo *repo_model.Repository) bool {
 	if unit.TypeProjects.UnitGlobalDisabled() {
 		hubapi.APIError(ctx, http.StatusNotFound, "projects_unavailable",
 			"this instance disables the Projects unit, so it serves no boards",
-			"Remove `projects` from DISABLED_REPO_UNITS in app.ini, or use "+BasePath+"/timeline, which needs no Projects API.")
+			"Remove `projects` from DISABLED_REPO_UNITS in app.ini, or use "+BasePath+"/roadmap, which needs no Projects API.")
 		return false
 	}
 	projectsUnit, err := repo.GetUnit(ctx, unit.TypeProjects)
 	if err != nil || !projectsUnit.ProjectsConfig().IsProjectsAllowed(repo_model.ProjectsModeRepo) {
 		hubapi.APIError(ctx, http.StatusNotFound, "projects_unavailable",
 			"the Projects unit is not enabled for repository-level boards on "+repo.FullName(),
-			"Enable Projects for this repository under its settings, or use "+BasePath+"/timeline, which needs no Projects API.")
+			"Enable Projects for this repository under its settings, or use "+BasePath+"/roadmap, which needs no Projects API.")
 		return false
 	}
 	return true
@@ -231,7 +231,7 @@ func boardProjectsReadable(ctx *context.APIContext, repo *repo_model.Repository,
 	if !perm.CanRead(unit.TypeProjects) {
 		hubapi.APIError(ctx, http.StatusForbidden, "forbidden",
 			"your account cannot read the Projects unit of "+repo.FullName(),
-			"Ask a repository administrator for read access, or use "+BasePath+"/timeline, which reads issues instead.")
+			"Ask a repository administrator for read access, or use "+BasePath+"/roadmap, which reads issues instead.")
 		return false
 	}
 	return true
@@ -257,7 +257,7 @@ func boardProject(ctx *context.APIContext, repo *repo_model.Repository, projectI
 	return project, true
 }
 
-// readBoard assembles the board: the project's columns, its cards, and the lanes those cards
+// readBoard assembles the board: the project's columns, its cards, and the groups those cards
 // fall into under the requested grouping.
 func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access.Permission, project *project_model.Project, grouping planning_service.Grouping) (*Board, bool) {
 	columns, err := project_model.GetColumns(ctx, project.ID, db.ListOptions{ListAll: true})
@@ -332,7 +332,7 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		RepoID: repo.ID, RepoFullName: repo.FullName(),
 		ProjectID: project.ID, Title: project.Title, GroupBy: string(grouping),
 		Columns:      out,
-		Lanes:        planning_service.BuildLanes(out, cards, grouping),
+		Groups:       planning_service.BuildGroups(out, cards, grouping),
 		CanWrite:     perm.CanWrite(unit.TypeProjects),
 		CanEditIssue: perm.CanWrite(unit.TypeIssues),
 	}, true
@@ -376,10 +376,10 @@ func parseGrouping(ctx *context.APIContext, raw string) (planning_service.Groupi
 	if !ok {
 		ctx.JSON(http.StatusBadRequest, &query.Error{
 			Status: http.StatusBadRequest, Code: "unknown_grouping",
-			Message:         "no such lane grouping: " + raw,
+			Message:         "no such group grouping: " + raw,
 			Parameter:       "group_by",
 			Accepted:        planning_service.Groupings,
-			SuggestedAction: "Group by one of " + strings.Join(planning_service.Groupings, ", ") + ", or omit group_by for Gitea's own single-lane board.",
+			SuggestedAction: "Group by one of " + strings.Join(planning_service.Groupings, ", ") + ", or omit group_by for Gitea's own single-group board.",
 		})
 		return planning_service.GroupNone, false
 	}
@@ -393,7 +393,7 @@ type boardMoveBody struct {
 	ColumnID  int64  `json:"column_id"`
 	Sorting   *int64 `json:"sorting"`
 	GroupBy   string `json:"group_by"`
-	Lane      string `json:"lane"`
+	Group     string `json:"group"`
 }
 
 // readBoardMoveBody reads a board write's body under maxBoardMoveBody.
@@ -407,7 +407,7 @@ func readBoardMoveBody(ctx *context.APIContext) (*boardMoveBody, bool) {
 	if len(raw) > maxBoardMoveBody {
 		hubapi.APIError(ctx, http.StatusBadRequest, "body_too_large",
 			"the request body is larger than 16KiB",
-			"A card move carries ids and a lane name; send only those fields.")
+			"A card move carries ids and a group name; send only those fields.")
 		return nil, false
 	}
 	body := new(boardMoveBody)
@@ -415,7 +415,7 @@ func readBoardMoveBody(ctx *context.APIContext) (*boardMoveBody, bool) {
 		hubapi.APIError(ctx, http.StatusBadRequest, "malformed_body",
 			"the request body is not the JSON object this endpoint takes",
 			`Send {"repo": "owner/name", "project_id": 5, "column_id": 11} to move a column, or `+
-				`{"repo": "owner/name", "project_id": 5, "group_by": "type", "lane": "bug"} to move a lane.`)
+				`{"repo": "owner/name", "project_id": 5, "group_by": "type", "group": "bug"} to move a group.`)
 		return nil, false
 	}
 	return body, true
@@ -504,10 +504,10 @@ func MoveBoardCardColumn(ctx *context.APIContext) {
 	renderBoardAfterWrite(ctx, repo, perm, project, body.GroupBy)
 }
 
-// MoveBoardCardLane answers POST /board/cards/{issue_id}/lane — the second and last write.
-// A lane is the grouping value itself, so this edits the type: label, the epic: label or the
+// MoveBoardCardGroup answers POST /board/cards/{issue_id}/group — the second and last write.
+// A group is the grouping value itself, so this edits the type: label, the epic: label or the
 // assignee, and is refused outright when grouping is off.
-func MoveBoardCardLane(ctx *context.APIContext) {
+func MoveBoardCardGroup(ctx *context.APIContext) {
 	body, repo, perm, project, issue, ok := boardMoveTarget(ctx, unit.TypeIssues)
 	if !ok {
 		return
@@ -516,7 +516,7 @@ func MoveBoardCardLane(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	write, err := planning_service.PlanLaneMove(grouping, body.Lane)
+	write, err := planning_service.PlanGroupMove(grouping, body.Group)
 	if err != nil {
 		// The refusal: with grouping off there is no field to write, and the message
 		// says which write does still work.
@@ -529,21 +529,21 @@ func MoveBoardCardLane(ctx *context.APIContext) {
 		return
 	}
 	switch write.Kind {
-	case planning_service.LaneWriteLabel:
-		if !applyLaneLabel(ctx, repo, issue, write) {
+	case planning_service.GroupWriteLabel:
+		if !applyGroupLabel(ctx, repo, issue, write) {
 			return
 		}
-	case planning_service.LaneWriteAssignee:
-		if !applyLaneAssignee(ctx, issue, write) {
+	case planning_service.GroupWriteAssignee:
+		if !applyGroupAssignee(ctx, issue, write) {
 			return
 		}
 	}
 	renderBoardAfterWrite(ctx, repo, perm, project, body.GroupBy)
 }
 
-// applyLaneLabel clears the grouping's label namespace and applies the target lane's label,
-// so a card never ends up in two lanes of the same grouping.
-func applyLaneLabel(ctx *context.APIContext, repo *repo_model.Repository, issue *issues_model.Issue, write planning_service.LaneWrite) bool {
+// applyGroupLabel clears the grouping's label namespace and applies the target group's label,
+// so a card never ends up in two groups of the same grouping.
+func applyGroupLabel(ctx *context.APIContext, repo *repo_model.Repository, issue *issues_model.Issue, write planning_service.GroupWrite) bool {
 	if err := issue.LoadLabels(ctx); err != nil {
 		ctx.APIErrorInternal(err)
 		return false
@@ -551,7 +551,7 @@ func applyLaneLabel(ctx *context.APIContext, repo *repo_model.Repository, issue 
 	for _, label := range issue.Labels {
 		if len(label.Name) > len(write.Prefix) && strings.EqualFold(label.Name[:len(write.Prefix)], write.Prefix) {
 			if label.Name == write.Label {
-				return true // already in the target lane; the move is a no-op, not an error
+				return true // already in the target group; the move is a no-op, not an error
 			}
 			if err := issue_service.RemoveLabel(ctx, issue, ctx.Doer, label); err != nil {
 				ctx.APIErrorInternal(err)
@@ -560,12 +560,12 @@ func applyLaneLabel(ctx *context.APIContext, repo *repo_model.Repository, issue 
 		}
 	}
 	if write.Label == "" {
-		return true // moved into the empty-value lane: the namespace is cleared, nothing added
+		return true // moved into the empty-value group: the namespace is cleared, nothing added
 	}
 
 	label, err := findRepoOrOrgLabel(ctx, repo, write.Label)
 	switch {
-	case errors.Is(err, errLaneLabelMissing):
+	case errors.Is(err, errGroupLabelMissing):
 		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "label_not_found",
 			"no label named "+write.Label+" exists in "+repo.FullName()+" or its organization",
 			"Create the label first — ccpm's init.sh creates one type:<t> label per declared work-item type — then move the card again.")
@@ -581,9 +581,9 @@ func applyLaneLabel(ctx *context.APIContext, repo *repo_model.Repository, issue 
 	return true
 }
 
-// errLaneLabelMissing is the sentinel for a lane whose label does not exist yet. It is a
+// errGroupLabelMissing is the sentinel for a group whose label does not exist yet. It is a
 // distinct outcome from a lookup failure: the caller answers it with what to create.
-var errLaneLabelMissing = errors.New("no label of that name exists in the repository or its organization")
+var errGroupLabelMissing = errors.New("no label of that name exists in the repository or its organization")
 
 // findRepoOrOrgLabel looks a label up by name in the repository and then in its organization,
 // which is where Gitea's own label picker looks.
@@ -604,12 +604,12 @@ func findRepoOrOrgLabel(ctx *context.APIContext, repo *repo_model.Repository, na
 			return label, nil
 		}
 	}
-	return nil, errLaneLabelMissing
+	return nil, errGroupLabelMissing
 }
 
-// applyLaneAssignee makes the target lane's user the issue's only assignee, because the lane
+// applyGroupAssignee makes the target group's user the issue's only assignee, because the group
 // a card sits in under assignee grouping is its first assignee.
-func applyLaneAssignee(ctx *context.APIContext, issue *issues_model.Issue, write planning_service.LaneWrite) bool {
+func applyGroupAssignee(ctx *context.APIContext, issue *issues_model.Issue, write planning_service.GroupWrite) bool {
 	if err := issue.LoadAssignees(ctx); err != nil {
 		ctx.APIErrorInternal(err)
 		return false
@@ -624,7 +624,7 @@ func applyLaneAssignee(ctx *context.APIContext, issue *issues_model.Issue, write
 		if assignee == 0 {
 			hubapi.APIError(ctx, http.StatusUnprocessableEntity, "assignee_not_found",
 				"no user named "+write.Assignee+" can be assigned issues in this repository",
-				"Move the card to a lane whose login is an assignable user, or add the user to the repository first.")
+				"Move the card to a group whose login is an assignable user, or add the user to the repository first.")
 			return false
 		}
 		wanted = assignee

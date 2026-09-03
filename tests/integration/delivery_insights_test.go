@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The CI overview's integration tests run under Gitea's own harness, so they execute the way
+// The CI insights' integration tests run under Gitea's own harness, so they execute the way
 // upstream's do and survive a rebase.
 //
 // Repository 4 is public and carries the Actions unit; repository 3 is private to org3. That
@@ -82,10 +82,10 @@ func getDeliveryJSON(t *testing.T, token, path string, into any) {
 	DecodeJSON(t, resp, into)
 }
 
-// TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee is the security case, in both
+// TestAPIDeliveryCIInsightsExcludesARepositoryTheViewerCannotSee is the security case, in both
 // its including and its excluding form. A run in a repository the viewer
 // cannot read must appear in no list and in no aggregate.
-func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T) {
+func TestAPIDeliveryCIInsightsExcludesARepositoryTheViewerCannotSee(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	seedCIRun(t, ciPublicRepoID, 9001, "ci.yaml", actions_model.StatusSuccess, 30)
@@ -111,8 +111,8 @@ func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	var insiderRepoStats, outsiderRepoStats []struct {
 		RepoID int64 `json:"repo_id"`
 	}
-	getDeliveryJSON(t, insiderToken, "/overview/repos?limit=200", &insiderRepoStats)
-	getDeliveryJSON(t, outsiderToken, "/overview/repos?limit=200", &outsiderRepoStats)
+	getDeliveryJSON(t, insiderToken, "/insights/repos?limit=200", &insiderRepoStats)
+	getDeliveryJSON(t, outsiderToken, "/insights/repos?limit=200", &outsiderRepoStats)
 
 	seen := func(rows []struct {
 		RepoID int64 `json:"repo_id"`
@@ -129,20 +129,20 @@ func TestAPIDeliveryCIOverviewExcludesARepositoryTheViewerCannotSee(t *testing.T
 	assert.False(t, seen(outsiderRepoStats, ciPrivateRepoID),
 		"the per-repository aggregate is scoped by the same filter as the run list")
 
-	var insiderOverview, outsiderOverview struct {
+	var insiderInsights, outsiderInsights struct {
 		Summary struct {
 			TotalRuns int64 `json:"total_runs"`
 		} `json:"summary"`
 	}
-	getDeliveryJSON(t, insiderToken, "/overview", &insiderOverview)
-	getDeliveryJSON(t, outsiderToken, "/overview", &outsiderOverview)
-	assert.Less(t, outsiderOverview.Summary.TotalRuns, insiderOverview.Summary.TotalRuns,
+	getDeliveryJSON(t, insiderToken, "/insights", &insiderInsights)
+	getDeliveryJSON(t, outsiderToken, "/insights", &outsiderInsights)
+	assert.Less(t, outsiderInsights.Summary.TotalRuns, insiderInsights.Summary.TotalRuns,
 		"the summary counts fewer runs for a viewer who can see fewer repositories")
 }
 
-// TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery: the aggregate has to
+// TestAPIDeliveryCIInsightsCountsMatchThePerRepositoryQuery: the aggregate has to
 // agree with the same question asked one repository at a time.
-func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
+func TestAPIDeliveryCIInsightsCountsMatchThePerRepositoryQuery(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	seedCIRun(t, ciPublicRepoID, 9101, "ci.yaml", actions_model.StatusSuccess, 30)
@@ -162,7 +162,7 @@ func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 			} `json:"window"`
 		} `json:"previous"`
 	}
-	getDeliveryJSON(t, token, "/overview", &all)
+	getDeliveryJSON(t, token, "/insights", &all)
 	require.Positive(t, all.Summary.TotalRuns)
 
 	var repoStats []struct {
@@ -171,7 +171,7 @@ func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 		Successes int64 `json:"successes"`
 		Failures  int64 `json:"failures"`
 	}
-	getDeliveryJSON(t, token, "/overview/repos?limit=200", &repoStats)
+	getDeliveryJSON(t, token, "/insights/repos?limit=200", &repoStats)
 
 	var summed, successes, failures int64
 	for _, r := range repoStats {
@@ -190,7 +190,7 @@ func TestAPIDeliveryCIOverviewCountsMatchThePerRepositoryQuery(t *testing.T) {
 			TotalRuns int64 `json:"total_runs"`
 		} `json:"summary"`
 	}
-	getDeliveryJSON(t, token, fmt.Sprintf("/overview?repo_id=%d", ciPublicRepoID), &one)
+	getDeliveryJSON(t, token, fmt.Sprintf("/insights?repo_id=%d", ciPublicRepoID), &one)
 	for _, r := range repoStats {
 		if r.RepoID == ciPublicRepoID {
 			assert.Equal(t, r.Runs, one.Summary.TotalRuns)
@@ -297,8 +297,8 @@ func TestAPIDeliveryCITrendMatchesTheDeliveryTables(t *testing.T) {
 	}
 
 	var insider, outsider []point
-	getDeliveryJSON(t, insiderToken, "/overview/trends", &insider)
-	getDeliveryJSON(t, outsiderToken, "/overview/trends", &outsider)
+	getDeliveryJSON(t, insiderToken, "/insights/trends", &insider)
+	getDeliveryJSON(t, outsiderToken, "/insights/trends", &outsider)
 
 	require.NotEmpty(t, insider, "the series has one point per UTC day, including quiet ones")
 	assert.Equal(t, int64(2), sum(insider), "both deployments are counted for a viewer who can see both repositories")
@@ -325,7 +325,7 @@ func TestDeliveryCIPageIsAClientOfItsAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/ci")
 	body := session.MakeRequest(t, req, http.StatusOK).Body.String()
 
-	for _, path := range []string{"/overview", "/overview/trends", "/overview/repos", "/runs"} {
+	for _, path := range []string{"/insights", "/insights/trends", "/insights/repos", "/runs"} {
 		assert.Contains(t, body, path, "the page reads %s over the documented API", path)
 	}
 	assert.Contains(t, body, `const base = "`+deploymentsv1.BasePath+`"`,

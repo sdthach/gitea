@@ -80,7 +80,7 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 		"deployments":              {[]string{"deployments"}, "/api/deployments/v1/deployments", ""},
 		"audit":                    {[]string{"audit"}, "/api/deployments/v1/audit", ""},
 		"releases":                 {[]string{"releases", "acme", "web"}, "/api/deployments/v1/repos/acme/web/releases", ""},
-		"grid":                     {[]string{"grid"}, "/api/deployments/v1/grid", ""},
+		"deployment-matrix":        {[]string{"deployment-matrix"}, "/api/deployments/v1/deployments/matrix", ""},
 		// deploy and rollback are one endpoint under two names, because rolling
 		// back is deploying a prior release tag rather than a second path.
 		"deploy": {
@@ -91,17 +91,17 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"rollback", "--repo", "acme/web", "--environment", "prod", "--release-tag", "v0.9"},
 			"/api/deployments/v1/deployments", http.MethodPost,
 		},
-		// the cross-repository CI overview's resources.
+		// the cross-repository CI insights' resources.
 		"runs":            {[]string{"runs"}, "/api/deployments/v1/runs", ""},
 		"workflows":       {[]string{"workflows"}, "/api/deployments/v1/workflows", ""},
-		"overview":        {[]string{"overview"}, "/api/deployments/v1/overview", ""},
-		"overview-trends": {[]string{"overview-trends"}, "/api/deployments/v1/overview/trends", ""},
-		"overview-repos":  {[]string{"overview-repos"}, "/api/deployments/v1/overview/repos", ""},
+		"insights":        {[]string{"insights"}, "/api/deployments/v1/insights", ""},
+		"insights-trends": {[]string{"insights-trends"}, "/api/deployments/v1/insights/trends", ""},
+		"insights-repos":  {[]string{"insights-repos"}, "/api/deployments/v1/insights/repos", ""},
 		// a gated environment holds a CLI-started deploy identically, and these
 		// are the only way to release it — there is no CLI path around the gate.
-		"approvals": {[]string{"approvals"}, "/api/deployments/v1/approvals", ""},
-		"approve":   {[]string{"approve", "42"}, "/api/deployments/v1/approvals/42/approve", http.MethodPost},
-		"reject":    {[]string{"reject", "42"}, "/api/deployments/v1/approvals/42/reject", http.MethodPost},
+		"reviews": {[]string{"reviews"}, "/api/deployments/v1/reviews", ""},
+		"approve": {[]string{"approve", "42"}, "/api/deployments/v1/reviews/42/approve", http.MethodPost},
+		"reject":  {[]string{"reject", "42"}, "/api/deployments/v1/reviews/42/reject", http.MethodPost},
 		"environment-create": {
 			[]string{"environment-create", "--name", "staging"},
 			"/api/deployments/v1/environments", http.MethodPost,
@@ -122,8 +122,8 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"secret-scope-delete", "3"},
 			"/api/deployments/v1/secret-scopes/3", http.MethodDelete,
 		},
-		"deployment-summary": {[]string{"deployment-summary"}, "/api/deployments/v1/deployment-summary", ""},
-		"environment":        {[]string{"environment", "7"}, "/api/deployments/v1/environments/7", ""},
+		"insights-deployments": {[]string{"insights-deployments"}, "/api/deployments/v1/insights/deployments", ""},
+		"environment":          {[]string{"environment", "7"}, "/api/deployments/v1/environments/7", ""},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

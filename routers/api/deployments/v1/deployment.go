@@ -39,7 +39,7 @@ var deploymentSpec = query.Spec{
 	SearchFields: []string{"release_tag", "environment"},
 	// an expansion is whitelisted only once its resource is declared; before that it would
 	// always return nothing, which no test could tell from a broken one.
-	Expands: []string{"release", "audit", "approval"},
+	Expands: []string{"release", "audit", "review"},
 	Paging:  query.PagingCursor,
 }
 
@@ -49,8 +49,8 @@ type Deployment struct {
 	deployments_model.Deployment
 	Release *Release                        `json:"release,omitempty"`
 	Audit   []*deployments_model.AuditEvent `json:"audit,omitempty"`
-	// Approval is the hold the review gate placed on this run, when there was one.
-	Approval *deployments_model.Review `json:"approval,omitempty"`
+	// Review is the hold the review gate placed on this run, when there was one.
+	Review *deployments_model.Review `json:"review,omitempty"`
 }
 
 func listDeploymentsEndpoint() *hubapi.Endpoint {
@@ -148,7 +148,7 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 				}
 				row.Audit = events
 			}
-		case "approval":
+		case "review":
 			for _, row := range rows {
 				cond := builder.Eq{"repo_id": row.RepoID, "run_id": row.RunID, "environment": row.Environment}
 				holds, _, err := deployments_model.FindReviews(ctx, cond, "id DESC", 1, 0)
@@ -156,7 +156,7 @@ func expandDeployments(ctx *context.APIContext, expand []string, rows []*Deploym
 					return err
 				}
 				if len(holds) > 0 {
-					row.Approval = holds[0]
+					row.Review = holds[0]
 				}
 			}
 		}

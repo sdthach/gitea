@@ -21,13 +21,13 @@ func endpoints() []*hubapi.Endpoint {
 	return []*hubapi.Endpoint{
 		getBoardEndpoint(),
 		moveBoardCardColumnEndpoint(),
-		moveBoardCardLaneEndpoint(),
-		getTimelineEndpoint(),
-		moveTimelineIssueMilestoneEndpoint(),
-		moveTimelineIssueLaneEndpoint(),
-		setTimelineIssueDatesEndpoint(),
-		createTimelineMilestoneEndpoint(),
-		createTimelineIssueEndpoint(),
+		moveBoardCardGroupEndpoint(),
+		getRoadmapEndpoint(),
+		moveIssueMilestoneEndpoint(),
+		moveIssueGroupEndpoint(),
+		setIssueDatesEndpoint(),
+		createMilestoneEndpoint(),
+		createIssueEndpoint(),
 	}
 }
 

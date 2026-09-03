@@ -4,7 +4,7 @@
       "Board": {
         "properties": {
           "can_edit_issue": {
-            "description": "Whether the caller may move a card between lanes, which edits the issue's own label or assignee.",
+            "description": "Whether the caller may move a card between groups, which edits the issue's own label or assignee.",
             "type": "boolean"
           },
           "can_write": {
@@ -19,7 +19,7 @@
             "type": "array"
           },
           "group_by": {
-            "description": "The active lane grouping. A view setting, never stored on the project.",
+            "description": "The active group grouping. A view setting, never stored on the project.",
             "enum": [
               "type",
               "assignee",
@@ -28,8 +28,8 @@
             ],
             "type": "string"
           },
-          "lanes": {
-            "description": "The horizontal lanes Gitea does not model. Each carries key, label, is_empty_value, cards and one entry per column, so the result is a rectangle. The lane whose is_empty_value is true holds the issues with no value for the active grouping.",
+          "groups": {
+            "description": "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, cards and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the issues with no value for the active grouping.",
             "items": {
               "type": "object"
             },
@@ -57,7 +57,7 @@
           "can_write",
           "columns",
           "group_by",
-          "lanes",
+          "groups",
           "project_id",
           "repo_full_name",
           "repo_id"
@@ -97,10 +97,10 @@
         ],
         "type": "object"
       },
-      "Timeline": {
+      "Roadmap": {
         "properties": {
           "arrows": {
-            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_span and to_span carry the span keys as kind:key, while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both span fields are absent at issue zoom, where an edge already joins two drawn bars.",
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_rollup and to_rollup carry the rollup keys as kind:key, while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both rollup fields are absent at issue zoom, where an edge already joins two drawn bars.",
             "items": {
               "type": "object"
             },
@@ -114,7 +114,7 @@
             "type": "array"
           },
           "group_by": {
-            "description": "The active lane grouping, reusing the board's own. A view setting, never stored.",
+            "description": "The active group grouping, reusing the board's own. A view setting, never stored.",
             "enum": [
               "type",
               "assignee",
@@ -123,8 +123,15 @@
             ],
             "type": "string"
           },
-          "lanes": {
-            "description": "The PUBLISHED bars grouped by the board's own lane definition. Empty when grouping is off, and empty at a rolled-up zoom, which publishes no bars to group. Each lane carries key, label, is_empty_value, cards and one column holding its bars.",
+          "groups": {
+            "description": "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, and empty at a rolled-up zoom, which publishes no bars to group. Each group carries key, label, is_empty_value, cards and one column holding its bars.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "milestones": {
+            "description": "The repository's milestones, which are the rows an issue can be filed under. Each carries milestone_id, title and is_closed.",
             "items": {
               "type": "object"
             },
@@ -138,16 +145,16 @@
             "description": "Repository the chart covers.",
             "type": "integer"
           },
-          "ruler": {
-            "description": "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows the span drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while the write granularity stays a day at every unit.",
-            "type": "object"
-          },
-          "spans": {
-            "description": "Epic and milestone rows spanning earliest start to latest end of their children, with ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row also carries issue_id, declared_start_unix and declared_end_unix — the epic issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
+          "rollups": {
+            "description": "Epic and milestone rows rolling up earliest start to latest end of their children, with ccpm's own task-close percentage as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so an epic is checked against its children even where none is drawn. An epic row also carries issue_id, declared_start_unix and declared_end_unix — the epic issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
             "items": {
               "type": "object"
             },
             "type": "array"
+          },
+          "ruler": {
+            "description": "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows the range drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while the write granularity stays a day at every unit.",
+            "type": "object"
           },
           "truncated": {
             "description": "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so.",
@@ -174,11 +181,11 @@
           "arrows",
           "bars",
           "group_by",
-          "lanes",
+          "groups",
           "repo_full_name",
           "repo_id",
+          "rollups",
           "ruler",
-          "spans",
           "truncated",
           "unmanaged",
           "zoom"
@@ -196,7 +203,7 @@
   "paths": {
     "/board": {
       "get": {
-        "description": "Gitea's project columns rendered vertically, with horizontal lanes it does not model at all: project.Column carries title, sorting, colour and project and no lane, row or group field, so lanes are a rendering over rows the Projects API already returns — no schema change and no fork change. group_by selects the lane dimension at view time and is never stored on the project, so two people may group the same board differently. An issue with no value for the active grouping falls into an explicit empty-value lane; nothing disappears from a board because a field is unset. Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board. The /delivery/board page is a client of this endpoint.",
+        "description": "Gitea's project columns rendered vertically, with horizontal groups it does not model at all: project.Column carries title, sorting, colour and project and no group or row field, so groups are a rendering over rows the Projects API already returns — no schema change and no fork change. group_by selects the group dimension at view time and is never stored on the project, so two people may group the same board differently. An issue with no value for the active grouping falls into an explicit empty-value group; nothing disappears from a board because a field is unset. Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board. The /delivery/board page is a client of this endpoint.",
         "operationId": "getBoard",
         "parameters": [
           {
@@ -287,7 +294,7 @@
             "description": "No such resource."
           }
         },
-        "summary": "A project board with horizontal swimlanes",
+        "summary": "A project board with horizontal groups",
         "tags": [
           "board"
         ]
@@ -389,10 +396,10 @@
         ]
       }
     },
-    "/board/cards/{issue_id}/lane": {
+    "/board/cards/{issue_id}/group": {
       "post": {
-        "description": "The second and last of the board's writes. A lane IS the grouping value, so moving between lanes edits the field itself: the type: label, the epic: label, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "moveBoardCardLane",
+        "description": "The second and last of the board's writes. A group IS the grouping value, so moving between groups edits the field itself: the type: label, the epic: label, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveBoardCardGroup",
         "parameters": [
           {
             "description": "The issue's GLOBAL id, which is what Gitea's own project endpoints address a card by — not its per-repository number.",
@@ -409,18 +416,18 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "group": {
+                    "description": "The group's key: the type, the epic or the assignee login. Empty moves the card into the empty-value group, clearing the field.",
+                    "type": "string"
+                  },
                   "group_by": {
-                    "description": "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
+                    "description": "The active grouping. A group move is refused when this is none, because there is nothing to write.",
                     "enum": [
                       "type",
                       "assignee",
                       "epic",
                       "none"
                     ],
-                    "type": "string"
-                  },
-                  "lane": {
-                    "description": "The lane's key: the type, the epic or the assignee login. Empty moves the card into the empty-value lane, clearing the field.",
                     "type": "string"
                   },
                   "project_id": {
@@ -485,16 +492,463 @@
             "description": "No such resource."
           }
         },
-        "summary": "Move a card between the board's lanes",
+        "summary": "Move a card between the board's groups",
         "tags": [
           "board"
         ]
       }
     },
-    "/timeline": {
+    "/issues": {
+      "post": {
+        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "createIssue",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Issue body.",
+                    "type": "string"
+                  },
+                  "epic": {
+                    "description": "Epic name; the issue is labelled epic:<name> so the chart draws it.",
+                    "type": "string"
+                  },
+                  "milestone_id": {
+                    "description": "Milestone row to file it under.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Issue title.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an issue on a row",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dates": {
+      "post": {
+        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueDates",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "end": {
+                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a bar's start and end",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/group": {
+      "post": {
+        "description": "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanGroupMove the board's group move goes through, so a vertical drag on the chart and a group move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveIssueGroup",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group": {
+                    "description": "The group's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value group, clearing the field.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The active grouping. A group move is refused when this is none, because there is nothing to write.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "epic",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "group_by",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a bar between the chart's groups",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/milestone": {
+      "post": {
+        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveIssueMilestone",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "milestone_id": {
+                    "description": "Target milestone; 0 removes the issue from its row.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move an issue between the chart's milestone rows",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/milestones": {
+      "post": {
+        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "createMilestone",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Milestone description.",
+                    "type": "string"
+                  },
+                  "end": {
+                    "description": "Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Milestone title.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a milestone row",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/roadmap": {
       "get": {
-        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the lane dimension, reusing the board's own lanes. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /delivery/timeline page is a client of this endpoint.",
-        "operationId": "getTimeline",
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from ccpm: the `started:` in updates/<N>/progress.md, carried onto the issue by issue-sync as a `ccpm:started=` marker on the progress comment, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue ccpm does not manage has no start to draw: it is listed with that reason rather than given a fabricated bar. Epic and milestone rows span earliest start to latest end of their children, and their progress is ccpm's own task-close percentage; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so an epic whose declared window ends before the work filed under it is still flagged at zoom=epic where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — epic over the type:epic issues, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. An epic with no children yet is still listed, over its own declared window. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. Scoped by Gitea's own permission check on the Issues unit. The /delivery/timeline page is a client of this endpoint.",
+        "operationId": "getRoadmap",
         "parameters": [
           {
             "description": "Filter on repo_id. Bare form means the eq operator.",
@@ -574,7 +1028,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Timeline"
+                  "$ref": "#/components/schemas/Roadmap"
                 }
               }
             },
@@ -611,456 +1065,9 @@
             "description": "No such resource."
           }
         },
-        "summary": "The delivery timeline: one bar per issue, with dependency arrows",
+        "summary": "The delivery roadmap: one bar per issue, with dependency arrows",
         "tags": [
-          "timeline"
-        ]
-      }
-    },
-    "/timeline/issues": {
-      "post": {
-        "description": "Creates the issue and files it under the milestone row and, when epic is given, the epic: label the chart groups by — an issue with no epic: label is listed as unmanaged rather than drawn. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "createTimelineIssue",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "description": {
-                    "description": "Issue body.",
-                    "type": "string"
-                  },
-                  "epic": {
-                    "description": "Epic name; the issue is labelled epic:<name> so the chart draws it.",
-                    "type": "string"
-                  },
-                  "milestone_id": {
-                    "description": "Milestone row to file it under.",
-                    "type": "integer"
-                  },
-                  "repo": {
-                    "description": "Repository as owner/name.",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "Issue title.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "repo",
-                  "title"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Timeline"
-                }
-              }
-            },
-            "description": "Success."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The request was refused, naming the offender and what is accepted."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The calling user is not permitted, by Gitea's own permission check."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "No such resource."
-          }
-        },
-        "summary": "Create an issue on a row",
-        "tags": [
-          "timeline"
-        ]
-      }
-    },
-    "/timeline/issues/{issue_id}/dates": {
-      "post": {
-        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. Gitea stores no start, so the start is written as the `ccpm:started=` comment the chart reads — no file in the repository is touched. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "setTimelineIssueDates",
-        "parameters": [
-          {
-            "description": "The issue's global id, as the timeline's bars publish it.",
-            "in": "path",
-            "name": "issue_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "end": {
-                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
-                    "type": "string"
-                  },
-                  "repo": {
-                    "description": "Repository as owner/name.",
-                    "type": "string"
-                  },
-                  "start": {
-                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "repo"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Timeline"
-                }
-              }
-            },
-            "description": "Success."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The request was refused, naming the offender and what is accepted."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The calling user is not permitted, by Gitea's own permission check."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "No such resource."
-          }
-        },
-        "summary": "Set a bar's start and end",
-        "tags": [
-          "timeline"
-        ]
-      }
-    },
-    "/timeline/issues/{issue_id}/lane": {
-      "post": {
-        "description": "The chart's vertical drag. A lane IS the grouping value, so moving between lanes edits the field itself: the type: label, the epic: label, or the assignee. It goes through the same PlanLaneMove the board's lane move goes through, so a vertical drag on the chart and a lane move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "moveTimelineIssueLane",
-        "parameters": [
-          {
-            "description": "The issue's global id, as the timeline's bars publish it.",
-            "in": "path",
-            "name": "issue_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "group_by": {
-                    "description": "The active grouping. A lane move is refused when this is none, because there is nothing to write.",
-                    "enum": [
-                      "type",
-                      "assignee",
-                      "epic",
-                      "none"
-                    ],
-                    "type": "string"
-                  },
-                  "lane": {
-                    "description": "The lane's key: the type, the epic or the assignee login. Empty moves the bar into the empty-value lane, clearing the field.",
-                    "type": "string"
-                  },
-                  "repo": {
-                    "description": "Repository as owner/name.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "group_by",
-                  "repo"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Timeline"
-                }
-              }
-            },
-            "description": "Success."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The request was refused, naming the offender and what is accepted."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The calling user is not permitted, by Gitea's own permission check."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "No such resource."
-          }
-        },
-        "summary": "Move a bar between the chart's lanes",
-        "tags": [
-          "timeline"
-        ]
-      }
-    },
-    "/timeline/issues/{issue_id}/milestone": {
-      "post": {
-        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "moveTimelineIssueMilestone",
-        "parameters": [
-          {
-            "description": "The issue's global id, as the timeline's bars publish it.",
-            "in": "path",
-            "name": "issue_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "milestone_id": {
-                    "description": "Target milestone; 0 removes the issue from its row.",
-                    "type": "integer"
-                  },
-                  "repo": {
-                    "description": "Repository as owner/name.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "repo"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Timeline"
-                }
-              }
-            },
-            "description": "Success."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The request was refused, naming the offender and what is accepted."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The calling user is not permitted, by Gitea's own permission check."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "No such resource."
-          }
-        },
-        "summary": "Move an issue between the chart's milestone rows",
-        "tags": [
-          "timeline"
-        ]
-      }
-    },
-    "/timeline/milestones": {
-      "post": {
-        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
-        "operationId": "createTimelineMilestone",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "description": {
-                    "description": "Milestone description.",
-                    "type": "string"
-                  },
-                  "end": {
-                    "description": "Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date.",
-                    "type": "string"
-                  },
-                  "repo": {
-                    "description": "Repository as owner/name.",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "Milestone title.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "repo",
-                  "title"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Timeline"
-                }
-              }
-            },
-            "description": "Success."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The request was refused, naming the offender and what is accepted."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "The calling user is not permitted, by Gitea's own permission check."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "No such resource."
-          }
-        },
-        "summary": "Create a milestone row",
-        "tags": [
-          "timeline"
+          "roadmap"
         ]
       }
     }

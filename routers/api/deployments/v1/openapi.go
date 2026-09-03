@@ -54,7 +54,7 @@ var componentSchemas = map[string]any{
 		"created_unix": hubapi.Prop("integer", "When the row was appended, unix seconds."),
 		"release":      hubapi.Prop("object", "The release, when ?expand=release was asked for."),
 		"audit":        hubapi.ArrayProp("object", "The run's audit events, when ?expand=audit was asked for."),
-		"approval":     hubapi.Prop("object", "The approval gate's hold on this run, when ?expand=approval was asked for."),
+		"review":       hubapi.Prop("object", "The review gate's hold on this run, when ?expand=review was asked for."),
 	}, "id", "repo_id", "environment", "release_tag", "run_id", "status", "created_unix"),
 	"AuditEvent": hubapi.ObjectSchema(map[string]any{
 		"id":            hubapi.Prop("integer", "Primary key."),
@@ -124,8 +124,8 @@ var componentSchemas = map[string]any{
 		"event":            hubapi.Prop("string", "The webhook event that caused the run."),
 		"ref":              hubapi.Prop("string", "The commit, branch or tag that caused the run."),
 		"commit_sha":       hubapi.Prop("string", "Commit the run built."),
-		"status":           hubapi.EnumProp("Run state, as the overview's tiles group them. Filter on this name, never on Gitea's internal integer.", deployments_service.RunStateNames()),
-		"run_url":          hubapi.Prop("string", "Link to Gitea's own run page. The overview duplicates no Gitea page."),
+		"status":           hubapi.EnumProp("Run state, as the insights tiles group them. Filter on this name, never on Gitea's internal integer.", deployments_service.RunStateNames()),
+		"run_url":          hubapi.Prop("string", "Link to Gitea's own run page. The insights duplicate no Gitea page."),
 		"created_unix":     hubapi.Prop("integer", "When the run was created, unix seconds."),
 		"started_unix":     hubapi.Prop("integer", "When the run started, unix seconds; 0 if it has not."),
 		"stopped_unix":     hubapi.Prop("integer", "When the run stopped, unix seconds; 0 if it has not."),
@@ -177,7 +177,7 @@ var componentSchemas = map[string]any{
 		"average_duration_seconds": hubapi.Prop("integer", "Mean duration over the runs that finished."),
 		"deployments":              hubapi.Prop("integer", "Deployments appended that day, read from the fork's own table so both dashboards share one source of truth."),
 	}, "date", "day_unix", "runs", "successes", "failures", "average_duration_seconds", "deployments"),
-	"Approval": hubapi.ObjectSchema(map[string]any{
+	"Review": hubapi.ObjectSchema(map[string]any{
 		"id":                 hubapi.Prop("integer", "Primary key."),
 		"repo_id":            hubapi.Prop("integer", "Repository the held run belongs to."),
 		"environment":        hubapi.Prop("string", "Environment the held job declares, lower-cased."),
@@ -191,12 +191,12 @@ var componentSchemas = map[string]any{
 		"created_unix":       hubapi.Prop("integer", "When the hold was recorded, unix seconds."),
 		"state":              hubapi.EnumProp("Projected over the append-only audit log, never a stored column.", deployments_model.ReviewStates),
 		"review_policy":      hubapi.EnumProp("The environment's live review policy.", deployments_model.ReviewPolicies),
-		"approvals_count":    hubapi.Prop("integer", "Distinct approvers so far, counted under the environment's policy."),
+		"reviews_count":      hubapi.Prop("integer", "Distinct reviewers so far, counted under the environment's policy."),
 		"required_reviewers": hubapi.Prop("integer", "Reviews this deploy needs before the job is assigned."),
 		"age_seconds":        hubapi.Prop("integer", "How long the deploy has been held."),
 		"can_approve":        hubapi.Prop("boolean", "Whether the calling user may approve or reject, by the same check the endpoint enforces."),
 		"deployment":         hubapi.Prop("object", "The deployment row for this run, when ?expand=deployment was asked for."),
-	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "approvals_count", "required_reviewers", "created_unix", "can_approve"),
+	}, "id", "repo_id", "environment", "run_id", "job_id", "state", "reviews_count", "required_reviewers", "created_unix", "can_approve"),
 	"SecretScope": hubapi.ObjectSchema(map[string]any{
 		"id":           hubapi.Prop("integer", "Primary key."),
 		"repo_id":      hubapi.Prop("integer", "Repository the secret belongs to."),

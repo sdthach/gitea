@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// approvalRun inserts one waiting deploy run at a release tag, reading its workflow from the
+// reviewRun inserts one waiting deploy run at a release tag, reading its workflow from the
 // commit the run records — the same path production takes, because jobparser.Job carries no
 // environment field and the declaration has to be re-read from the file.
-func approvalRun(t *testing.T, repo *repo_model.Repository, sha string, index int64) *actions_model.ActionRun {
+func reviewRun(t *testing.T, repo *repo_model.Repository, sha string, index int64) *actions_model.ActionRun {
 	t.Helper()
 	run := &actions_model.ActionRun{
 		Title: "deploy v1.1", RepoID: repo.ID, OwnerID: repo.OwnerID,
@@ -41,9 +41,9 @@ func approvalRun(t *testing.T, repo *repo_model.Repository, sha string, index in
 	return run
 }
 
-// approvalJob inserts one waiting job of a run. jobID names the job in the workflow file, so
+// reviewJob inserts one waiting job of a run. jobID names the job in the workflow file, so
 // "to-prod" declares environment prod and "build" declares none.
-func approvalJob(t *testing.T, run *actions_model.ActionRun, jobID, name string) *actions_model.ActionRunJob {
+func reviewJob(t *testing.T, run *actions_model.ActionRun, jobID, name string) *actions_model.ActionRunJob {
 	t.Helper()
 	job := &actions_model.ActionRunJob{
 		RunID: run.ID, RepoID: run.RepoID, OwnerID: run.OwnerID, CommitSHA: run.CommitSHA,
@@ -55,10 +55,10 @@ func approvalJob(t *testing.T, run *actions_model.ActionRun, jobID, name string)
 	return job
 }
 
-func approvalRunner(t *testing.T, repo *repo_model.Repository, name string) *actions_model.ActionRunner {
+func reviewRunner(t *testing.T, repo *repo_model.Repository, name string) *actions_model.ActionRunner {
 	t.Helper()
 	runner := &actions_model.ActionRunner{
-		UUID: "approval-runner-" + name, Name: "approval-runner-" + name,
+		UUID: "review-runner-" + name, Name: "review-runner-" + name,
 		RepoID: repo.ID, AgentLabels: []string{"ubuntu-latest"},
 	}
 	runner.GenerateAndFillToken()
@@ -78,7 +78,7 @@ func gridCell(t *testing.T, token string, repoID int64, releaseTag, environment 
 			Symbol      string `json:"symbol"`
 		} `json:"cells"`
 	}
-	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id="+strconv.FormatInt(repoID, 10)).AddTokenAuth(token)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id="+strconv.FormatInt(repoID, 10)).AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
 	for _, row := range rows {
 		if row.ReleaseTag != releaseTag {
@@ -94,11 +94,11 @@ func gridCell(t *testing.T, token string, repoID int64, releaseTag, environment 
 	return "", ""
 }
 
-// TestDeliveryApprovalGateHoldsJobsUntilApproved runs the gate through the
+// TestDeliveryReviewGateHoldsJobsUntilApproved runs the gate through the
 // production path: a real workflow file, real run and job rows, and Gitea's own
 // CreateTaskForRunner — the function the spoke delegates from. Nothing here calls the gate
 // directly, so a spoke that stopped delegating would fail every assertion.
-func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
+func TestDeliveryReviewGateHoldsJobsUntilApproved(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
@@ -115,11 +115,11 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 
 		session := loginUser(t, "user2")
 		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
-		runner := approvalRunner(t, repo, "main")
+		runner := reviewRunner(t, repo, "main")
 
-		run := approvalRun(t, repo, sha, 9901)
-		gated := approvalJob(t, run, "to-prod", "to prod")
-		ungated := approvalJob(t, run, "build", "build")
+		run := reviewRun(t, repo, sha, 9901)
+		gated := reviewJob(t, run, "to-prod", "to prod")
+		ungated := reviewJob(t, run, "build", "build")
 
 		// The gated job is oldest-first in the keyset walk, so a gate that narrowed by
 		// reordering or restarting the cursor would show up as the ungated job never being
@@ -145,13 +145,13 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			const runners = 4
 			burst := make([]*actions_model.ActionRunner, runners)
 			for i := range runners {
-				burst[i] = approvalRunner(t, repo, "burst-"+strconv.Itoa(i))
+				burst[i] = reviewRunner(t, repo, "burst-"+strconv.Itoa(i))
 			}
 			// One free job per runner, so every runner has something it may legitimately
 			// take; the only job none of them may take is the held one.
 			free := map[int64]bool{}
 			for i := range runners {
-				free[approvalJob(t, run, "build", fmt.Sprintf("burst build %d", i)).ID] = true
+				free[reviewJob(t, run, "build", fmt.Sprintf("burst build %d", i)).ID] = true
 			}
 
 			type outcome struct {
@@ -200,12 +200,12 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			RequesterLogin    string `json:"requester_login"`
 			State             string `json:"state"`
 			ReviewPolicy      string `json:"review_policy"`
-			ApprovalsCount    int64  `json:"approvals_count"`
+			ReviewsCount      int64  `json:"reviews_count"`
 			RequiredReviewers int64  `json:"required_reviewers"`
 			CanApprove        bool   `json:"can_approve"`
 			AgeSeconds        int64  `json:"age_seconds"`
 		}
-		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals?environment=prod").AddTokenAuth(token)
+		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/reviews?environment=prod").AddTokenAuth(token)
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &listed)
 		require.Len(t, listed, 1, "one held job, one hold row")
 		hold := listed[0]
@@ -215,7 +215,7 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 		assert.Equal(t, "v1.1", hold.ReleaseTag)
 		assert.Equal(t, "user2", hold.RequesterLogin)
 		assert.Equal(t, "pending", hold.State)
-		assert.Equal(t, int64(0), hold.ApprovalsCount)
+		assert.Equal(t, int64(0), hold.ReviewsCount)
 		assert.Equal(t, int64(1), hold.RequiredReviewers)
 		assert.True(t, hold.CanApprove, "user2 owns the repository, so the forge permits them to approve")
 		assert.GreaterOrEqual(t, hold.AgeSeconds, int64(0))
@@ -230,18 +230,18 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			var expanded []struct {
 				Deployment *deployments_model.Deployment `json:"deployment"`
 			}
-			req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals?expand=deployment").AddTokenAuth(token)
+			req := NewRequest(t, "GET", deploymentsv1.BasePath+"/reviews?expand=deployment").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &expanded)
 			require.Len(t, expanded, 1)
 			require.NotNil(t, expanded[0].Deployment, "?expand=deployment resolves the run's deployment")
 			assert.Equal(t, "v1.1", expanded[0].Deployment.ReleaseTag)
 		})
 
-		t.Run("the grid renders the held cell as ⏸ from the approvals table", func(t *testing.T) {
+		t.Run("the grid renders the held cell as ⏸ from the reviews table", func(t *testing.T) {
 			// This is the case only the SECOND source can answer. The run has already
 			// started — its ungated build job was claimed above, so the notifier records
 			// `started` — which makes the projection over the log alone say "in progress".
-			// The deploy job is nonetheless held, and the approvals table is what knows it.
+			// The deploy job is nonetheless held, and the reviews table is what knows it.
 			// A grid reading the log alone renders ⟳ here and is wrong.
 			for _, event := range []string{deployments_model.AuditRequested, deployments_model.AuditStarted} {
 				require.NoError(t, deployments_model.AppendAuditEvent(ctx, &deployments_model.AuditEvent{
@@ -254,13 +254,13 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 			assert.Equal(t, "⏸", symbol)
 		})
 
-		t.Run("a user without approval rights is refused at the endpoint", func(t *testing.T) {
+		t.Run("a user without review rights is refused at the endpoint", func(t *testing.T) {
 			// Refused HERE, not merely offered no button. user4 can read the public
 			// repository but has no write on its Actions unit.
 			otherSession := loginUser(t, "user4")
 			otherToken := getTokenForLoggedInUser(t, otherSession, auth_model.AccessTokenScopeWriteRepository)
 			req := NewRequest(t, "POST",
-				fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(otherToken)
+				fmt.Sprintf("%s/reviews/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(otherToken)
 			resp := MakeRequest(t, req, http.StatusForbidden)
 			var refusal struct {
 				Message         string `json:"message"`
@@ -278,19 +278,19 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 
 		t.Run("approving releases the job and lands in the audit log", func(t *testing.T) {
 			req := NewRequest(t, "POST",
-				fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(token)
+				fmt.Sprintf("%s/reviews/%d/approve", deploymentsv1.BasePath, hold.ID)).AddTokenAuth(token)
 			var decided struct {
-				State          string `json:"state"`
-				ApprovalsCount int64  `json:"approvals_count"`
+				State        string `json:"state"`
+				ReviewsCount int64  `json:"reviews_count"`
 			}
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &decided)
 			assert.Equal(t, "approved", decided.State)
-			assert.Equal(t, int64(1), decided.ApprovalsCount)
+			assert.Equal(t, int64(1), decided.ReviewsCount)
 
 			var events []*deployments_model.AuditEvent
 			req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?event=approved&sort_by=id&order=asc").AddTokenAuth(token)
 			DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &events)
-			require.Len(t, events, 1, "approval is an audit event on the append-only log")
+			require.Len(t, events, 1, "the review is an audit event on the append-only log")
 			assert.Equal(t, "user2", events[0].ActorLogin)
 			assert.Equal(t, int64(2), events[0].ActorID)
 			assert.NotZero(t, events[0].OccurredUnix)
@@ -309,9 +309,9 @@ func TestDeliveryApprovalGateHoldsJobsUntilApproved(t *testing.T) {
 	})
 }
 
-// TestDeliveryApprovalRejectionEndsTheDeploy is the other half: a rejection is terminal,
+// TestDeliveryReviewRejectionEndsTheDeploy is the other half: a rejection is terminal,
 // the run does not proceed later, and the rejection names its approver on the audit log.
-func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
+func TestDeliveryReviewRejectionEndsTheDeploy(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
@@ -321,9 +321,9 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 			ReviewPolicy: deployments_model.PolicyOthersOnly, RequiredReviewers: 1,
 		}))
 
-		runner := approvalRunner(t, repo, "reject")
-		run := approvalRun(t, repo, sha, 9902)
-		gated := approvalJob(t, run, "to-prod", "to prod")
+		runner := reviewRunner(t, repo, "reject")
+		run := reviewRun(t, repo, sha, 9902)
+		gated := reviewJob(t, run, "to-prod", "to prod")
 
 		_, ok, err := actions_model.CreateTaskForRunner(ctx, runner)
 		require.NoError(t, err)
@@ -336,18 +336,18 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 			ID    int64  `json:"id"`
 			State string `json:"state"`
 		}
-		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/approvals").AddTokenAuth(token)
+		req := NewRequest(t, "GET", deploymentsv1.BasePath+"/reviews").AddTokenAuth(token)
 		DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &listed)
 		require.Len(t, listed, 1)
 
-		// user2 triggered the run and the policy is others_only, so their own approval is
+		// user2 triggered the run and the policy is others_only, so their own review is
 		// refused by the endpoint rather than silently ignored.
 		req = NewRequest(t, "POST",
-			fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
+			fmt.Sprintf("%s/reviews/%d/approve", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusForbidden)
 
 		req = NewRequest(t, "POST",
-			fmt.Sprintf("%s/approvals/%d/reject?reason=wrong+release", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
+			fmt.Sprintf("%s/reviews/%d/reject?reason=wrong+release", deploymentsv1.BasePath, listed[0].ID)).AddTokenAuth(token)
 		var decided struct {
 			State string `json:"state"`
 		}
@@ -373,10 +373,10 @@ func TestDeliveryApprovalRejectionEndsTheDeploy(t *testing.T) {
 	})
 }
 
-// TestDeliveryApprovalsPageIsAClientOfTheAPI covers the pending-approval view: the
+// TestDeliveryReviewsPageIsAClientOfTheAPI covers the pending-review view: the
 // handler serves the shell and every figure — requester, release, age, run link and whether
 // the viewer may act — arrives over the documented endpoint.
-func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
+func TestDeliveryReviewsPageIsAClientOfTheAPI(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	req := NewRequest(t, "GET", "/delivery/approvals")
@@ -386,12 +386,12 @@ func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/delivery/approvals")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deploymentsv1.BasePath+"/approvals",
+	assert.Contains(t, body, deploymentsv1.BasePath+"/reviews",
 		"the page fetches its rows from the documented endpoint")
 	assert.Contains(t, body, "suggested_action",
 		"the page surfaces the API's suggested next action")
 	assert.Contains(t, body, "can_approve",
-		"a user without approval rights is offered no action")
+		"a user without review rights is offered no action")
 
 	req = NewRequest(t, "GET", "/delivery/environments/prod/approvals")
 	resp = session.MakeRequest(t, req, http.StatusOK)
@@ -399,10 +399,10 @@ func TestDeliveryApprovalsPageIsAClientOfTheAPI(t *testing.T) {
 		"the environment's own pending list is filtered to it, so an approver need not hunt the grid")
 }
 
-// TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone is the "with the fork absent"
+// TestDeliveryReviewGateLeavesUngatedRepositoriesAlone is the "with the fork absent"
 // case as closely as an integration test can reach it: with every environment's policy at
 // its default of none, the same run deploys with no gate at all.
-func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
+func TestDeliveryReviewGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
 		repo, sha := commitWorkflow(t)
 		ctx := t.Context()
@@ -411,9 +411,9 @@ func TestDeliveryApprovalGateLeavesUngatedRepositoriesAlone(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, gated, "the seeded default environments all carry review_policy none")
 
-		runner := approvalRunner(t, repo, "ungated")
-		run := approvalRun(t, repo, sha, 9903)
-		job := approvalJob(t, run, "to-prod", "to prod")
+		runner := reviewRunner(t, repo, "ungated")
+		run := reviewRun(t, repo, sha, 9903)
+		job := reviewJob(t, run, "to-prod", "to prod")
 
 		task, ok, err := actions_model.CreateTaskForRunner(ctx, runner)
 		require.NoError(t, err)

@@ -54,7 +54,7 @@ type deliveryRoleWorld struct {
 	repo       *repo_model.Repository
 	releaseTag string
 	devEnvID   int64
-	approvalID int64
+	reviewID   int64
 	tokens     map[string]string
 }
 
@@ -69,7 +69,7 @@ func TestDeliveryPermissionMatrix(t *testing.T) {
 				assert.Equal(t, tc.deploy, w.canDeploy(t, token), "create deployment")
 				assert.Equal(t, tc.setPolicy, w.canSetPolicy(t, token), "set environment policy")
 				assert.Equal(t, tc.seeForeign, w.seesForeignRepo(t, token), "see another owner's private repo")
-				// Approval last: it writes an audit event, and a role that may approve
+				// Review last: it writes an audit event, and a role that may approve
 				// would otherwise change what a later role is answered.
 				assert.Equal(t, tc.approve, w.canApprove(t, token), "approve")
 			})
@@ -84,7 +84,7 @@ func (w *deliveryRoleWorld) gridShowsRepo(t *testing.T, token string) bool {
 	var rows []struct {
 		ReleaseTag string `json:"release_tag"`
 	}
-	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/grid?repo_id="+strconv.FormatInt(w.repo.ID, 10)).
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id="+strconv.FormatInt(w.repo.ID, 10)).
 		AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &rows)
 	for _, row := range rows {
@@ -107,7 +107,7 @@ func (w *deliveryRoleWorld) canDeploy(t *testing.T, token string) bool {
 
 func (w *deliveryRoleWorld) canApprove(t *testing.T, token string) bool {
 	t.Helper()
-	req := NewRequest(t, "POST", fmt.Sprintf("%s/approvals/%d/approve", deploymentsv1.BasePath, w.approvalID)).
+	req := NewRequest(t, "POST", fmt.Sprintf("%s/reviews/%d/approve", deploymentsv1.BasePath, w.reviewID)).
 		AddTokenAuth(token)
 	return MakeRequest(t, req, NoExpectedStatus).Code == http.StatusOK
 }
@@ -197,13 +197,13 @@ func setUpDeliveryRoles(t *testing.T) *deliveryRoleWorld {
 
 	// The requester is the deployer, so others_only also has something to refuse.
 	deployer := deliveryRoleLogin("deployer")
-	approval := &deployments_model.Review{
+	review := &deployments_model.Review{
 		RepoID: w.repo.ID, Environment: "prod", RunID: 9101, JobID: 9101,
 		ReleaseTag: w.releaseTag, RequesterID: userIDByName(t, adminToken, deployer),
 		RequesterLogin: deployer,
 	}
-	require.NoError(t, db.Insert(t.Context(), approval))
-	w.approvalID = approval.ID
+	require.NoError(t, db.Insert(t.Context(), review))
+	w.reviewID = review.ID
 	return w
 }
 

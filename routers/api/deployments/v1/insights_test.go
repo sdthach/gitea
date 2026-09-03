@@ -28,7 +28,7 @@ func parseRunQuery(t *testing.T, raw string) *query.Query {
 
 // TestDeliveryRunStatusFilterBecomesTheStoredInteger is what makes
 // `status[eq]=failure` return the failed runs rather than nothing: the column stores Gitea's
-// integer, and the caller filters on the state name the overview publishes.
+// integer, and the caller filters on the state name the insights publish.
 func TestDeliveryRunStatusFilterBecomesTheStoredInteger(t *testing.T) {
 	q := parseRunQuery(t, "status[eq]=failure")
 	require.Nil(t, mapRunStatusFilters(q))
@@ -89,15 +89,15 @@ func TestDeliveryRunStatusFilterLeavesOtherFiltersAlone(t *testing.T) {
 	}
 }
 
-// TestDeliveryOverviewResourcesArePublished: every figure the composite shows is
+// TestDeliveryInsightsResourcesArePublished: every figure the composite shows is
 // also reachable from a resource of its own, so the composite is a saving rather than the
 // only door.
-func TestDeliveryOverviewResourcesArePublished(t *testing.T) {
+func TestDeliveryInsightsResourcesArePublished(t *testing.T) {
 	published := map[string]bool{}
 	for _, op := range Operations() {
 		published[op.Path] = true
 	}
-	for _, path := range []string{"/runs", "/workflows", "/overview", "/overview/trends", "/overview/repos"} {
+	for _, path := range []string{"/runs", "/workflows", "/insights", "/insights/trends", "/insights/repos"} {
 		assert.True(t, published[path], "%s must be a published operation", path)
 	}
 }
@@ -114,7 +114,7 @@ func TestDeliveryProjectionFiltersNarrowTheRows(t *testing.T) {
 	apply := func(raw string) []deployments_service.RepoStat {
 		values, err := url.ParseQuery(raw)
 		require.NoError(t, err)
-		q, qErr := query.Parse(values, overviewRepoSpec)
+		q, qErr := query.Parse(values, insightsRepoSpec)
 		require.Nil(t, qErr)
 		return filterProjection(rows, q, repoStatValue)
 	}
@@ -154,12 +154,12 @@ func TestDeliveryEveryDeclaredProjectionFieldIsReadable(t *testing.T) {
 	// declared field with no accessor.
 	const windowField = "window_days"
 
-	for _, f := range overviewRepoSpec.Fields {
+	for _, f := range insightsRepoSpec.Fields {
 		if f.Name == windowField {
 			continue
 		}
 		_, readable := repoStatValue(deployments_service.RepoStat{}, f.Name)
-		assert.True(t, readable, "overview-repos publishes %q as filterable but cannot read it", f.Name)
+		assert.True(t, readable, "insights-repos publishes %q as filterable but cannot read it", f.Name)
 	}
 	for _, f := range workflowSpec.Fields {
 		if f.Name == windowField {
@@ -168,21 +168,21 @@ func TestDeliveryEveryDeclaredProjectionFieldIsReadable(t *testing.T) {
 		_, readable := workflowStatValue(deployments_service.WorkflowStat{}, f.Name)
 		assert.True(t, readable, "workflows publishes %q as filterable but cannot read it", f.Name)
 	}
-	for _, col := range append(overviewRepoSpec.SearchFields, workflowSpec.SearchFields...) {
+	for _, col := range append(insightsRepoSpec.SearchFields, workflowSpec.SearchFields...) {
 		_, readableRepo := repoStatValue(deployments_service.RepoStat{}, col)
 		_, readableWorkflow := workflowStatValue(deployments_service.WorkflowStat{}, col)
 		assert.True(t, readableRepo || readableWorkflow, "a searched column %q must be readable", col)
 	}
 }
 
-// TestDeliveryOverviewPagesAProjection covers the in-process paging the projections use,
+// TestDeliveryInsightsPagesAProjection covers the in-process paging the projections use,
 // including the past-the-end page a naive slice would panic on.
-func TestDeliveryOverviewPagesAProjection(t *testing.T) {
+func TestDeliveryInsightsPagesAProjection(t *testing.T) {
 	rows := []int{1, 2, 3, 4, 5}
 	page := func(p, limit int) []int {
 		values, err := url.ParseQuery("")
 		require.NoError(t, err)
-		q, qErr := query.Parse(values, overviewRepoSpec)
+		q, qErr := query.Parse(values, insightsRepoSpec)
 		require.Nil(t, qErr)
 		q.Page, q.Limit = p, limit
 		return pageOf(rows, q)

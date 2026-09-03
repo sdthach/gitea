@@ -366,21 +366,21 @@ def promote(api, fake, full, release_count, totals, verbose):
                 break
 
 
-def pending_approvals(api):
-    rows = api("GET", f"{DV1}/approvals?limit=200") or []
+def pending_reviews(api):
+    rows = api("GET", f"{DV1}/reviews?limit=200") or []
     if isinstance(rows, dict):  # a paged envelope, should the resource ever grow one
         rows = rows.get("data") or []
     return [r for r in rows if r.get("state") == "pending"]
 
 
-def resolve_approvals(api, fake, users, totals, wait, verbose):
+def resolve_reviews(api, fake, users, totals, wait, verbose):
     # The gate holds at task assignment, not at dispatch, so a held deploy only appears
     # once the runner asks for the job (models/actions/task.go).
     deadline = time.monotonic() + wait
-    rows = pending_approvals(api)
+    rows = pending_reviews(api)
     while not rows and time.monotonic() < deadline:
         time.sleep(3)
-        rows = pending_approvals(api)
+        rows = pending_reviews(api)
     if not rows:
         print("approvals: none pending — is the runner up? "
               "(docker compose --profile runner up -d runner)")
@@ -390,7 +390,7 @@ def resolve_approvals(api, fake, users, totals, wait, verbose):
     for i, row in enumerate(rows):
         verb = "approve" if i % 3 else "reject"
         try:
-            api("POST", f"{DV1}/approvals/{row['id']}/{verb}", {"comment": fake.sentence()},
+            api("POST", f"{DV1}/reviews/{row['id']}/{verb}", {"comment": fake.sentence()},
                 token=approvers[i % len(approvers)]["token"], ok=(200, 201))
             totals["approved" if verb == "approve" else "rejected"] += 1
         except ApiError as e:
@@ -484,7 +484,7 @@ def main():
         promote(api, fake, full, args.releases, totals, args.verbose)
         print(f"repo: {full}")
 
-    resolve_approvals(api, fake, users, totals, args.wait_approvals, args.verbose)
+    resolve_reviews(api, fake, users, totals, args.wait_approvals, args.verbose)
 
     print("\n" + json.dumps(totals, indent=2))
     written = write_accounts(args.accounts_file, args.server, org, users, teams)

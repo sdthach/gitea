@@ -3,16 +3,16 @@
 	<div class="ui container">
 		<h2 class="ui header">{{.Title}}</h2>
 		<p class="tw-text-14">
-			Every deploy the approval gate is holding, with who asked for it, the release, how long it
+			Every deploy the review gate is holding, with who asked for it, the release, how long it
 			has waited and a link to the run. Every figure is fetched from
-			<code>{{.DeliveryAPIBase}}/approvals</code>; this page is a client of that endpoint and
+			<code>{{.DeliveryAPIBase}}/reviews</code>; this page is a client of that endpoint and
 			reads nothing the API does not serve. Approving or rejecting calls that same endpoint, so
 			a user the forge does not permit to approve is refused by the server, not merely offered
 			no button.
 		</p>
 
 		<div id="delivery-error" class="ui negative message tw-hidden">
-			<div class="header">Could not load pending approvals</div>
+			<div class="header">Could not load pending reviews</div>
 			<p id="delivery-error-message"></p>
 			<p><strong>Suggested action:</strong> <span id="delivery-error-action"></span></p>
 		</div>
@@ -21,7 +21,7 @@
 			<div class="header">This page needs an API token</div>
 			<p>
 				The delivery API authenticates with a token, not with your browser session, so that no
-				approval can be triggered by another site holding your cookie. Create one under
+				review can be triggered by another site holding your cookie. Create one under
 				Settings &gt; Applications and paste it here; it is kept in this tab only.
 			</p>
 			<div class="ui action input">
@@ -39,7 +39,7 @@
 					<th>Requested by</th>
 					<th>Age</th>
 					<th>State</th>
-					<th>Approvals</th>
+					<th>Reviews</th>
 					<th>Run</th>
 					<th>Actions</th>
 				</tr>
@@ -51,7 +51,7 @@
 
 		<p class="tw-text-12">
 			A rejection ends the deploy: the run does not proceed later. Both decisions are written to
-			the append-only audit log naming the approver and the time.
+			the append-only audit log naming the reviewer and the time.
 		</p>
 	</div>
 </div>
@@ -104,11 +104,11 @@ function age(seconds) {
 	return `${Math.floor(seconds / 86400)}d`;
 }
 
-// decide posts one approval or rejection. The endpoint is the ONLY thing that releases a
+// decide posts one review or rejection. The endpoint is the ONLY thing that releases a
 // held job, so a refusal here is the real answer and is shown with the action it suggests.
-async function decide(approval, verb) {
+async function decide(review, verb) {
 	clearError();
-	const resp = await fetch(`${base}/approvals/${approval.id}/${verb}`, {method: 'POST', headers: headers()});
+	const resp = await fetch(`${base}/reviews/${review.id}/${verb}`, {method: 'POST', headers: headers()});
 	const payload = await resp.json().catch(() => ({}));
 	if (!resp.ok) {
 		if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
@@ -125,7 +125,7 @@ async function load() {
 
 	let payload;
 	try {
-		const resp = await fetch(`${base}/approvals?${params}`, {headers: headers()});
+		const resp = await fetch(`${base}/reviews?${params}`, {headers: headers()});
 		payload = await resp.json();
 		if (!resp.ok) {
 			if (resp.status === 401 || resp.status === 403) tokenBox.classList.remove('tw-hidden');
@@ -144,47 +144,47 @@ async function load() {
 	if (!payload.length) {
 		body.replaceChildren(Object.assign(document.createElement('tr'), {innerHTML: ''}));
 		const tr = document.createElement('tr');
-		cell(tr, wanted ? `nothing is awaiting approval in "${wanted}"` : 'nothing is awaiting approval').colSpan = 9;
+		cell(tr, wanted ? `nothing is awaiting review in "${wanted}"` : 'nothing is awaiting review').colSpan = 9;
 		body.replaceChildren(tr);
 		return;
 	}
 
-	body.replaceChildren(...payload.map((approval) => {
+	body.replaceChildren(...payload.map((review) => {
 		const tr = document.createElement('tr');
-		cell(tr, `#${approval.repo_id}`);
-		cell(tr, approval.environment);
-		cell(tr, approval.release_tag || '—');
-		cell(tr, approval.requester_login || `#${approval.requester_id}`);
-		cell(tr, age(approval.age_seconds));
-		cell(tr, approval.state);
-		cell(tr, `${approval.approvals_count}/${approval.required_reviewers}`);
+		cell(tr, `#${review.repo_id}`);
+		cell(tr, review.environment);
+		cell(tr, review.release_tag || '—');
+		cell(tr, review.requester_login || `#${review.requester_id}`);
+		cell(tr, age(review.age_seconds));
+		cell(tr, review.state);
+		cell(tr, `${review.reviews_count}/${review.required_reviewers}`);
 
 		const run = document.createElement('td');
-		if (approval.run_url) {
+		if (review.run_url) {
 			const a = document.createElement('a');
-			a.href = approval.run_url.startsWith('http') ? approval.run_url : `${subURL}${approval.run_url}`;
-			a.textContent = `run ${approval.run_id}`;
+			a.href = review.run_url.startsWith('http') ? review.run_url : `${subURL}${review.run_url}`;
+			a.textContent = `run ${review.run_id}`;
 			run.append(a);
 		} else {
-			run.textContent = `run ${approval.run_id}`;
+			run.textContent = `run ${review.run_id}`;
 		}
 		tr.append(run);
 
 		const actions = document.createElement('td');
-		// A user without approval rights is offered no action; can_approve is the server's
+		// A user without review rights is offered no action; can_approve is the server's
 		// own answer, resolved by the same check the endpoint enforces.
-		if (approval.can_approve) {
+		if (review.can_approve) {
 			for (const [verb, label, cls] of [['approve', 'approve', 'ui mini primary button'], ['reject', 'reject', 'ui mini negative button']]) {
 				const button = document.createElement('button');
 				button.type = 'button';
 				button.className = cls;
 				button.textContent = label;
-				button.addEventListener('click', () => decide(approval, verb));
+				button.addEventListener('click', () => decide(review, verb));
 				actions.append(button);
 				actions.append(' ');
 			}
 		} else {
-			actions.textContent = approval.state === 'pending' ? 'not yours to approve' : '—';
+			actions.textContent = review.state === 'pending' ? 'not yours to review' : '—';
 		}
 		tr.append(actions);
 		return tr;

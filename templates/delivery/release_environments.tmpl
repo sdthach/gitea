@@ -20,7 +20,7 @@ for (const entry of document.querySelectorAll('#release-list .release-entry')) {
 
 if (entries.size) {
 	try {
-		const resp = await fetch(`${base}/grid?repo_id=${repoID}&limit=200`, {headers: {accept: 'application/json'}});
+		const resp = await fetch(`${base}/deployments/matrix?repo_id=${repoID}&limit=200`, {headers: {accept: 'application/json'}});
 		if (resp.ok) {
 			for (const row of await resp.json()) {
 				const title = entries.get(row.release_tag);

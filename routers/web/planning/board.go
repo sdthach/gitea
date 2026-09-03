@@ -34,9 +34,9 @@ func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/delivery/timeline", reqSignIn, hub_web.PlanningPagesEnabled, Timeline)
 }
 
-// Board renders /delivery/board: Gitea's project columns vertically, with horizontal lanes
-// Gitea does not model. Lane assignment, the empty-value lane and both writes are the
-// server's, so the page and the CLI cannot disagree about which lane a card is in.
+// Board renders /delivery/board: Gitea's project columns vertically, with horizontal groups
+// Gitea does not model. Group assignment, the empty-value group and both writes are the
+// server's, so the page and the CLI cannot disagree about which group a card is in.
 func Board(ctx *context.Context) {
 	ctx.Data["Title"] = "Board"
 	ctx.Data["PageIsDelivery"] = true

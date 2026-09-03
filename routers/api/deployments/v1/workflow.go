@@ -67,7 +67,7 @@ func listWorkflowsEndpoint() *hubapi.Endpoint {
 			ID: "listWorkflows", Method: http.MethodGet, Path: "/workflows",
 			Summary: "List workflows with their run counts, success rate and average duration",
 			Description: "One row per (repository, workflow file) over the selected window, so every figure the " +
-				"overview's tiles aggregate is independently queryable rather than reachable only through the " +
+				"insights tiles aggregate is independently queryable rather than reachable only through the " +
 				"composite. window_days selects the window and defaults to " +
 				"7 days. Rows carry disabled, read from Gitea's own Actions unit configuration. " +
 				"Scoped by Gitea's own permission filtering on the Actions unit.",
@@ -83,7 +83,7 @@ func ListWorkflows(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	opts, ok := overviewOptions(ctx, q)
+	opts, ok := insightsOptions(ctx, q)
 	if !ok {
 		return
 	}
