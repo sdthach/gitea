@@ -56,7 +56,7 @@ func OperationsFrom(eps []*Endpoint) []*Operation {
 }
 
 func buildAuthGroup() *auth_service.Group {
-	group := auth_service.NewGroup(&auth_service.OAuth2{}, &auth_service.HTTPSign{}, &auth_service.Basic{})
+	group := auth_service.NewGroup(&auth_service.OAuth2{}, &auth_service.HTTPSign{}, &auth_service.Basic{}, &auth_service.Session{})
 	if setting.Service.EnableReverseProxyAuthAPI {
 		group.Add(&auth_service.ReverseProxy{})
 	}
@@ -69,7 +69,9 @@ func apiAuth(authMethod auth_service.Method) func(*context.APIContext) {
 	return func(ctx *context.APIContext) {
 		var sessionStore auth_service.SessionStore
 		if ctx.Req.Method == http.MethodGet || ctx.Req.Method == http.MethodHead {
-			sessioner()(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})).ServeHTTP(ctx.Resp, ctx.Req)
+			// The middleware attaches the session to the request it hands its next
+			// handler, not to ctx.Req itself, so that request has to be captured back out.
+			sessioner()(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx.Req = r })).ServeHTTP(ctx.Resp, ctx.Req)
 			sessionStore = session.GetContextSession(ctx.Req)
 		}
 		ar, err := common.AuthShared(ctx.Base, sessionStore, authMethod)

@@ -67,6 +67,20 @@ jobs:
       - name: spoke count against the upstream pin
         run: make hub-spoke-check
 
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+      - name: enable pnpm
+        run: corepack enable
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: lint frontend
+        run: make lint-js lint-css hub-lint-css
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -5,15 +5,25 @@ package hub
 
 import (
 	"context"
+	"time"
 
 	deployments_model "gitea.dev/models/deployments"
 	hub_model "gitea.dev/models/hub"
+	"gitea.dev/modules/log"
 	deployments_service "gitea.dev/services/deployments"
 	"gitea.dev/services/notify"
 )
 
+// pageTokenSweepInterval is how often Init's goroutine sweeps expired page tokens.
+const pageTokenSweepInterval = time.Minute
+
+// pageTokenMaxAge is how long a page token survives since it was minted before the sweep
+// deletes it.
+const pageTokenMaxAge = 24 * time.Hour
+
 // Init mounts the fork: it runs the hub's own migrations and seeds the default environment
-// set, then registers the deployment notifier.
+// set, then registers the deployment notifier. It also starts a goroutine sweeping expired
+// page tokens, which runs until ctx is done.
 //
 // The notifier is registered here rather than from models/deployments because services/notify
 // sits above the models layer; registering from the model package would invert the
@@ -26,5 +36,12 @@ func Init(ctx context.Context) error {
 		return err
 	}
 	notify.RegisterNotifier(deployments_service.NewNotifier())
+
+	go runSweeper(ctx, pageTokenSweepInterval, func() {
+		if _, err := hub_model.SweepPageTokens(ctx, time.Now().Add(-pageTokenMaxAge)); err != nil {
+			log.Error("hub: sweep page tokens: %v", err)
+		}
+	})
+
 	return nil
 }

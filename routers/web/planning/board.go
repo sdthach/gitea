@@ -30,6 +30,8 @@ type RouteRegistrar interface {
 // RegisterRoutes mounts the planning pages. routers/web/hubroutes calls this from its own
 // RegisterRoutes, behind hub's own settings gate.
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
+	m.Get("/planning/projects", reqSignIn, hub_web.PlanningPagesEnabled, Projects)
+	m.Get("/planning/projects/{owner}/{repo}/{project_id}", reqSignIn, hub_web.PlanningPagesEnabled, Project)
 	m.Get("/planning/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
 	m.Get("/planning/roadmap", reqSignIn, hub_web.PlanningPagesEnabled, Roadmap)
 }

@@ -3,9 +3,10 @@ import {test, expect} from '@playwright/test';
 import type {APIRequestContext} from '@playwright/test';
 import {login, loginUser, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
 
-// The planning pages authenticate with a token, not the browser session, and mint one per
-// page render. These tests are what proves that: a signed-in user reaches the data without
-// ever being shown the token prompt, which is the failure the prompt exists to recover from.
+// The planning pages authenticate with a token, not the browser session, cached in the
+// session store and reused across renders rather than minted fresh each time. These tests
+// are what proves that: a signed-in user reaches the data without ever being shown the token
+// prompt, which is the failure the prompt exists to recover from.
 
 async function apiRepoID(request: APIRequestContext, owner: string, name: string): Promise<number> {
   const response = await request.get(`${baseUrl()}/api/v1/repos/${owner}/${name}`, {headers: apiHeaders()});

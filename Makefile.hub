@@ -27,8 +27,12 @@ hub-test: ## run the hub fork's Go unit tests
 	@echo "Running hub unit tests $(GOTEST_FLAGS) -tags '$(TAGS)'..."
 	@$(GO) test $(GOTEST_FLAGS) -tags='$(TAGS)' $(HUB_TEST_PACKAGES)
 
+.PHONY: hub-lint-css
+hub-lint-css: node_modules ## lint the hub fork's own CSS and Vue files
+	pnpm exec stylelint --color --max-warnings=0 'web_src/js/features/planning/**/*.{css,vue}'
+
 .PHONY: hub-check
-hub-check: hub-test hub-generate-check hub-parity hub-spoke-check ## every hub gate
+hub-check: hub-test hub-generate-check hub-parity hub-spoke-check hub-lint-css ## every hub gate
 
 .PHONY: hub-integration
 # One unanchored pattern, not a list of prefixes: enumerating them silently dropped

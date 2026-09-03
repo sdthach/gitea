@@ -68,9 +68,13 @@ var forkPages = []struct {
 	dir      string
 	template string
 	// endpoints are every operation path the page fetches. Each must be published, and
-	// each must actually appear in the template, so neither list can rot.
+	// each must actually appear in the template (or client, when set), so neither list can rot.
 	endpoints []string
 	fetch     string
+	// client is the bundled TypeScript module that is a client of the API instead of the
+	// template itself, for a page whose figures are fetched by mounted Vue rather than an
+	// inline script. Path relative to the repository root.
+	client string
 }{
 	{
 		dir:      "deployments",
@@ -117,6 +121,13 @@ var forkPages = []struct {
 		endpoints: []string{"/roadmap"},
 		fetch:     "/roadmap?",
 	},
+	{
+		dir:       "planning",
+		template:  "project.tmpl",
+		endpoints: []string{"/board"},
+		fetch:     "/board?",
+		client:    "web_src/js/features/planning/api.ts",
+	},
 }
 
 // forkFragments are the templates a spoke embeds in an upstream page rather than the fork
@@ -153,8 +164,17 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(templateDir(t), page.dir, page.template))
 			require.NoError(t, err)
 			body := string(raw)
-			assert.Contains(t, body, page.fetch, "the page reads its rows over the API")
-			assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action")
+
+			checked := body
+			if page.client != "" {
+				clientRaw, err := os.ReadFile(filepath.Join(repoRoot(t), page.client))
+				require.NoError(t, err)
+				checked = string(clientRaw)
+				assert.Contains(t, body, `data-global-init="initPlanningProject"`,
+					"the page mounts the bundled feature that is the API's actual client")
+			}
+			assert.Contains(t, checked, page.fetch, "the page reads its rows over the API")
+			assert.Contains(t, checked, "suggested_action", "the page surfaces the API's suggested next action")
 
 			published := map[string]bool{}
 			for _, op := range allOperations() {
@@ -168,7 +188,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				// may name the documented path verbatim, as board.tmpl does, or interpolate the
 				// repository into it, as matrix.tmpl does; either one names the operation.
 				interpolated := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
-				assert.True(t, strings.Contains(body, endpoint) || strings.Contains(body, interpolated),
+				assert.True(t, strings.Contains(checked, endpoint) || strings.Contains(checked, interpolated),
 					"the page fetches %s", endpoint)
 			}
 		})
@@ -180,16 +200,18 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 // routers/web/planning's carry PlanningPagesEnabled, so switching one area off never
 // touches the other's pages.
 var gateFor = map[string]func(*context.Context){
-	"/deployments/environments":                hub_web.DeploymentsPagesEnabled,
-	"/deployments/environments/{name}":         hub_web.DeploymentsPagesEnabled,
-	"/deployments/environments/{id}/edit":      hub_web.DeploymentsPagesEnabled,
-	"/deployments":                             hub_web.DeploymentsPagesEnabled,
-	"/deployments/insights":                    hub_web.DeploymentsPagesEnabled,
-	"/deployments/new":                         hub_web.DeploymentsPagesEnabled,
-	"/deployments/reviews":                     hub_web.DeploymentsPagesEnabled,
-	"/deployments/environments/{name}/reviews": hub_web.DeploymentsPagesEnabled,
-	"/planning/board":                          hub_web.PlanningPagesEnabled,
-	"/planning/roadmap":                        hub_web.PlanningPagesEnabled,
+	"/deployments/environments":                      hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{name}":               hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{id}/edit":            hub_web.DeploymentsPagesEnabled,
+	"/deployments":                                   hub_web.DeploymentsPagesEnabled,
+	"/deployments/insights":                          hub_web.DeploymentsPagesEnabled,
+	"/deployments/new":                               hub_web.DeploymentsPagesEnabled,
+	"/deployments/reviews":                           hub_web.DeploymentsPagesEnabled,
+	"/deployments/environments/{name}/reviews":       hub_web.DeploymentsPagesEnabled,
+	"/planning/board":                                hub_web.PlanningPagesEnabled,
+	"/planning/roadmap":                              hub_web.PlanningPagesEnabled,
+	"/planning/projects":                             hub_web.PlanningPagesEnabled,
+	"/planning/projects/{owner}/{repo}/{project_id}": hub_web.PlanningPagesEnabled,
 }
 
 // redirectPatterns is every pattern registerRedirects mounts. Each is a plain 303 to its
@@ -215,6 +237,7 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 		"/deployments/environments/{id}/edit", "/deployments",
 		"/deployments/insights", "/deployments/new",
 		"/deployments/reviews", "/deployments/environments/{name}/reviews",
+		"/planning/projects", "/planning/projects/{owner}/{repo}/{project_id}",
 		"/planning/board", "/planning/roadmap",
 	}, pagePatterns)
 	assert.Equal(t, redirectPatterns, r.patterns[len(r.patterns)-len(redirectPatterns):],

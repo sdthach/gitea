@@ -39,6 +39,7 @@ var spokes = map[string]spoke{
 	"templates/projects/view.tmpl":     {2, "one swimlane block delegating to a hub template, plus the blank line separating it"},
 	"routers/web/repo/projects.go":     {2, "the swimlane feature flag in the project page's data, one assignment plus its import"},
 	"models/unit/unit.go":              {1, "at most one unit enum entry"},
+	"web_src/js/index.ts":              {1, "one import of the fork's bundled planning and deployments features"},
 	// The other spokes are tail calls, which are one statement and so one line. This one is
 	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
 	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if

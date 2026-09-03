@@ -8,10 +8,13 @@
 package hub
 
 import (
+	"errors"
 	"net/http"
 
 	auth_model "gitea.dev/models/auth"
+	hub_model "gitea.dev/models/hub"
 	"gitea.dev/modules/log"
+	"gitea.dev/modules/util"
 	"gitea.dev/services/context"
 	hub_service "gitea.dev/services/hub"
 )
@@ -31,6 +34,11 @@ func DeploymentsPagesEnabled(ctx *context.Context) {
 	}
 }
 
+// hubPageTokenSessionKey is where SetPageToken caches the raw token value in the session, so
+// a page minted once per sign-in is reused on every render rather than piling up a fresh
+// token per request.
+const hubPageTokenSessionKey = "hub_page_token"
+
 // SetPageToken mints a short-lived API token so a page's JS can call the fork's API without
 // the user pasting a token manually. Reads already use the browser session; this covers
 // writes only. The token is scoped to repository and issue writes.
@@ -38,14 +46,25 @@ func SetPageToken(ctx *context.Context) {
 	if ctx.Doer == nil {
 		return
 	}
+	if raw, ok := ctx.Session.Get(hubPageTokenSessionKey).(string); ok && raw != "" {
+		if existing, err := auth_model.GetAccessTokenBySHA(ctx, raw); err == nil && existing.UID == ctx.Doer.ID {
+			ctx.Data["PageToken"] = raw
+			return
+		} else if err != nil && !errors.Is(err, util.ErrNotExist) {
+			log.Error("hub: look up page token for %s: %v", ctx.Doer.Name, err)
+		}
+	}
 	t := &auth_model.AccessToken{
 		UID:   ctx.Doer.ID,
-		Name:  "_hub_page",
+		Name:  hub_model.PageTokenName,
 		Scope: auth_model.AccessTokenScopeWriteRepository + "," + auth_model.AccessTokenScopeWriteIssue,
 	}
 	if err := auth_model.NewAccessToken(ctx, t); err != nil {
 		log.Error("hub: mint page token for %s: %v", ctx.Doer.Name, err)
 		return
+	}
+	if err := ctx.Session.Set(hubPageTokenSessionKey, t.Token); err != nil {
+		log.Error("hub: cache page token for %s: %v", ctx.Doer.Name, err)
 	}
 	ctx.Data["PageToken"] = t.Token
 }

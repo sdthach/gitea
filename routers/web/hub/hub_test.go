@@ -11,6 +11,12 @@ import (
 	"testing"
 	"text/template"
 
+	auth_model "gitea.dev/models/auth"
+	hub_model "gitea.dev/models/hub"
+	"gitea.dev/models/unittest"
+	"gitea.dev/modules/session"
+	"gitea.dev/services/contexttest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,4 +144,23 @@ func TestEnvironmentPageEscapesItsData(t *testing.T) {
 	assert.Contains(t, body, `const base = "/api/deployments/v1";`)
 	assert.NotContains(t, body, `const wanted = "prod";alert(1);//";`, "an environment name must not be able to close the string literal")
 	assert.Contains(t, body, "alert", "the value is still rendered, just escaped")
+}
+
+// TestSetPageTokenIgnoresATokenMintedForAnotherUser: a token cached in the session must be
+// verified against the signed-in doer before it is reused. Without that check, one user's
+// cached session value (however it got there) would hand back another user's write token.
+func TestSetPageTokenIgnoresATokenMintedForAnotherUser(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	mockOpt := contexttest.MockContextOption{SessionStore: session.NewMockMemStore("dummy-sid")}
+	ctx, _ := contexttest.MockContext(t, "/planning/projects", mockOpt)
+	contexttest.LoadUser(t, ctx, 2)
+
+	other := &auth_model.AccessToken{UID: 4, Name: hub_model.PageTokenName}
+	require.NoError(t, auth_model.NewAccessToken(ctx, other))
+	require.NoError(t, ctx.Session.Set(hubPageTokenSessionKey, other.Token))
+
+	SetPageToken(ctx)
+
+	assert.NotEqual(t, other.Token, ctx.Data["PageToken"])
+	unittest.AssertCount(t, &auth_model.AccessToken{UID: 2, Name: hub_model.PageTokenName}, 1)
 }
