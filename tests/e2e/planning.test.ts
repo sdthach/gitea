@@ -298,6 +298,7 @@ test('planning roadmap keys a rollup bracket by kind, and its chevron collapses 
   await apiSetIssueParent(page.request, owner, repoName, childNumber, parentNumber);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&group_by=parent&scale=day&at=2030-03-10`);
+  await expect(page.getByText('Loading…')).toBeHidden();
 
   const bracket = page.locator('.planning-bracket');
   await expect(bracket).toBeVisible();
@@ -329,6 +330,7 @@ test('planning roadmap drags a bar by two days', async ({page}) => {
   const before = await apiRoadmapBar(page.request, repoID, issueID);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   const outerBar = page.locator('.planning-roadmap-bar').filter({hasText: 'drag me'});
   const bar = page.locator('.planning-roadmap-bar-body').filter({hasText: 'drag me'});
   await expect(bar).toBeVisible();
@@ -370,6 +372,7 @@ test('planning roadmap cancels a drag with Escape, writing nothing', async ({pag
   const before = await apiRoadmapBar(page.request, repoID, issueID);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   const outerBar = page.locator('.planning-roadmap-bar').filter({hasText: 'escape me'});
   const bar = page.locator('.planning-roadmap-bar-body').filter({hasText: 'escape me'});
   await expect(bar).toBeVisible();
@@ -413,11 +416,13 @@ test('planning board drags a card between columns', async ({page}) => {
   await apiMoveCardToColumn(page.request, cardTwoID, repo, projectID, columnOne);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=board`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   await expect(page.getByText('Todo')).toBeVisible();
   await expect(page.getByText('Doing')).toBeVisible();
 
   const sourceCard = page.locator('.board-card').filter({hasText: 'card one'});
   const targetCell = page.locator(`[data-column-id="${columnTwo}"]`);
+  await expect(page.locator('[data-column-id]:not([data-sortable="ready"])')).toHaveCount(0);
   const from = (await sourceCard.boundingBox())!;
   const to = (await targetCell.boundingBox())!;
   const startX = from.x + from.width / 2;
@@ -459,6 +464,7 @@ test('planning board drags an unassigned card into an assignee swimlane within o
   const before = await apiBoardColumnOrder(page.request, repoID, projectID, 'assignee', columnOne);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=board&group_by=assignee`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   await expect(page.getByText('unassigned card')).toBeVisible();
   await expect(page.getByText('assigned card', {exact: true})).toBeVisible();
 
@@ -466,6 +472,7 @@ test('planning board drags an unassigned card into an assignee swimlane within o
   // Both swimlanes carry the same column, stacked one above the other, so the drop target is
   // the same column at a different row rather than a different column.
   const targetCell = page.locator(`[data-column-id="${columnOne}"][data-group-key="${owner}"]`);
+  await expect(page.locator('[data-column-id]:not([data-sortable="ready"])')).toHaveCount(0);
   const from = (await sourceCard.boundingBox())!;
   const to = (await targetCell.boundingBox())!;
   const startX = from.x + from.width / 2;
@@ -537,6 +544,7 @@ test('planning roadmap draws and removes a dependency arrow', async ({page}) => 
   await apiAddDependency(page.request, owner, repoName, blockedID, blockerID);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   const arrow = page.locator(`path[data-arrow="${blockerID}>${blockedID}"]`);
   await expect(arrow).toBeVisible();
   // The path is a thin SVG stroke: dispatching straight to the element exercises the click
@@ -565,6 +573,7 @@ test('planning time view adds and removes an entry', async ({page}) => {
   const today = new Date().toISOString().slice(0, 10);
 
   await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=time`);
+  await expect(page.getByText('Loading…')).toBeHidden();
   const cell = page.locator(`[data-time-cell="${userID}:${today}"]`);
   await cell.click();
   await page.locator('form select').selectOption({label: `log time on me #${issueNumber}`});

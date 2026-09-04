@@ -182,6 +182,7 @@ async function initSortables() {
     if (sortables.has(key)) continue;
     const sortable = await createSortable(el, {group: 'planning-board', delay: 300, delayOnTouchOnly: true, draggable: '.board-card', onEnd: handleDrop});
     sortables.set(key, sortable);
+    el.dataset.sortable = 'ready'; // tests wait for this before pressing on a card
   }
 }
 

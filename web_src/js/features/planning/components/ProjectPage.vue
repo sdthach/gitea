@@ -81,7 +81,7 @@ onUnmounted(() => store.stopAutoRefresh());
         <p v-if="errorBanner.suggestedAction"><strong>Suggested action:</strong> {{ errorBanner.suggestedAction }}</p>
       </div>
 
-      <p v-if="store.state.loadingBoard || store.state.loadingRoadmap" class="tw-text-text-light">Loading…</p>
+      <p class="tw-text-text-light" :class="{'tw-invisible': !store.state.loadingBoard && !store.state.loadingRoadmap}">Loading…</p>
 
       <div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
         <FilterBar v-model="urlState.q"/>
