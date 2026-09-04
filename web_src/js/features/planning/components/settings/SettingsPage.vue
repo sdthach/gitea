@@ -17,7 +17,7 @@ const scope = computed<PlanningScope>(() => (props.config.repoId ? {repoId: prop
 // canWrite reads false with no token even when the doer otherwise could: a token the page
 // failed to mint carries no write scope, so every editor is disabled rather than failing.
 const canWrite = computed(() => props.config.canWrite && !!props.config.token);
-const title = computed(() => props.config.repoFullName || props.config.ownerName);
+const title = computed(() => props.config.repoFullName || (props.config.orgId ? props.config.ownerName : 'Instance'));
 const projectsHref = computed(() => `${window.config.appSubUrl}/planning/projects`);
 
 const error = ref<{message: string; suggestedAction: string} | null>(null);

@@ -40,3 +40,36 @@ func TestPlanningSettingsRepoPage(t *testing.T) {
 	req = NewRequest(t, "GET", "/planning/settings/user2/repo2")
 	reader.MakeRequest(t, req, http.StatusNotFound)
 }
+
+// TestPlanningSettingsOwnerPage covers the owner-scoped settings page: an organization owner
+// gets canWrite true and the organization's own title, a member who is not an owner gets
+// canWrite false, and a plain user's own page is the instance scope — writable only by a site
+// administrator, titled accordingly rather than after the user who happens to be looking at it.
+func TestPlanningSettingsOwnerPage(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user2 owns org3 in the fixtures (team_user.yml team_id 1, the Owners team).
+	owner := loginUser(t, "user2")
+	req := NewRequest(t, "GET", "/planning/settings/org3")
+	resp := owner.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), `"canWrite":true`)
+
+	// user4 belongs to org3 (team_user.yml team_id 2, write) but does not own it.
+	member := loginUser(t, "user4")
+	req = NewRequest(t, "GET", "/planning/settings/org3")
+	resp = member.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), `"canWrite":false`)
+
+	// user2 is not an organization: /planning/settings/user2 edits the instance scope, so only
+	// a site administrator may write there, and the page is titled for that scope, not for user2.
+	admin := loginUser(t, "user1")
+	req = NewRequest(t, "GET", "/planning/settings/user2")
+	resp = admin.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), `"canWrite":true`)
+	assert.Contains(t, resp.Body.String(), `"orgId":0`)
+	assert.Contains(t, resp.Body.String(), "<title>Instance planning settings")
+
+	req = NewRequest(t, "GET", "/planning/settings/user2")
+	resp = owner.MakeRequest(t, req, http.StatusOK)
+	assert.Contains(t, resp.Body.String(), `"canWrite":false`)
+}

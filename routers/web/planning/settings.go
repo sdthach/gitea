@@ -57,6 +57,7 @@ func Settings(ctx *context.Context) {
 
 	var orgID int64
 	canWrite := ctx.Doer != nil && ctx.Doer.IsAdmin
+	title := "Instance planning settings"
 	if owner.IsOrganization() {
 		org := org_model.OrgFromUser(owner)
 		orgID = org.ID
@@ -66,9 +67,10 @@ func Settings(ctx *context.Context) {
 			return
 		}
 		canWrite = owned
+		title = owner.Name + " planning settings"
 	}
 
-	ctx.Data["Title"] = "Planning settings"
+	ctx.Data["Title"] = title
 	ctx.Data["PageIsPlanning"] = true
 	ctx.PageData["planningSettings"] = settingsPageData(ctx, 0, orgID, owner.Name, "", canWrite)
 	ctx.HTML(http.StatusOK, tplSettings)

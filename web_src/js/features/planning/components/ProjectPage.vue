@@ -31,7 +31,9 @@ const errorBanner = computed(() => store.state.writeError ?? store.state.boardEr
 // first use.
 const canWrite = computed(() => props.config.canWrite && !!props.config.token);
 const canEditIssues = computed(() => props.config.canEditIssues && !!props.config.token);
-const settingsHref = computed(() => `${window.config.appSubUrl}/planning/settings/${props.config.repoFullName}`);
+const ownerName = computed(() => props.config.repoFullName.split('/')[0]);
+const repoSettingsHref = computed(() => `${window.config.appSubUrl}/planning/settings/${props.config.repoFullName}`);
+const ownerSettingsHref = computed(() => `${window.config.appSubUrl}/planning/settings/${ownerName.value}`);
 
 function applySavedQuery(query: string) {
   Object.assign(urlState, parseUrlState(`?${query}`));
@@ -65,7 +67,8 @@ onUnmounted(() => store.stopAutoRefresh());
               @click="urlState.view = tab"
             >{{ tab }}</a>
           </div>
-          <a :href="settingsHref">Settings</a>
+          <a :href="repoSettingsHref">Repository settings</a>
+          <a :href="ownerSettingsHref">{{ ownerName }} settings</a>
         </div>
       </div>
 
