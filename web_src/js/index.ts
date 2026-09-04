@@ -1,6 +1,7 @@
 import '../fomantic/build/fomantic.js';
 import '../css/index.css';
 import './features/planning/index.ts'; // hub fork spoke
+import './features/deployments/index.ts'; // hub fork spoke
 
 import {initDashboardRepoList} from './features/dashboard.ts';
 import {initGlobalCopyToClipboardListener} from './modules/clipboard.ts';

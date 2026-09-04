@@ -15,6 +15,7 @@ import (
 	deployments_model "gitea.dev/models/deployments"
 	"gitea.dev/modules/timeutil"
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
+	deployments_service "gitea.dev/services/deployments"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -325,10 +326,14 @@ func TestDeploymentsInsightsPageIsAClientOfItsAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/deployments/insights")
 	body := session.MakeRequest(t, req, http.StatusOK).Body.String()
 
-	for _, path := range []string{"/insights", "/insights/trends", "/insights/repos", "/runs"} {
-		assert.Contains(t, body, path, "the page reads %s over the documented API", path)
-	}
-	assert.Contains(t, body, `const base = "`+deploymentsv1.BasePath+`"`,
+	// The page itself carries no script: it mounts the bundled client and hands it the
+	// namespace's own base and the server's own default window through window.config.pageData.
+	// web_src/js/features/deployments/api.ts and InsightsPage.vue are what name /insights,
+	// /insights/trends, /insights/repos and /runs, proven in routers/web/hubroutes.
+	assert.Contains(t, body, `"deploymentsInsights":{"apiBase":"`+deploymentsv1.BasePath+`"`,
 		"the handler hands the page the namespace's own base, so the page reaches the documented API and nothing else")
-	assert.Contains(t, body, "suggested_action", "the page surfaces the API's suggested next action")
+	assert.Contains(t, body, fmt.Sprintf(`"defaultWindowDays":%d`, deployments_service.DefaultWindowDays),
+		"the page opens on the server's own default window")
+	assert.Contains(t, body, `data-global-init="initDeploymentsInsights"`,
+		"the page mounts the bundled client that is the API's actual client")
 }

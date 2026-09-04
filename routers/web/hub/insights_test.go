@@ -4,103 +4,66 @@
 package hub
 
 import (
-	htmltemplate "html/template"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
-	deployments_service "gitea.dev/services/deployments"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// renderInsights executes the insights page through html/template, the renderer Gitea uses, so
-// what the assertions below read is the page a browser would receive rather than its source.
-func renderInsights(t *testing.T, data map[string]any) string {
+// readInsightsPage reads the bundled Vue component that replaced insights.tmpl's inline
+// script: the template now carries no logic of its own, only the mount point, so the
+// behavior this file used to prove by executing the template is proven by reading its client
+// instead. Vue's own text interpolation escapes every value it renders, which is why no
+// escaping test is repeated here.
+func readInsightsPage(t *testing.T) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "insights.tmpl"))
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "web_src", "js", "features", "deployments", "InsightsPage.vue"))
 	require.NoError(t, err)
-
-	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap(templateStubs()))
-	_, err = tmpl.New("base/head").Parse("<html><body>")
-	require.NoError(t, err)
-	_, err = tmpl.New("base/footer").Parse("</body></html>")
-	require.NoError(t, err)
-	_, err = tmpl.New("insights").Parse(string(raw))
-	require.NoError(t, err)
-
-	var out strings.Builder
-	require.NoError(t, tmpl.ExecuteTemplate(&out, "insights", data))
-	return out.String()
+	return string(raw)
 }
 
-// TestDeploymentsInsightsPageEscapesItsData proves the values the handler interpolates arrive
-// as quoted JavaScript strings rather than as raw source. Parsing alone would not catch this:
-// contextual escaping happens at execution.
-func TestDeploymentsInsightsPageEscapesItsData(t *testing.T) {
-	body := renderInsights(t, map[string]any{
-		"Title":             "Insights",
-		"APIBase":           deploymentsv1.BasePath,
-		"AppSubURL":         `";alert(1);//`,
-		"DefaultWindowDays": deployments_service.DefaultWindowDays,
-	})
-
-	assert.Contains(t, body, `const base = "`+deploymentsv1.BasePath+`";`)
-	assert.NotContains(t, body, `const subURL = "";alert(1);//";`,
-		"a sub-URL must not be able to close the string literal")
-	assert.Contains(t, body, "alert", "the value is still rendered, just escaped")
+// TestDeploymentsInsightsPageCarriesNoInlineScript: the handler serves the shell alone, and
+// the figures are drawn by the bundled client mounted on it.
+func TestDeploymentsInsightsPageCarriesNoInlineScript(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "insights.tmpl"))
+	require.NoError(t, err)
+	body := string(raw)
+	assert.NotContains(t, body, "<script")
+	assert.Contains(t, body, `data-global-init="initDeploymentsInsights"`)
 }
 
 // TestDeploymentsInsightsPageOffersTheServersOwnDefaultWindow keeps the page's default in step
 // with the server's: a page that opened on a different window than the API defaults to would
 // show the previous-window comparison against the wrong baseline.
 func TestDeploymentsInsightsPageOffersTheServersOwnDefaultWindow(t *testing.T) {
-	body := renderInsights(t, map[string]any{
-		"Title":             "Insights",
-		"APIBase":           deploymentsv1.BasePath,
-		"AppSubURL":         "",
-		"DefaultWindowDays": deployments_service.DefaultWindowDays,
-	})
-	assert.Contains(t, body, `<option value="7" selected>`,
-		"the selected window is the server's own DefaultWindowDays")
+	body := readInsightsPage(t)
+	assert.Contains(t, body, "ref(String(props.config.defaultWindowDays))",
+		"the selected window starts at the server's own DefaultWindowDays")
 }
 
-// TestDeploymentsInsightsPageOpensNoSecondTransport asserts it as the repository permits. The
-// page re-reads its documented endpoints on an interval; it opens no WebSocket and no
-// EventSource of its own.
+// TestDeploymentsInsightsPageOpensNoSecondTransport: the page re-reads its documented
+// endpoints on an interval; it opens no WebSocket and no EventSource of its own.
 func TestDeploymentsInsightsPageOpensNoSecondTransport(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "insights.tmpl"))
-	require.NoError(t, err)
-	body := string(raw)
-
+	body := readInsightsPage(t)
 	assert.NotContains(t, body, "new WebSocket", "the page must open no transport of its own")
 	assert.NotContains(t, body, "EventSource", "Gitea's SSE endpoint was replaced upstream; nothing here revives one")
-	assert.Contains(t, body, "setInterval(load,", "the page refreshes itself over the same documented endpoints")
+	assert.Contains(t, body, "setInterval(load, refreshMillis)", "the page refreshes itself over the same documented endpoints")
 }
 
 // TestDeploymentsInsightsPageLinksOutToGitea: every per-run and per-repository detail opens
 // Gitea's own page rather than a reimplementation.
 func TestDeploymentsInsightsPageLinksOutToGitea(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "insights.tmpl"))
-	require.NoError(t, err)
-	body := string(raw)
-
+	body := readInsightsPage(t)
 	assert.Contains(t, body, "run.run_url", "a run row opens the run in Gitea")
-	assert.Contains(t, body, "${subURL}/${r.repo_full_name}/actions", "a repository row opens its runs in Gitea")
+	assert.Contains(t, body, "${config.appSubUrl}/${repo.repo_full_name}/actions", "a repository row opens its runs in Gitea")
 }
 
 // TestDeploymentsInsightsPageShowsTheComparisonWindow: the previous window of equal length
 // renders beside each tile.
 func TestDeploymentsInsightsPageShowsTheComparisonWindow(t *testing.T) {
-	body := renderInsights(t, map[string]any{
-		"Title":             "Insights",
-		"APIBase":           deploymentsv1.BasePath,
-		"AppSubURL":         "",
-		"DefaultWindowDays": deployments_service.DefaultWindowDays,
-	})
+	body := readInsightsPage(t)
 	assert.Contains(t, body, "Previous window", "each tile carries its comparison column")
-	assert.Contains(t, body, "overview.previous", "the comparison is the API's own previous-window summary")
+	assert.Contains(t, body, "insights.previous", "the comparison is the API's own previous-window summary")
 }

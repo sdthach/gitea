@@ -22,25 +22,29 @@ var deploymentsPages = []forkPage{
 		dir:       "deployments",
 		template:  "matrix.tmpl",
 		endpoints: []string{"/deployments/matrix", "/deployments", "/repos/{owner}/{repo}/releases"},
-		fetch:     "/deployments/matrix?",
+		fetch:     "/deployments/matrix",
+		client:    "web_src/js/features/deployments/api.ts",
 	},
 	{
 		dir:       "deployments",
 		template:  "insights.tmpl",
 		endpoints: []string{"/insights", "/insights/trends", "/insights/repos", "/runs"},
-		fetch:     "/insights?",
+		fetch:     "/insights",
+		client:    "web_src/js/features/deployments/api.ts",
 	},
 	{
 		dir:       "deployments",
 		template:  "new.tmpl",
 		endpoints: []string{"/deployments"},
 		fetch:     "/deployments",
+		client:    "web_src/js/features/deployments/api.ts",
 	},
 	{
 		dir:       "deployments",
 		template:  "reviews.tmpl",
 		endpoints: []string{"/reviews"},
-		fetch:     "/reviews?",
+		fetch:     "/reviews",
+		client:    "web_src/js/features/deployments/api.ts",
 	},
 }
 

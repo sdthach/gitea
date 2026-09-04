@@ -379,7 +379,11 @@ func TestDeploymentsNewPageIsAClientOfTheAPI(t *testing.T) {
 		NewRequest(t, "GET", "/deployments/new?repo=user2%2Frepo1&environment=prod&release_tag=v1.1"),
 		http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deploymentsv1.BasePath+"/deployments",
+	// The page carries no script of its own: it mounts the bundled client and hands it the
+	// namespace's own base through window.config.pageData. api.ts and NewPage.vue are what
+	// name POST /deployments and its confirm field, proven in routers/web/hubroutes.
+	assert.Contains(t, body, `"deploymentsNew":{"apiBase":"`+deploymentsv1.BasePath+`"`,
 		"the page names the endpoint it is a client of")
-	assert.Contains(t, body, "confirm")
+	assert.Contains(t, body, `data-global-init="initDeploymentsNew"`,
+		"the page mounts the bundled client that is the API's actual client")
 }

@@ -386,12 +386,13 @@ func TestDeploymentsReviewsPageIsAClientOfTheAPI(t *testing.T) {
 	req = NewRequest(t, "GET", "/deployments/reviews")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deploymentsv1.BasePath+"/reviews",
+	// The page carries no script of its own: it mounts the bundled client and hands it the
+	// namespace's own base through window.config.pageData. api.ts and ReviewsPage.vue are what
+	// name /reviews, suggested_action and can_approve, proven in routers/web/hubroutes.
+	assert.Contains(t, body, `"deploymentsReviews":{"apiBase":"`+deploymentsv1.BasePath+`"`,
 		"the page fetches its rows from the documented endpoint")
-	assert.Contains(t, body, "suggested_action",
-		"the page surfaces the API's suggested next action")
-	assert.Contains(t, body, "can_approve",
-		"a user without review rights is offered no action")
+	assert.Contains(t, body, `data-global-init="initDeploymentsReviews"`,
+		"the page mounts the bundled client that is the API's actual client")
 
 	req = NewRequest(t, "GET", "/deployments/environments/prod/reviews")
 	resp = session.MakeRequest(t, req, http.StatusOK)

@@ -1,0 +1,10 @@
+#deployments-matrix,
+#deployments-new,
+#deployments-reviews,
+#deployments-insights {
+  min-height: 20rem;
+}
+
+.deployments-waiting-note {
+  color: var(--color-text-light-2);
+}

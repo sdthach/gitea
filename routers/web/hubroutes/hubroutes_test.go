@@ -134,7 +134,7 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				clientRaw, err := os.ReadFile(filepath.Join(repoRoot(t), page.client))
 				require.NoError(t, err)
 				checked = string(clientRaw)
-				assert.Contains(t, body, `data-global-init="initPlanningProject"`,
+				assert.Regexp(t, `data-global-init="init[A-Za-z]+"`, body,
 					"the page mounts the bundled feature that is the API's actual client")
 			}
 			assert.Contains(t, checked, page.fetch, "the page reads its rows over the API")

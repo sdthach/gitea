@@ -5,6 +5,7 @@ package integration
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"gitea.dev/modules/setting"
@@ -35,15 +36,19 @@ func TestPlanningReleasePageBadgesTheEnvironmentsHoldingARelease(t *testing.T) {
 	req := NewRequest(t, "GET", "/user2/repo1/releases")
 	body := session.MakeRequest(t, req, http.StatusOK).Body.String()
 
-	assert.Contains(t, body, "data-deployments-release-environments",
-		"the release page carries the fork's one delegation")
+	// The fragment carries no script of its own: it mounts the fork's bundled client, once,
+	// which is what draws a badge onto each release entry the matrix says is live somewhere.
+	assert.Contains(t, body, `data-global-init="initDeploymentsReleaseBadges"`,
+		"the release page mounts the fork's one delegation")
+	assert.Equal(t, 1, strings.Count(body, `data-global-init="initDeploymentsReleaseBadges"`),
+		"the fragment mounts once per page, not once per release entry")
 	assert.Contains(t, body, `data-repo-id="1"`, "which names the repository the matrix is asked about")
-	assert.Contains(t, body, "/api/deployments/v1", "and reads the matrix over the documented endpoint")
+	assert.Contains(t, body, `data-api-base="/api/deployments/v1"`, "and reads the matrix over the documented endpoint")
 
 	// Signed out, the page is Gitea's alone: the matrix is not readable, so nothing is offered.
 	req = NewRequest(t, "GET", "/user2/repo1/releases")
 	anonymous := MakeRequest(t, req, http.StatusOK).Body.String()
-	assert.NotContains(t, anonymous, "data-deployments-release-environments")
+	assert.NotContains(t, anonymous, `data-global-init="initDeploymentsReleaseBadges"`)
 }
 
 // TestPlanningSwimlanesAreGatedOnTheFlag: the project page is Gitea's, so

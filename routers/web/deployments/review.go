@@ -22,9 +22,13 @@ func Reviews(ctx *context.Context) {
 	environment := ctx.PathParam("name")
 	ctx.Data["Title"] = "Pending reviews"
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["EnvironmentName"] = environment
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
+	token, _ := ctx.Data["PageToken"].(string)
+	ctx.PageData["deploymentsReviews"] = map[string]any{
+		"apiBase":         setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl":       setting.AppSubURL,
+		"token":           token,
+		"environmentName": environment,
+	}
 	ctx.HTML(http.StatusOK, tplReviews)
 }

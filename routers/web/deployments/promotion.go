@@ -21,8 +21,12 @@ const tplNew templates.TplName = "deployments/new"
 func New(ctx *context.Context) {
 	ctx.Data["Title"] = "New deployment"
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
+	token, _ := ctx.Data["PageToken"].(string)
+	ctx.PageData["deploymentsNew"] = map[string]any{
+		"apiBase":   setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl": setting.AppSubURL,
+		"token":     token,
+	}
 	ctx.HTML(http.StatusOK, tplNew)
 }

@@ -24,8 +24,10 @@ const tplInsights templates.TplName = "deployments/insights"
 func Insights(ctx *context.Context) {
 	ctx.Data["Title"] = "Insights"
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
-	ctx.Data["DefaultWindowDays"] = deployments_service.DefaultWindowDays
+	ctx.PageData["deploymentsInsights"] = map[string]any{
+		"apiBase":           setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl":         setting.AppSubURL,
+		"defaultWindowDays": deployments_service.DefaultWindowDays,
+	}
 	ctx.HTML(http.StatusOK, tplInsights)
 }

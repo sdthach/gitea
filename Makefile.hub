@@ -29,7 +29,7 @@ hub-test: ## run the hub fork's Go unit tests
 
 .PHONY: hub-lint-css
 hub-lint-css: node_modules ## lint the hub fork's own CSS and Vue files
-	pnpm exec stylelint --color --max-warnings=0 'web_src/js/features/planning/**/*.{css,vue}'
+	pnpm exec stylelint --color --max-warnings=0 'web_src/js/features/{planning,deployments}/**/*.{css,vue}'
 
 .PHONY: hub-check
 hub-check: hub-test hub-generate-check hub-parity hub-spoke-check hub-lint-css ## every hub gate

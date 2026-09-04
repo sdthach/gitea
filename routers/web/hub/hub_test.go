@@ -96,7 +96,10 @@ func TestEveryInlineScriptCarriesTheCspNonce(t *testing.T) {
 			}
 		}
 	}
-	assert.Greater(t, scripts, 5, "the scan must actually have found the fork's scripts")
+	// Both areas are mid-migration to bundled Vue islands, so the count only ever falls as a
+	// page's inline script is ported; the floor here just proves the scan itself is not
+	// silently finding zero files.
+	assert.Greater(t, scripts, 0, "the scan must actually have found the fork's scripts")
 }
 
 // TestNavbarSpokeDelegatesToAHubTemplate: the single upstream template edit is one

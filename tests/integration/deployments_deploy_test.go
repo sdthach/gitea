@@ -414,6 +414,12 @@ func TestDeploymentsMatrixPageIsAClientOfTheAPI(t *testing.T) {
 	session := loginUser(t, "user2")
 	req = NewRequest(t, "GET", "/deployments")
 	resp := session.MakeRequest(t, req, http.StatusOK)
-	assert.Contains(t, resp.Body.String(), deploymentsv1.BasePath+"/deployments/matrix",
+	body := resp.Body.String()
+	// The page carries no script of its own: it mounts the bundled client and hands it the
+	// namespace's own base through window.config.pageData. api.ts is what names
+	// /deployments/matrix, proven in routers/web/hubroutes.
+	assert.Contains(t, body, `"deploymentsMatrix":{"apiBase":"`+deploymentsv1.BasePath+`"`,
 		"the page fetches its rows from the documented endpoint")
+	assert.Contains(t, body, `data-global-init="initDeploymentsMatrix"`,
+		"the page mounts the bundled client that is the API's actual client")
 }

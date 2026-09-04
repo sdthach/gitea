@@ -53,8 +53,12 @@ func EnvironmentEdit(ctx *context.Context) {
 func Matrix(ctx *context.Context) {
 	ctx.Data["Title"] = "Deployments"
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
+	token, _ := ctx.Data["PageToken"].(string)
+	ctx.PageData["deploymentsMatrix"] = map[string]any{
+		"apiBase":   setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl": setting.AppSubURL,
+		"token":     token,
+	}
 	ctx.HTML(http.StatusOK, tplMatrix)
 }
