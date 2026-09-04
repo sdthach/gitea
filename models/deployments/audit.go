@@ -30,14 +30,26 @@ const (
 	// why. It is appended only after the deploy it authorized was dispatched, so the
 	// row carries the run that is its evidence.
 	AuditOverridden = "overridden"
+	// AuditChecksPending records that a promotion's pre-deployment checks held it: the
+	// deployment row it names is in the waiting state, not dispatched.
+	AuditChecksPending = "checks_pending"
+	// AuditChecksPassed records that a waiting deployment's checks all passed on
+	// re-evaluation and it was dispatched.
+	AuditChecksPassed = "checks_passed"
+	// AuditChecksFailed records that a waiting deployment's checks turned up a failure on
+	// re-evaluation; the deployment moves to the failed state and dispatches nothing.
+	AuditChecksFailed = "checks_failed"
+	// AuditAutoPromoted records that an environment's auto_promote column, not a person,
+	// created this deployment because every environment it depends on held the release live.
+	AuditAutoPromoted = "auto_promoted"
 )
 
 // AuditEvents is the complete event set, in the order the constants above declare it, with
-// override appended rather than inserted so an existing row's meaning never moves.
+// each addition appended rather than inserted so an existing row's meaning never moves.
 var AuditEvents = []string{
 	AuditRequested, AuditStarted, AuditSucceeded,
 	AuditFailed, AuditCancelled, AuditApproved, AuditRejected,
-	AuditOverridden,
+	AuditOverridden, AuditChecksPending, AuditChecksPassed, AuditChecksFailed, AuditAutoPromoted,
 }
 
 // The source set, declared once.

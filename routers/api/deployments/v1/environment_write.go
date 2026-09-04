@@ -32,6 +32,18 @@ type environmentBody struct {
 	RestrictReviewers      bool     `json:"restrict_reviewers"`
 	ReviewerUserIDs        []int64  `json:"reviewer_user_ids"`
 	ReviewerTeamIDs        []int64  `json:"reviewer_team_ids"`
+
+	AutoPromote            bool     `json:"auto_promote"`
+	WaitMinutes            int      `json:"wait_minutes"`
+	RequiredStatusContexts []string `json:"required_status_contexts"`
+	ExclusiveLock          bool     `json:"exclusive_lock"`
+	// DeployWindow is flattened into four scalar members rather than one nested object: the
+	// generated CLI marshals a body member by its own declared scalar type, with no object
+	// kind, so the window would otherwise have no flag to send it with.
+	DeployWindowDaysMask   int    `json:"deploy_window_days_mask"`
+	DeployWindowFromMinute int    `json:"deploy_window_from_minute"`
+	DeployWindowToMinute   int    `json:"deploy_window_to_minute"`
+	DeployWindowTimezone   string `json:"deploy_window_timezone"`
 }
 
 var environmentBodyParams = []hubapi.Param{
@@ -47,6 +59,14 @@ var environmentBodyParams = []hubapi.Param{
 	{Name: "restrict_reviewers", In: "body", Type: "boolean", Description: "Enable bypass allowlist."},
 	{Name: "reviewer_user_ids", In: "body", Type: "array", Description: "User IDs allowed to bypass."},
 	{Name: "reviewer_team_ids", In: "body", Type: "array", Description: "Team IDs allowed to bypass."},
+	{Name: "auto_promote", In: "body", Type: "boolean", Description: "Deploy the same release here automatically once every environment in depends_on holds it live."},
+	{Name: "wait_minutes", In: "body", Type: "integer", Description: "Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week)."},
+	{Name: "required_status_contexts", In: "body", Type: "array", Description: "Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries."},
+	{Name: "exclusive_lock", In: "body", Type: "boolean", Description: "Refuse a deploy while another is already waiting or running on this environment."},
+	{Name: "deploy_window_days_mask", In: "body", Type: "integer", Description: "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open."},
+	{Name: "deploy_window_from_minute", In: "body", Type: "integer", Description: "Window open time, minutes since local midnight in deploy_window_timezone."},
+	{Name: "deploy_window_to_minute", In: "body", Type: "integer", Description: "Window close time, minutes since local midnight in deploy_window_timezone."},
+	{Name: "deploy_window_timezone", In: "body", Type: "string", Description: "IANA timezone the window is evaluated in, for example \"America/New_York\"."},
 }
 
 var environmentIDParam = []hubapi.Param{
@@ -229,7 +249,7 @@ func DeleteEnvironmentHandler(ctx *context.APIContext) {
 // and is set by CreateEnvironmentHandler and UpdateEnvironmentHandler once they know whether
 // they are defaulting it or preserving the existing row's value.
 func bodyToEnvironment(body *environmentBody) *deployments_model.Environment {
-	return &deployments_model.Environment{
+	env := &deployments_model.Environment{
 		RepoID:                 body.RepoID,
 		Name:                   body.Name,
 		SortOrder:              body.SortOrder,
@@ -241,7 +261,21 @@ func bodyToEnvironment(body *environmentBody) *deployments_model.Environment {
 		RestrictReviewers:      body.RestrictReviewers,
 		ReviewerUserIDs:        body.ReviewerUserIDs,
 		ReviewerTeamIDs:        body.ReviewerTeamIDs,
+		AutoPromote:            body.AutoPromote,
+		WaitMinutes:            body.WaitMinutes,
+		RequiredStatusContexts: body.RequiredStatusContexts,
+		ExclusiveLock:          body.ExclusiveLock,
 	}
+	// A days_mask of zero is "no window configured", the same zero value as an omitted
+	// deploy_window entirely, so an update that leaves the four members off clears the window
+	// rather than accidentally validating four zeros as a window nobody asked for.
+	if body.DeployWindowDaysMask != 0 {
+		env.DeployWindow = &deployments_model.DeployWindow{
+			DaysMask: body.DeployWindowDaysMask, FromMinute: body.DeployWindowFromMinute,
+			ToMinute: body.DeployWindowToMinute, Timezone: body.DeployWindowTimezone,
+		}
+	}
+	return env
 }
 
 func readEnvironmentBody(ctx *context.APIContext) (*environmentBody, bool) {

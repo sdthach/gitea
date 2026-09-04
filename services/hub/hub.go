@@ -21,6 +21,15 @@ const pageTokenSweepInterval = time.Minute
 // deletes it.
 const pageTokenMaxAge = 24 * time.Hour
 
+// waitingSweepInterval is how often Init's goroutine re-evaluates waiting deployments — a
+// wait timer or a deployment window is measured in minutes, so a minute is fine granularity
+// without polling the table needlessly.
+const waitingSweepInterval = time.Minute
+
+// nowFunc is what the waiting-deployment sweep calls "now". A test overrides it to move the
+// clock without sleeping past a real wait timer or deployment window.
+var nowFunc = time.Now
+
 // Init mounts the fork: it runs the hub's own migrations and seeds the default environment
 // set, then registers the deployment notifier. It also starts a goroutine sweeping expired
 // page tokens, which runs until ctx is done.
@@ -40,6 +49,12 @@ func Init(ctx context.Context) error {
 	go runSweeper(ctx, pageTokenSweepInterval, func() {
 		if _, err := hub_model.SweepPageTokens(ctx, time.Now().Add(-pageTokenMaxAge)); err != nil {
 			log.Error("hub: sweep page tokens: %v", err)
+		}
+	})
+
+	go runSweeper(ctx, waitingSweepInterval, func() {
+		if err := deployments_service.ReevaluateWaiting(ctx, nowFunc().Unix()); err != nil {
+			log.Error("hub: re-evaluate waiting deployments: %v", err)
 		}
 	})
 

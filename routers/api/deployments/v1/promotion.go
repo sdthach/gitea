@@ -128,6 +128,13 @@ func CreateDeployment(ctx *context.APIContext) {
 		ctx.JSON(http.StatusForbidden, result)
 	case body.Confirm && result.RequiresOverrideReason && !result.Confirmed:
 		ctx.JSON(http.StatusBadRequest, result)
+	case result.State == deployments_service.StateChecksFailed:
+		// A failing check is refused the same way a bad request body is: unprocessable,
+		// with the failing check named in result.Checks.
+		ctx.JSON(http.StatusUnprocessableEntity, result)
+	case result.State == deployments_service.StateWaiting:
+		// A waiting deployment row was appended, even though nothing dispatched yet.
+		ctx.JSON(http.StatusCreated, result)
 	case result.Confirmed:
 		ctx.JSON(http.StatusCreated, result)
 	default:

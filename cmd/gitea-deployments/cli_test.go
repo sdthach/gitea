@@ -124,6 +124,8 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 		},
 		"insights-deployments": {[]string{"insights-deployments"}, "/api/deployments/v1/insights/deployments", ""},
 		"environment":          {[]string{"environment", "7"}, "/api/deployments/v1/environments/7", ""},
+		"deployment-checks":    {[]string{"deployment-checks", "9"}, "/api/deployments/v1/deployments/9/checks", ""},
+		"environment-paths":    {[]string{"environment-paths", "--filter", "repo_id=1"}, "/api/deployments/v1/environments/paths", ""},
 	}
 	require.Len(t, cases, len(Commands), "every command needs a test; add one when an endpoint is added")
 

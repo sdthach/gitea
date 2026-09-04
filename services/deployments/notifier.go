@@ -199,6 +199,23 @@ func (n *notifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model
 		} else {
 			log.Error("deployments: open repo %s for tag: %v", repo.FullName(), err)
 		}
+
+		// A success can be exactly what a waiting deployment's prior_deployment check was
+		// holding on, and exactly what makes an auto_promote environment eligible — both read
+		// the log this success just extended, so both run right after it, not on the next
+		// sweep alone.
+		if err := ReevaluateWaiting(ctx, int64(timeutil.TimeStampNow())); err != nil {
+			log.Error("deployments: re-evaluate waiting deployments after %s succeeded in %s: %v",
+				deployment.ReleaseTag, deployment.Environment, err)
+		}
+		actor := sender
+		if actor == nil {
+			actor = user_model.NewGhostUser()
+		}
+		if err := AutoPromote(ctx, repo, actor, deployment.Environment, deployment.ReleaseTag); err != nil {
+			log.Error("deployments: auto-promote after %s succeeded in %s: %v",
+				deployment.ReleaseTag, deployment.Environment, err)
+		}
 	}
 }
 

@@ -44,6 +44,8 @@ func endpoints() []*hubapi.Endpoint {
 		createSecretScopeEndpoint(),
 		deleteSecretScopeEndpoint(),
 		getInsightsDeploymentsEndpoint(),
+		deploymentChecksEndpoint(),
+		environmentPathsEndpoint(),
 	}
 }
 

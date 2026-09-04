@@ -33,7 +33,11 @@
               "cancelled",
               "approved",
               "rejected",
-              "overridden"
+              "overridden",
+              "checks_pending",
+              "checks_passed",
+              "checks_failed",
+              "auto_promoted"
             ],
             "type": "string"
           },
@@ -86,6 +90,49 @@
           "repo_id",
           "run_id",
           "source"
+        ],
+        "type": "object"
+      },
+      "Check": {
+        "properties": {
+          "name": {
+            "description": "Which pre-deployment check this is.",
+            "enum": [
+              "reviewers",
+              "prior_deployment",
+              "releases_only",
+              "wait_timer",
+              "deployment_window",
+              "required_status_contexts",
+              "exclusive_lock"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why, when the state is not pass.",
+            "type": "string"
+          },
+          "retry_at": {
+            "description": "Unix seconds worth retrying at, when the check names one.",
+            "type": "integer"
+          },
+          "state": {
+            "description": "The check's answer.",
+            "enum": [
+              "pass",
+              "wait",
+              "fail"
+            ],
+            "type": "string"
+          },
+          "suggested_action": {
+            "description": "What to do about it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "state"
         ],
         "type": "object"
       },
@@ -160,6 +207,10 @@
       },
       "Environment": {
         "properties": {
+          "auto_promote": {
+            "description": "Deploy the same release here automatically once every environment in depends_on holds it live.",
+            "type": "boolean"
+          },
           "can_write": {
             "description": "Whether a write to this environment by the calling account would be accepted: site administrator for the instance-wide default set, repository administrator otherwise. The editor offers an edit only where this is true.",
             "type": "boolean"
@@ -167,6 +218,14 @@
           "created_unix": {
             "description": "Creation time, unix seconds.",
             "type": "integer"
+          },
+          "deploy_window": {
+            "description": "The recurring time-of-day window a deploy must land inside: days_mask, from_minute, to_minute, timezone. Null means always open.",
+            "type": "object"
+          },
+          "exclusive_lock": {
+            "description": "Refuse a deploy while another is already waiting or running on this environment.",
+            "type": "boolean"
           },
           "id": {
             "description": "Primary key.",
@@ -184,6 +243,13 @@
             "description": "Reviews a held deploy needs. Defaults to 1.",
             "type": "integer"
           },
+          "required_status_contexts": {
+            "description": "Commit status contexts that must report success on the release commit before dispatching.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "review_policy": {
             "description": "Review policy. Defaults to none, so adding the fork changes no existing behaviour.",
             "enum": [
@@ -199,6 +265,10 @@
           },
           "updated_unix": {
             "description": "Last update, unix seconds.",
+            "type": "integer"
+          },
+          "wait_minutes": {
+            "description": "Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week).",
             "type": "integer"
           }
         },
@@ -382,6 +452,13 @@
       },
       "Promotion": {
         "properties": {
+          "checks": {
+            "description": "Every pre-deployment check EvaluateChecks ran, in order.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "confirmed": {
             "description": "Whether this call dispatched. False on the first of the two steps.",
             "type": "boolean"
@@ -396,6 +473,10 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "deployment_id": {
+            "description": "The deploy_deployment row's own id, set only when this call appended a waiting placeholder. GET /deployments/{id}/checks takes this id.",
+            "type": "integer"
           },
           "environment": {
             "description": "Target environment, lower-cased.",
@@ -465,6 +546,22 @@
             "description": "Link to the run, once dispatched.",
             "type": "string"
           },
+          "sha": {
+            "description": "The release's commit, used to evaluate required_status_contexts.",
+            "type": "string"
+          },
+          "state": {
+            "description": "This call's own outcome.",
+            "enum": [
+              "planned",
+              "refused",
+              "override_required",
+              "checks_failed",
+              "waiting",
+              "dispatched"
+            ],
+            "type": "string"
+          },
           "suggested_action": {
             "description": "What to do about it. Every decision carries one.",
             "type": "string"
@@ -481,7 +578,31 @@
           "predecessor_state",
           "release_tag",
           "repo_full_name",
-          "repo_id"
+          "repo_id",
+          "state"
+        ],
+        "type": "object"
+      },
+      "PromotionPath": {
+        "properties": {
+          "edges": {
+            "description": "One entry per dependency: from (holds the release first) and to.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "description": "One entry per environment: name, depends_on, auto_promote and checks (wait_minutes, deploy_window, required_status_contexts, exclusive_lock).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "edges",
+          "nodes"
         ],
         "type": "object"
       },
@@ -2371,6 +2492,72 @@
         ]
       }
     },
+    "/deployments/{id}/checks": {
+      "get": {
+        "description": "Re-runs every check EvaluateChecks applies for a waiting or in-progress deployment: reviewers, prior deployment, releases only, wait timer, deployment window, required status contexts and exclusive lock, in that order. Scoped by Gitea's own permission filtering on the Actions unit.",
+        "operationId": "getDeploymentChecks",
+        "parameters": [
+          {
+            "description": "Deployment id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Check"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Re-evaluate a deployment's pre-deployment checks",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
     "/environments": {
       "get": {
         "description": "Scoped by Gitea's own permission filtering, plus the instance-wide default set (repo_id 0). The /deployments/environments/{name} page is a client of this endpoint.",
@@ -2964,9 +3151,33 @@
                     "description": "Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.",
                     "type": "boolean"
                   },
+                  "auto_promote": {
+                    "description": "Deploy the same release here automatically once every environment in depends_on holds it live.",
+                    "type": "boolean"
+                  },
                   "depends_on": {
                     "description": "Environments a release must pass through first.",
                     "type": "array"
+                  },
+                  "deploy_window_days_mask": {
+                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.",
+                    "type": "integer"
+                  },
+                  "deploy_window_from_minute": {
+                    "description": "Window open time, minutes since local midnight in deploy_window_timezone.",
+                    "type": "integer"
+                  },
+                  "deploy_window_timezone": {
+                    "description": "IANA timezone the window is evaluated in, for example \"America/New_York\".",
+                    "type": "string"
+                  },
+                  "deploy_window_to_minute": {
+                    "description": "Window close time, minutes since local midnight in deploy_window_timezone.",
+                    "type": "integer"
+                  },
+                  "exclusive_lock": {
+                    "description": "Refuse a deploy while another is already waiting or running on this environment.",
+                    "type": "boolean"
                   },
                   "name": {
                     "description": "Environment name.",
@@ -2987,6 +3198,10 @@
                   "required_reviewers": {
                     "description": "Reviews needed. Defaults to 1.",
                     "type": "integer"
+                  },
+                  "required_status_contexts": {
+                    "description": "Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries.",
+                    "type": "array"
                   },
                   "restrict_reviewers": {
                     "description": "Enable bypass allowlist.",
@@ -3011,6 +3226,10 @@
                   },
                   "sort_order": {
                     "description": "Render order.",
+                    "type": "integer"
+                  },
+                  "wait_minutes": {
+                    "description": "Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week).",
                     "type": "integer"
                   }
                 },
@@ -3066,6 +3285,69 @@
           }
         },
         "summary": "Create an environment",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/environments/paths": {
+      "get": {
+        "description": "The effective environment set for repo_id — its own rows, falling back per name to the instance-wide default set — as nodes and the depends_on edges between them. The path editor renders this.",
+        "operationId": "getEnvironmentPaths",
+        "parameters": [
+          {
+            "description": "Repository id; 0 is the instance-wide default set.",
+            "in": "query",
+            "name": "repo_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionPath"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The repository's environment dependency graph",
         "tags": [
           "environments"
         ]
@@ -3217,9 +3499,33 @@
                     "description": "Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.",
                     "type": "boolean"
                   },
+                  "auto_promote": {
+                    "description": "Deploy the same release here automatically once every environment in depends_on holds it live.",
+                    "type": "boolean"
+                  },
                   "depends_on": {
                     "description": "Environments a release must pass through first.",
                     "type": "array"
+                  },
+                  "deploy_window_days_mask": {
+                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.",
+                    "type": "integer"
+                  },
+                  "deploy_window_from_minute": {
+                    "description": "Window open time, minutes since local midnight in deploy_window_timezone.",
+                    "type": "integer"
+                  },
+                  "deploy_window_timezone": {
+                    "description": "IANA timezone the window is evaluated in, for example \"America/New_York\".",
+                    "type": "string"
+                  },
+                  "deploy_window_to_minute": {
+                    "description": "Window close time, minutes since local midnight in deploy_window_timezone.",
+                    "type": "integer"
+                  },
+                  "exclusive_lock": {
+                    "description": "Refuse a deploy while another is already waiting or running on this environment.",
+                    "type": "boolean"
                   },
                   "name": {
                     "description": "Environment name.",
@@ -3240,6 +3546,10 @@
                   "required_reviewers": {
                     "description": "Reviews needed. Defaults to 1.",
                     "type": "integer"
+                  },
+                  "required_status_contexts": {
+                    "description": "Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries.",
+                    "type": "array"
                   },
                   "restrict_reviewers": {
                     "description": "Enable bypass allowlist.",
@@ -3264,6 +3574,10 @@
                   },
                   "sort_order": {
                     "description": "Render order.",
+                    "type": "integer"
+                  },
+                  "wait_minutes": {
+                    "description": "Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week).",
                     "type": "integer"
                   }
                 },

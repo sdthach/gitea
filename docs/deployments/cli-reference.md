@@ -12,11 +12,13 @@ Commands:
   approve                   Approve a held deploy
   audit                     List deployment audit events across every repository the caller can see
   deploy                    Plan or dispatch a deploy of a release to an environment
+  deployment-checks         Re-evaluate a deployment's pre-deployment checks
   deployment-matrix         The release × environment deployment matrix
   deployments               List deployments across every repository the caller can see
   environment               Read one environment by id
   environment-create        Create an environment
   environment-delete        Delete an environment
+  environment-paths         The repository's environment dependency graph
   environment-update        Update an environment
   environments              List environments across every repository the caller can see
   insights                  The cross-repository CI summary and its comparison window
@@ -156,6 +158,40 @@ Flags:
     	API token; resolved by the same precedence detect.sh implements
 ```
 
+## gitea-deployments deployment-checks
+
+```
+gitea-deployments deployment-checks — Re-evaluate a deployment's pre-deployment checks
+
+  GET /deployments/{id}/checks
+
+Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
 ## gitea-deployments deployment-matrix
 
 ```
@@ -264,10 +300,22 @@ gitea-deployments environment-create — Create an environment
 Flags:
   -admins-can-bypass
     	Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.
+  -auto-promote
+    	Deploy the same release here automatically once every environment in depends_on holds it live.
   -cursor string
     	opaque cursor from a previous response
   -depends-on string
     	Environments a release must pass through first.
+  -deploy-window-days-mask string
+    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.
+  -deploy-window-from-minute string
+    	Window open time, minutes since local midnight in deploy_window_timezone.
+  -deploy-window-timezone string
+    	IANA timezone the window is evaluated in, for example "America/New_York".
+  -deploy-window-to-minute string
+    	Window close time, minutes since local midnight in deploy_window_timezone.
+  -exclusive-lock
+    	Refuse a deploy while another is already waiting or running on this environment.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -292,6 +340,8 @@ Flags:
     	Gate when a dependency hasn't held the release.
   -required-reviewers string
     	Reviews needed. Defaults to 1.
+  -required-status-contexts string
+    	Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries.
   -restrict-reviewers
     	Enable bypass allowlist.
   -review-policy string
@@ -308,6 +358,8 @@ Flags:
     	Render order.
   -token string
     	API token; resolved by the same precedence detect.sh implements
+  -wait-minutes string
+    	Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week).
 ```
 
 ## gitea-deployments environment-delete
@@ -318,6 +370,38 @@ gitea-deployments environment-delete — Delete an environment
   DELETE /environments/{id}
 
 Positional arguments: id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_DEPLOYMENTS_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-deployments environment-paths
+
+```
+gitea-deployments environment-paths — The repository's environment dependency graph
+
+  GET /environments/paths
 
 Flags:
   -cursor string
@@ -356,10 +440,22 @@ Positional arguments: id
 Flags:
   -admins-can-bypass
     	Let a repo admin bypass the gate. Defaults to true on create; an update that omits it leaves the existing value unchanged.
+  -auto-promote
+    	Deploy the same release here automatically once every environment in depends_on holds it live.
   -cursor string
     	opaque cursor from a previous response
   -depends-on string
     	Environments a release must pass through first.
+  -deploy-window-days-mask string
+    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.
+  -deploy-window-from-minute string
+    	Window open time, minutes since local midnight in deploy_window_timezone.
+  -deploy-window-timezone string
+    	IANA timezone the window is evaluated in, for example "America/New_York".
+  -deploy-window-to-minute string
+    	Window close time, minutes since local midnight in deploy_window_timezone.
+  -exclusive-lock
+    	Refuse a deploy while another is already waiting or running on this environment.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -384,6 +480,8 @@ Flags:
     	Gate when a dependency hasn't held the release.
   -required-reviewers string
     	Reviews needed. Defaults to 1.
+  -required-status-contexts string
+    	Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries.
   -restrict-reviewers
     	Enable bypass allowlist.
   -review-policy string
@@ -400,6 +498,8 @@ Flags:
     	Render order.
   -token string
     	API token; resolved by the same precedence detect.sh implements
+  -wait-minutes string
+    	Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week).
 ```
 
 ## gitea-deployments environments
