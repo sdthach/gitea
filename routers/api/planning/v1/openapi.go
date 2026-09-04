@@ -151,6 +151,34 @@ var componentSchemas = map[string]any{
 		"fields": hubapi.ArrayProp("object", "The fields visible from this issue's repository, nearest scope shadowing by key."),
 		"values": hubapi.Prop("object", "This issue's own recorded values, keyed by field key and typed by kind."),
 	}, "fields", "values"),
+	"Capacity": hubapi.ObjectSchema(map[string]any{
+		"hours_per_day": hubapi.Prop("number", "Hours in a working day, in (0, 24]."),
+		"utilization":   hubapi.Prop("number", "Fraction of a working day actually available, in (0, 1]."),
+		"workdays":      hubapi.Prop("integer", "A bit mask over the week, Sunday as bit 0. 62 is Monday through Friday."),
+		"source": hubapi.EnumProp("Which scope resolved the row: the nearer of repo, org and instance, or default when none is recorded.",
+			[]string{planning_service.CapacitySourceRepo, planning_service.CapacitySourceOrg, planning_service.CapacitySourceInstance, planning_service.CapacitySourceDefault}),
+	}, "hours_per_day", "utilization", "workdays", "source"),
+	"CapacityRow": hubapi.ObjectSchema(map[string]any{
+		"user_id":       hubapi.Prop("integer", "The user's id."),
+		"login":         hubapi.Prop("string", "The user's login."),
+		"display_name":  hubapi.Prop("string", "The user's display name."),
+		"avatar_url":    hubapi.Prop("string", "The user's avatar."),
+		"hours_per_day": hubapi.Prop("number", "Resolved hours in a working day."),
+		"utilization":   hubapi.Prop("number", "Resolved fraction of a working day actually available."),
+		"workdays":      hubapi.Prop("integer", "Resolved bit mask over the week, Sunday as bit 0."),
+		"source": hubapi.EnumProp("Which scope resolved the row.",
+			[]string{planning_service.CapacitySourceRepo, planning_service.CapacitySourceOrg, planning_service.CapacitySourceInstance, planning_service.CapacitySourceDefault}),
+	}, "user_id", "login", "hours_per_day", "utilization", "workdays", "source"),
+	"RoadmapCapacity": hubapi.ObjectSchema(map[string]any{
+		"lanes": hubapi.ArrayProp("object", "One heat-strip lane per repository assignee, even one with no load. Each carries "+
+			"user_id, login, display_name, avatar_url, hours_per_day, utilization, workdays, total_load_hours, "+
+			"total_available_hours, over, days (unix, load_hours, available_hours, over) and unestimated (issue_id, number, title)."),
+		"sprints": hubapi.ArrayProp("object", "One row per milestone carrying both a recorded start and a due date: "+
+			"milestone_id, title, start_unix, end_unix, working_days and lanes (user_id, login, load_hours, "+
+			"available_hours, over, points)."),
+		"sprints_unscheduled": hubapi.ArrayProp("object", "A milestone missing a start, a due date or both: milestone_id, title, missing."),
+		"truncated":           hubapi.Prop("boolean", "True when the repository has more than 2000 open assigned issues, so only a prefix was considered."),
+	}, "lanes", "sprints", "sprints_unscheduled", "truncated"),
 	"Error": hubapi.ErrorSchema(),
 }
 

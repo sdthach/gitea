@@ -35,12 +35,14 @@ type Command struct {
 	PathParams  []string
 	QueryParams []string
 	// BodyParams are the request body's members, one flag each. RequiredBody is the subset
-	// the endpoint refuses the request without. BoolBody, IntBody and ArrayBody are the
-	// subsets that marshal as a JSON boolean, number or array rather than a string.
+	// the endpoint refuses the request without. BoolBody, IntBody, FloatBody and ArrayBody are
+	// the subsets that marshal as a JSON boolean, whole number, fractional number or array
+	// rather than a string.
 	BodyParams   []string
 	RequiredBody []string
 	BoolBody     []string
 	IntBody      []string
+	FloatBody    []string
 	ArrayBody    []string
 	// BodyHelp is each member's published description, used as its flag's help text so the
 	// generated command reference explains the body rather than listing it.
@@ -316,6 +318,15 @@ func composeBody(cfg Config, cmd Command, stringValues map[string]*string, bools
 				return nil, failf(2, "Send a whole number.", "%s must be an integer, got %q", flagName, *stringValues[name])
 			}
 			encoded = []byte(strconv.FormatInt(n, 10))
+		case slices.Contains(cmd.FloatBody, name):
+			if stringValues[name] == nil || *stringValues[name] == "" {
+				continue
+			}
+			n, err := strconv.ParseFloat(strings.TrimSpace(*stringValues[name]), 64)
+			if err != nil {
+				return nil, failf(2, "Send a number.", "%s must be a number, got %q", flagName, *stringValues[name])
+			}
+			encoded = []byte(strconv.FormatFloat(n, 'g', -1, 64))
 		case slices.Contains(cmd.ArrayBody, name):
 			if stringValues[name] == nil || *stringValues[name] == "" {
 				continue

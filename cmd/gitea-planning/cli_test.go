@@ -206,6 +206,22 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"issue-set-fields", "--repo", "acme/widgets", "--values", `{"points": 5}`, "9042"},
 			"/api/planning/v1/issues/9042/fields", http.MethodPut,
 		},
+		"roadmap-capacity": {
+			[]string{"roadmap-capacity", "--filter", "repo_id=1"},
+			"/api/planning/v1/roadmap/capacity", "",
+		},
+		"capacity": {
+			[]string{"capacity", "--filter", "repo_id=1"},
+			"/api/planning/v1/capacity", "",
+		},
+		"capacity-set": {
+			[]string{"capacity-set", "--repo-id", "1", "--hours-per-day", "6", "--utilization", "0.5", "--workdays", "62", "2"},
+			"/api/planning/v1/capacity/2", http.MethodPut,
+		},
+		"capacity-clear": {
+			[]string{"capacity-clear", "--repo-id", "1", "2"},
+			"/api/planning/v1/capacity/2", http.MethodDelete,
+		},
 	}
 	require.Len(t, cases, len(client.Commands), "every command needs a test; add one when an endpoint is added")
 
@@ -321,4 +337,22 @@ func TestBoardOrderColumnSendsIssueIDsAsAnArray(t *testing.T) {
 	body, readErr := io.ReadAll(rec.requests[0].Body)
 	require.NoError(t, readErr)
 	assert.JSONEq(t, `{"repo":"acme/web","project_id":5,"issue_ids":["12","7","3"]}`, string(body))
+}
+
+// TestCapacitySetSendsWorkdaysAndScopeAsNumbers: workdays, repo_id and org_id are IntBody
+// members and hours_per_day and utilization are FloatBody members, decoded server-side into
+// int and float64 fields respectively — a JSON string would fail either decode. The server
+// still parses either shape for hours_per_day and utilization, since a raw API caller may send
+// a numeric string instead.
+func TestCapacitySetSendsWorkdaysAndScopeAsNumbers(t *testing.T) {
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec)
+
+	_, _, err := exec(t, rec, "capacity-set", "--repo-id", "1", "--hours-per-day", "6", "--utilization", "0.5", "--workdays", "62", "2")
+	require.Nil(t, err)
+	require.Len(t, rec.requests, 1)
+
+	body, readErr := io.ReadAll(rec.requests[0].Body)
+	require.NoError(t, readErr)
+	assert.JSONEq(t, `{"repo_id":1,"hours_per_day":6,"utilization":0.5,"workdays":62}`, string(body))
 }

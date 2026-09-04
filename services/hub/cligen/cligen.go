@@ -120,6 +120,7 @@ var Commands = []hubcli.Command{
 		fmt.Fprintf(&b, "\t\tRequiredBody: %s,\n", stringSlice(requiredBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tBoolBody:    %s,\n", stringSlice(boolBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tIntBody:     %s,\n", stringSlice(intBodyNames(op)))
+		fmt.Fprintf(&b, "\t\tFloatBody:   %s,\n", stringSlice(floatBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tArrayBody:   %s,\n", stringSlice(arrayBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tBodyHelp:    %s,\n", stringMap(bodyHelp(op)))
 		fmt.Fprintf(&b, "\t\tColumns:     %s,\n", stringSlice(columnsFor(op, schemas)))
@@ -185,6 +186,18 @@ func intBodyNames(op *hubapi.Operation) []string {
 	names := make([]string, 0, len(op.Body))
 	for _, p := range op.Body {
 		if p.Type == "integer" {
+			names = append(names, p.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// floatBodyNames lists the members that marshal as JSON numbers with a fractional part.
+func floatBodyNames(op *hubapi.Operation) []string {
+	names := make([]string, 0, len(op.Body))
+	for _, p := range op.Body {
+		if p.Type == "number" {
 			names = append(names, p.Name)
 		}
 	}

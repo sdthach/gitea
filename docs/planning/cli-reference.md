@@ -14,6 +14,9 @@ Commands:
   board-move-column        Move a card between the board's columns
   board-move-group         Move a card between the board's groups
   board-order-column       Reorder every card in one column
+  capacity                 Resolved capacity for a scope's own users
+  capacity-clear           Clear a user's own row in a scope
+  capacity-set             Set a user's capacity in a scope
   field-create             Create a custom field
   field-delete             Delete a custom field
   field-update             Update a custom field
@@ -47,6 +50,7 @@ Commands:
   project-views            A project's saved views
   projects                 The repositories and boards a planning page can open
   roadmap                  The roadmap: one bar per issue, with dependency arrows
+  roadmap-capacity         Per-user capacity heat strips and sprint load for the roadmap
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -262,6 +266,120 @@ Flags:
     	sort field
   -token string
     	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning capacity
+
+```
+gitea-planning capacity — Resolved capacity for a scope's own users
+
+  GET /capacity
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning capacity-clear
+
+```
+gitea-planning capacity-clear — Clear a user's own row in a scope
+
+  DELETE /capacity/{user_id}
+
+Positional arguments: user_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -repo-id string
+    	Scope to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning capacity-set
+
+```
+gitea-planning capacity-set — Set a user's capacity in a scope
+
+  PUT /capacity/{user_id}
+
+Positional arguments: user_id
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -hours-per-day string
+    	required. A number in (0, 24], such as 8 or 6.5. Accepted as either a JSON number or a numeric string.
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -org-id string
+    	Scope to this organization. Mutually exclusive with repo_id.
+  -q string
+    	free-text search
+  -repo-id string
+    	Scope to this repository. Mutually exclusive with org_id; both zero is the instance scope.
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+  -utilization string
+    	required. A fraction in (0, 1], such as 0.8 for 80%. Accepted as either a JSON number or a numeric string.
+  -workdays string
+    	required. A bit mask from 1 to 127: a bit per day of the week, Sunday as bit 0. 62 is Monday through Friday.
 ```
 
 ## gitea-planning field-create
@@ -1490,6 +1608,38 @@ Flags:
 gitea-planning roadmap — The roadmap: one bar per issue, with dependency arrows
 
   GET /roadmap
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning roadmap-capacity
+
+```
+gitea-planning roadmap-capacity — Per-user capacity heat strips and sprint load for the roadmap
+
+  GET /roadmap/capacity
 
 Flags:
   -cursor string

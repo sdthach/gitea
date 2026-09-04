@@ -57,6 +57,10 @@ func endpoints() []*hubapi.Endpoint {
 		getProjectViewsEndpoint(),
 		createProjectViewEndpoint(),
 		deleteProjectViewEndpoint(),
+		getRoadmapCapacityEndpoint(),
+		getCapacityEndpoint(),
+		setCapacityEndpoint(),
+		clearCapacityEndpoint(),
 	}
 }
 

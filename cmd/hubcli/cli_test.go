@@ -66,8 +66,8 @@ func testConfig() Config {
 			},
 			{
 				Name: "resize-widget", OperationID: "resizeWidget", Method: http.MethodPut, Path: "/widgets/{id}/size",
-				Summary: "Resize a widget", PathParams: []string{"id"}, BodyParams: []string{"size", "tags"},
-				IntBody: []string{"size"}, ArrayBody: []string{"tags"}, Columns: []string{"id", "name"},
+				Summary: "Resize a widget", PathParams: []string{"id"}, BodyParams: []string{"size", "tags", "weight"},
+				IntBody: []string{"size"}, FloatBody: []string{"weight"}, ArrayBody: []string{"tags"}, Columns: []string{"id", "name"},
 			},
 		},
 	}
@@ -393,6 +393,32 @@ func TestIntBodyRefusesANonInteger(t *testing.T) {
 	require.NotNil(t, err)
 	assert.Equal(t, 2, err.ExitCode)
 	assert.Contains(t, err.Message, "--size")
+	assert.Empty(t, rec.requests, "nothing was sent")
+}
+
+// TestFloatBodyMarshalsAsANumber: a FloatBody member is sent as a JSON number, not the string
+// every other body member marshals as — the handler decodes it into a float64 field.
+func TestFloatBodyMarshalsAsANumber(t *testing.T) {
+	cfg := testConfig()
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--weight", "6.5", "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"weight":6.5}`, requestBody(t, rec.requests[0]))
+}
+
+// TestFloatBodyRefusesANonNumber: a non-numeric value is refused before the round-trip, naming
+// the flag.
+func TestFloatBodyRefusesANonNumber(t *testing.T) {
+	cfg := testConfig()
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--weight", "not-a-number", "7")
+	require.NotNil(t, err)
+	assert.Equal(t, 2, err.ExitCode)
+	assert.Contains(t, err.Message, "--weight")
 	assert.Empty(t, rec.requests, "nothing was sent")
 }
 
