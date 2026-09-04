@@ -9,6 +9,7 @@ import (
 
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unit"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/templates"
 	planningv1 "gitea.dev/routers/api/planning/v1"
@@ -26,11 +27,13 @@ func Projects(ctx *context.Context) {
 	hub_web.SetPageToken(ctx)
 	token, _ := ctx.Data["PageToken"].(string)
 	ctx.PageData["planningProject"] = map[string]any{
-		"apiBase":      setting.AppSubURL + planningv1.BasePath,
-		"token":        token,
-		"repoId":       int64(0),
-		"repoFullName": "",
-		"projectId":    int64(0),
+		"apiBase":       setting.AppSubURL + planningv1.BasePath,
+		"token":         token,
+		"repoId":        int64(0),
+		"repoFullName":  "",
+		"projectId":     int64(0),
+		"canWrite":      false,
+		"canEditIssues": false,
 	}
 	ctx.HTML(http.StatusOK, tplProject)
 }
@@ -67,16 +70,24 @@ func Project(ctx *context.Context) {
 		return
 	}
 
+	perm, err := access_model.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("GetDoerRepoPermission", err)
+		return
+	}
+
 	ctx.Data["Title"] = "Project"
 	ctx.Data["PageIsPlanning"] = true
 	hub_web.SetPageToken(ctx)
 	token, _ := ctx.Data["PageToken"].(string)
 	ctx.PageData["planningProject"] = map[string]any{
-		"apiBase":      setting.AppSubURL + planningv1.BasePath,
-		"token":        token,
-		"repoId":       repo.ID,
-		"repoFullName": repo.FullName(),
-		"projectId":    projectID,
+		"apiBase":       setting.AppSubURL + planningv1.BasePath,
+		"token":         token,
+		"repoId":        repo.ID,
+		"repoFullName":  repo.FullName(),
+		"projectId":     projectID,
+		"canWrite":      perm.CanWrite(unit.TypeProjects),
+		"canEditIssues": perm.CanWrite(unit.TypeIssues),
 	}
 	ctx.HTML(http.StatusOK, tplProject)
 }

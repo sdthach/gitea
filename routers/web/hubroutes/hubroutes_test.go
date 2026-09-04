@@ -122,11 +122,17 @@ var forkPages = []struct {
 		fetch:     "/roadmap?",
 	},
 	{
-		dir:       "planning",
-		template:  "project.tmpl",
-		endpoints: []string{"/board"},
-		fetch:     "/board?",
-		client:    "web_src/js/features/planning/api.ts",
+		dir:      "planning",
+		template: "project.tmpl",
+		endpoints: []string{
+			"/board", "/roadmap", "/projects", "/projects/{project_id}/views",
+			"/projects/{project_id}/views/{view_id}",
+			"/issues/{issue_id}/milestone", "/issues/{issue_id}/dates",
+			"/issues/{issue_id}/type", "/issues/{issue_id}/fields",
+			"/issues/{issue_id}/estimate",
+		},
+		fetch:  "/board",
+		client: "web_src/js/features/planning/api.ts",
 	},
 }
 
@@ -187,12 +193,34 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				// fetched is caught rather than standing as a claim about a dead page. A page
 				// may name the documented path verbatim, as board.tmpl does, or interpolate the
 				// repository into it, as matrix.tmpl does; either one names the operation.
+				if page.client != "" {
+					// A client's own path table spells every endpoint as a complete quoted
+					// literal (docs/planning/openapi.json's own path, verbatim), so requiring
+					// the closing quote catches a renamed literal that a plain substring check
+					// would miss against a sibling endpoint sharing the same prefix, such as
+					// /issues/{issue_id}/estimate for /issues/{issue_id}.
+					assert.True(t, quotedLiteral(checked, endpoint),
+						"the client %s must name the exact endpoint %s as a quoted literal, not merely contain it as a sibling path's prefix", page.client, endpoint)
+					continue
+				}
 				interpolated := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
 				assert.True(t, strings.Contains(checked, endpoint) || strings.Contains(checked, interpolated),
 					"the page fetches %s", endpoint)
 			}
 		})
 	}
+}
+
+// quotedLiteral reports whether endpoint appears in body as a complete quoted string literal,
+// bounded by a matching quote character on both sides, so a sibling path that merely starts
+// with endpoint (a longer literal sharing its prefix) does not satisfy the check.
+func quotedLiteral(body, endpoint string) bool {
+	for _, quote := range []string{"'", `"`, "`"} {
+		if strings.Contains(body, quote+endpoint+quote) {
+			return true
+		}
+	}
+	return false
 }
 
 // gateFor is which settings gate TestRoutesAreRegisteredBehindTheGate expects on each

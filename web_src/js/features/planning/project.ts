@@ -1,12 +1,7 @@
 import {createApp} from 'vue';
+import type {PlanningProjectConfig} from './types.ts';
 
-export type PlanningProjectConfig = {
-  apiBase: string;
-  token: string;
-  repoId: number;
-  repoFullName: string;
-  projectId: number;
-};
+export type {PlanningProjectConfig} from './types.ts';
 
 type PlanningPageData = {planningProject: PlanningProjectConfig};
 

@@ -33,6 +33,8 @@ func TestPlanningProjectPage(t *testing.T) {
 	body := resp.Body.String()
 	assert.Contains(t, body, `data-global-init="initPlanningProject"`)
 	assert.Contains(t, body, "planningProject")
+	assert.Contains(t, body, `"canWrite":true`)
+	assert.Contains(t, body, `"canEditIssues":true`)
 
 	// repo2 is private to user2 in the fixtures; user4 has no collaboration or team access
 	// to it.
@@ -48,9 +50,15 @@ func TestPlanningProjectPage(t *testing.T) {
 	// mint that user's own token rather than reusing user2's cached one.
 	user4Session := loginUser(t, "user4")
 	req = NewRequest(t, "GET", "/planning/projects/user2/repo1/1")
-	user4Session.MakeRequest(t, req, http.StatusOK)
+	resp = user4Session.MakeRequest(t, req, http.StatusOK)
 	unittest.AssertCount(t, &auth_model.AccessToken{UID: 4, Name: hub_model.PageTokenName}, 1)
 	unittest.AssertCount(t, &auth_model.AccessToken{UID: 2, Name: hub_model.PageTokenName}, 1)
+
+	// user2/repo1 is public, so user4 can read it but holds no write on either unit: both
+	// flags come back false, gating both the board's inline editors and the saved-views writer.
+	readerBody := resp.Body.String()
+	assert.Contains(t, readerBody, `"canWrite":false`)
+	assert.Contains(t, readerBody, `"canEditIssues":false`)
 }
 
 // TestPlanningAPIAcceptsTheBrowserSessionForReads: a page's own JS calls the API with
