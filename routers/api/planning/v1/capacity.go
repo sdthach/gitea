@@ -526,7 +526,7 @@ func capacityLoadItems(ctx *context.APIContext, repo *repo_model.Repository, iss
 
 	items := make([]planning_service.LoadItem, 0, len(issues))
 	for _, issue := range issues {
-		bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID]))
+		bar, ok := planning_service.ResolveBar(barInputFor(ctx, issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID]))
 		if !ok || len(issue.Assignees) == 0 {
 			continue
 		}

@@ -368,8 +368,10 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 		for _, label := range issue.Labels {
 			card.Labels = append(card.Labels, label.Name)
 		}
+		card.AssigneeAvatars = make([]planning_service.AssigneeAvatar, 0, len(issue.Assignees))
 		for _, assignee := range issue.Assignees {
 			card.Assignees = append(card.Assignees, assignee.Name)
+			card.AssigneeAvatars = append(card.AssigneeAvatars, planning_service.AssigneeAvatar{Login: assignee.Name, AvatarURL: assignee.AvatarLink(ctx)})
 		}
 		cards = append(cards, card)
 	}

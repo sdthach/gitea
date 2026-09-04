@@ -1,6 +1,6 @@
 import {request} from '../../modules/fetch.ts';
 import type {
-  Board, IssueFacets, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity,
+  Board, IssueFacets, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity, Timesheet,
 } from './types.ts';
 
 export type PlanningApiConfig = {
@@ -31,6 +31,21 @@ export const paths = {
   boardCardGroup: '/board/cards/{issue_id}/group',
   boardColumnOrder: '/board/columns/{column_id}/order',
   milestoneSchedule: '/milestones/{milestone_id}/schedule',
+  issueDependencies: '/issues/{issue_id}/dependencies',
+  issueDependency: '/issues/{issue_id}/dependencies/{dependency_id}',
+  timesheet: '/timesheet',
+};
+
+// v1Paths is Gitea's OWN v1 API, spelled exactly as templates/swagger/v1-swagger.generated.json
+// spells it — never this fork's hub namespace. The Time tab's writes (adding and deleting a
+// tracked-time entry, starting and stopping a stopwatch) go through it directly, with the
+// page's own token, because Gitea already has these endpoints and a second copy in the hub
+// namespace would be two sources of truth for one issue's tracked time.
+export const v1Paths = {
+  issueTimes: '/repos/{owner}/{repo}/issues/{index}/times',
+  issueTime: '/repos/{owner}/{repo}/issues/{index}/times/{id}',
+  stopwatchStart: '/repos/{owner}/{repo}/issues/{index}/stopwatch/start',
+  stopwatchStop: '/repos/{owner}/{repo}/issues/{index}/stopwatch/stop',
 };
 
 function withParam(template: string, name: string, value: number): string {
@@ -188,4 +203,53 @@ export function createIssue(config: PlanningApiConfig, body: {
 
 export function setMilestoneSchedule(config: PlanningApiConfig, milestoneId: number, body: {repo: string; start: string}): Promise<MilestoneSchedule> {
   return call<MilestoneSchedule>(config, withParam(paths.milestoneSchedule, 'milestone_id', milestoneId), {method: 'PUT', body});
+}
+
+export function addIssueDependency(config: PlanningApiConfig, issueId: number, body: {repo: string; depends_on_issue_id: number}): Promise<Roadmap> {
+  return call<Roadmap>(config, withParam(paths.issueDependencies, 'issue_id', issueId), {method: 'POST', body});
+}
+
+export function removeIssueDependency(config: PlanningApiConfig, issueId: number, dependencyId: number, repo: string): Promise<Roadmap> {
+  const path = withParam(withParam(paths.issueDependency, 'issue_id', issueId), 'dependency_id', dependencyId);
+  return call<Roadmap>(config, path, {method: 'DELETE', body: {repo}});
+}
+
+export function getTimesheet(config: PlanningApiConfig, opts: {repoId: number; from?: string; to?: string; userId?: number}): Promise<Timesheet> {
+  const qs = query({repo_id: opts.repoId, from: opts.from, to: opts.to, user_id: opts.userId});
+  return call<Timesheet>(config, `${paths.timesheet}?${qs}`);
+}
+
+// v1Base derives Gitea's own v1 API root from this fork's own base, which is the only piece of
+// server-rendered config a v1 write needs — the page's token already carries write:issue,
+// minted for this same page (routers/web/hub.SetPageToken).
+function v1Base(config: PlanningApiConfig): string {
+  return config.apiBase.replace(/\/api\/planning\/v1$/, '/api/v1');
+}
+
+async function v1Call<T>(config: PlanningApiConfig, path: string, {method = 'GET', body}: CallOptions = {}): Promise<T> {
+  return call<T>({apiBase: v1Base(config), token: config.token}, path, {method, body});
+}
+
+// v1Path fills in a v1Paths template's owner, repo and index placeholders — the trio every one
+// of these endpoints addresses an issue by, rather than this fork's own issue_id.
+function v1Path(template: string, owner: string, repo: string, index: number): string {
+  return template.replace('{owner}', owner).replace('{repo}', repo).replace('{index}', String(index));
+}
+
+// addTrackedTime and the writes below are Gitea's OWN time-tracking API: adding and deleting a
+// tracked-time entry, and starting and stopping a stopwatch.
+export function addTrackedTime(config: PlanningApiConfig, owner: string, repo: string, index: number, body: {time: number; created?: string}): Promise<unknown> {
+  return v1Call(config, v1Path(v1Paths.issueTimes, owner, repo, index), {method: 'POST', body});
+}
+
+export function deleteTrackedTime(config: PlanningApiConfig, owner: string, repo: string, index: number, timeId: number): Promise<unknown> {
+  return v1Call(config, v1Path(v1Paths.issueTime, owner, repo, index).replace('{id}', String(timeId)), {method: 'DELETE'});
+}
+
+export function startStopwatch(config: PlanningApiConfig, owner: string, repo: string, index: number): Promise<unknown> {
+  return v1Call(config, v1Path(v1Paths.stopwatchStart, owner, repo, index), {method: 'POST'});
+}
+
+export function stopStopwatch(config: PlanningApiConfig, owner: string, repo: string, index: number): Promise<unknown> {
+  return v1Call(config, v1Path(v1Paths.stopwatchStop, owner, repo, index), {method: 'POST'});
 }

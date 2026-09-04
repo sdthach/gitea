@@ -11,6 +11,7 @@ import SavedViews from './SavedViews.vue';
 import TableView from './TableView.vue';
 import BoardView from './BoardView.vue';
 import RoadmapView from './roadmap/RoadmapView.vue';
+import TimeView from './time/TimeView.vue';
 
 const props = defineProps<{config: PlanningProjectConfig}>();
 
@@ -24,7 +25,7 @@ watch(urlState, (state) => applyUrlState(state), {deep: true});
 
 const groupBy = computed<Grouping>(() => (groupings.includes(urlState.group_by as Grouping) ? urlState.group_by as Grouping : 'none'));
 const currentSearch = computed(() => buildSearch(urlState).replace(/^\?/, ''));
-const errorBanner = computed(() => store.state.writeError ?? store.state.boardError ?? store.state.roadmapError ?? store.state.capacityError ?? store.state.viewsError);
+const errorBanner = computed(() => store.state.writeError ?? store.state.boardError ?? store.state.roadmapError ?? store.state.capacityError ?? store.state.timesheetError ?? store.state.viewsError);
 // canWrite reads false with no token even when the doer otherwise could: a token the page
 // failed to mint carries no write scope, so every editor is disabled rather than failing on
 // first use.
@@ -97,7 +98,10 @@ onUnmounted(() => store.stopAutoRefresh());
         @update:scale="urlState.scale = $event" @update:at="urlState.at = $event"
         @update:group-by="urlState.group_by = $event" @toggle-collapse="onToggleCollapse"
       />
-      <p v-else>Time view is coming.</p>
+      <TimeView
+        v-else-if="urlState.view === 'time'" :store="store" :can-edit-issues="canEditIssues"
+        :at="urlState.at" @update:at="urlState.at = $event"
+      />
     </template>
   </div>
 </template>

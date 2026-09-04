@@ -3,7 +3,7 @@ import type {Board, Card} from './types.ts';
 
 function card(partial: Partial<Card> & {issue_id: number; column_id: number; sorting: number}): Card {
   return {
-    number: partial.issue_id, title: `#${partial.issue_id}`, url: '', labels: [], assignees: [],
+    number: partial.issue_id, title: `#${partial.issue_id}`, url: '', labels: [], assignees: [], assignee_avatars: [],
     is_closed: false, is_pull: false, fields: {}, points: 0, time_estimate: 0, tracked_seconds: 0,
     ...partial,
   };

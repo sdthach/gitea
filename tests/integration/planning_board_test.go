@@ -27,6 +27,22 @@ import (
 // The fork's integration tests run under Gitea's own harness. Every name carries
 // "Planning" or "Deployments", the pattern `make hub-integration` selects on.
 
+// boardCard is one card as GET /board answers it, reduced to what these tests assert.
+type boardCard struct {
+	IssueID         int64    `json:"issue_id"`
+	Number          int64    `json:"number"`
+	ColumnID        int64    `json:"column_id"`
+	MilestoneID     int64    `json:"milestone_id"`
+	TimeEstimate    int64    `json:"time_estimate"`
+	TrackedSeconds  int64    `json:"tracked_seconds"`
+	Labels          []string `json:"labels"`
+	Assignees       []string `json:"assignees"`
+	AssigneeAvatars []struct {
+		Login     string `json:"login"`
+		AvatarURL string `json:"avatar_url"`
+	} `json:"assignee_avatars"`
+}
+
 // boardPayload is the shape GET /board answers with, reduced to what these tests assert.
 type boardPayload struct {
 	ProjectID int64  `json:"project_id"`
@@ -43,16 +59,7 @@ type boardPayload struct {
 		Columns      []struct {
 			ColumnID int64 `json:"column_id"`
 			Title    string
-			Cards    []struct {
-				IssueID        int64    `json:"issue_id"`
-				Number         int64    `json:"number"`
-				ColumnID       int64    `json:"column_id"`
-				MilestoneID    int64    `json:"milestone_id"`
-				TimeEstimate   int64    `json:"time_estimate"`
-				TrackedSeconds int64    `json:"tracked_seconds"`
-				Labels         []string `json:"labels"`
-				Assignees      []string `json:"assignees"`
-			} `json:"cards"`
+			Cards    []boardCard `json:"cards"`
 		} `json:"columns"`
 	} `json:"groups"`
 	Tree []struct {
@@ -103,6 +110,21 @@ func groupOf(t *testing.T, board boardPayload, issueID int64) string {
 	}
 	t.Fatalf("issue %d is on no group of the board", issueID)
 	return ""
+}
+
+func cardOf(t *testing.T, board boardPayload, issueID int64) boardCard {
+	t.Helper()
+	for _, group := range board.Groups {
+		for _, column := range group.Columns {
+			for _, card := range column.Cards {
+				if card.IssueID == issueID {
+					return card
+				}
+			}
+		}
+	}
+	t.Fatalf("issue %d is on no card of the board", issueID)
+	return boardCard{}
 }
 
 func columnOf(t *testing.T, board boardPayload, issueID int64) int64 {
@@ -228,6 +250,13 @@ func TestAPIPlanningBoardGroupsByTypeAssigneeAndParent(t *testing.T) {
 	// issue 1 is assigned to user1 in the fixtures, so assignee grouping names a group too.
 	byAssignee := getBoard(t, token, "repo_id=1&project_id=1&group_by=assignee")
 	assert.Equal(t, "user1", groupOf(t, byAssignee, 1))
+
+	// issue 1's assignee_avatars carries the same login, resolved to a non-empty avatar url
+	// through the user's own avatar link — never left for a client to derive from the login.
+	card := cardOf(t, byAssignee, 1)
+	require.Len(t, card.AssigneeAvatars, 1)
+	assert.Equal(t, "user1", card.AssigneeAvatars[0].Login)
+	assert.NotEmpty(t, card.AssigneeAvatars[0].AvatarURL, "the avatar url is resolved, not left blank")
 }
 
 // TestPlanningBoardLabelsAParentGroupWhoseRootIsNotOnTheBoard: a group's label comes from

@@ -19,7 +19,28 @@ const props = defineProps<{
   height: number;
 }>();
 
-const emit = defineEmits<{(e: 'commit', writes: DragWrite[]): void}>();
+const emit = defineEmits<{
+  (e: 'commit', writes: DragWrite[]): void;
+  (e: 'link', payload: {fromIssueId: number; toIssueId: number}): void;
+}>();
+
+// A dependency drag carries its own mime type, distinct from the plain issue id an unscheduled
+// card's drag sets: onRowDrop (RoadmapView) reads only text/plain, so a dependency drop bubbling
+// past this bar never gets mistaken for a schedule drop.
+const DEPENDENCY_MIME = 'application/x-planning-dependency';
+
+function onArrowHandleDragStart(event: DragEvent) {
+  if (!props.canEditIssues) return;
+  event.dataTransfer!.setData(DEPENDENCY_MIME, String(props.bar.issueId));
+  event.dataTransfer!.effectAllowed = 'link';
+}
+
+function onArrowDrop(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes(DEPENDENCY_MIME)) return;
+  event.stopPropagation();
+  const fromIssueId = Number(event.dataTransfer.getData(DEPENDENCY_MIME));
+  if (fromIssueId && fromIssueId !== props.bar.issueId) emit('link', {fromIssueId, toIssueId: props.bar.issueId});
+}
 
 const preview = reactive({startUnix: props.bar.startUnix, endUnix: props.bar.endUnix});
 
@@ -134,6 +155,8 @@ const width = computed(() => Math.max(1, xOf(preview.endUnix, props.origin, prop
     :data-end="isoDate(preview.endUnix)"
     :tabindex="canEditIssues ? 0 : -1"
     @keydown="onKeydown"
+    @dragover.prevent
+    @drop="onArrowDrop"
   >
     <span
       v-if="canEditIssues" data-drag class="tw-w-1.5 tw-flex-shrink-0 tw-cursor-ew-resize"
@@ -153,6 +176,12 @@ const width = computed(() => Math.max(1, xOf(preview.endUnix, props.origin, prop
     <span
       v-if="canEditIssues" data-drag class="tw-w-1.5 tw-flex-shrink-0 tw-cursor-ew-resize"
       @pointerdown="startDrag('resize-end', $event)" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerCancel"
+    />
+    <span
+      v-if="canEditIssues" draggable="true" data-arrow-handle
+      class="tw-absolute tw-right-0 tw-top-0 tw-bottom-0 tw-my-auto tw-w-2 tw-h-2 tw-rounded-full tw-bg-white tw-cursor-crosshair"
+      title="Drag onto another bar to add a dependency"
+      @dragstart="onArrowHandleDragStart"
     />
   </div>
 </template>

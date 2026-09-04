@@ -1,8 +1,13 @@
 <script lang="ts" setup>
-import {ref} from 'vue';
+import {computed, ref} from 'vue';
 
-const props = defineProps<{login: string; size: number}>();
+// avatarUrl, when the caller has it (the API's own resolved assignee_avatars), is used as is —
+// it already honours gravatar and local avatar settings. Without it this falls back to the
+// same constructed link every other caller of this component used before that field existed.
+const props = defineProps<{login: string; size: number; avatarUrl?: string}>();
 const failed = ref(false);
+
+const src = computed(() => props.avatarUrl || `/user/avatar/${props.login}/${props.size}`);
 
 function initials(login: string): string {
   return login.slice(0, 2).toUpperCase();
@@ -11,7 +16,7 @@ function initials(login: string): string {
 
 <template>
   <img
-    v-if="!failed" class="ui avatar image" :src="`/user/avatar/${login}/${size}`"
+    v-if="!failed" class="ui avatar image" :src="src"
     :width="size" :height="size" :alt="login" @error="failed = true"
   >
   <span

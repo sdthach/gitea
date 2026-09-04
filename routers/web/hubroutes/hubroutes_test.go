@@ -130,6 +130,7 @@ var forkPages = []struct {
 			"/issues", "/issues/{issue_id}/milestone", "/issues/{issue_id}/dates",
 			"/issues/{issue_id}/type", "/issues/{issue_id}/fields",
 			"/issues/{issue_id}/estimate", "/issues/{issue_id}/group", "/issues/{issue_id}/parent",
+			"/issues/{issue_id}/dependencies", "/issues/{issue_id}/dependencies/{dependency_id}",
 			"/board/cards", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/group",
 			"/board/columns/{column_id}/order", "/milestones/{milestone_id}/schedule",
 		},

@@ -1,6 +1,18 @@
 import {reactive} from 'vue';
-import {ApiError, getBoard, getProjectViews, getRoadmap, getRoadmapCapacity, createProjectView, deleteProjectView} from './api.ts';
-import type {Board, PlanningProjectConfig, ProjectView, Roadmap, RoadmapCapacity, RoadmapMilestone} from './types.ts';
+import {
+  ApiError, getBoard, getProjectViews, getRoadmap, getRoadmapCapacity, getTimesheet,
+  createProjectView, deleteProjectView,
+} from './api.ts';
+import type {Board, PlanningProjectConfig, ProjectView, Roadmap, RoadmapCapacity, RoadmapMilestone, Timesheet} from './types.ts';
+
+// currentUserLoginFromDom reads the doer's own login off Gitea's own navbar, rather than
+// through the API: the page's own token carries write:repository and write:issue only, not
+// the user scope GET /api/v1/user requires, and this fork's own hub API publishes no "who am
+// I" of its own. Gitea's base chrome (base/head_navbar.tmpl), which every hub page inherits,
+// already renders the signed-in user's login on this attribute for exactly this purpose.
+function currentUserLoginFromDom(): string {
+  return document.querySelector('[data-signed-in-username]')?.getAttribute('data-signed-in-username') ?? '';
+}
 
 export type PlanningError = {
   message: string;
@@ -24,11 +36,17 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     board: null as Board | null,
     roadmap: null as Roadmap | null,
     capacity: null as RoadmapCapacity | null,
+    timesheet: null as Timesheet | null,
+    // currentUserLogin identifies the doer the page's own token belongs to, fetched once —
+    // the Time tab's only use for it is picking its own lane and running timer out of the
+    // repository's shared timesheet.
+    currentUserLogin: '',
     milestones: [] as RoadmapMilestone[],
     views: [] as ProjectView[],
     boardError: null as PlanningError | null,
     roadmapError: null as PlanningError | null,
     capacityError: null as PlanningError | null,
+    timesheetError: null as PlanningError | null,
     viewsError: null as PlanningError | null,
     writeError: null as PlanningError | null,
     loadingBoard: false,
@@ -98,6 +116,21 @@ export function createPlanningStore(config: PlanningProjectConfig) {
   async function loadAll(): Promise<void> {
     await Promise.all([loadBoard(), loadRoadmap(), loadCapacity()]);
     state.overrides = {};
+  }
+
+  // loadTimesheet fails into timesheetError alone, the same isolation loadCapacity gives the
+  // roadmap: a repository whose timesheet read fails still shows the rest of the page.
+  async function loadTimesheet(range: {from?: string; to?: string; userId?: number} = {}): Promise<void> {
+    try {
+      state.timesheet = await getTimesheet(state.config, {repoId: state.config.repoId, ...range});
+      state.timesheetError = null;
+    } catch (err) {
+      state.timesheetError = toError(err);
+    }
+  }
+
+  function loadCurrentUser(): void {
+    if (!state.currentUserLogin) state.currentUserLogin = currentUserLoginFromDom();
   }
 
   async function loadViews(): Promise<void> {
@@ -197,7 +230,7 @@ export function createPlanningStore(config: PlanningProjectConfig) {
 
   return {
     state, loadAll, loadViews, saveView, removeView, applyOptimistic, setOverride, setBoard, setRoadmap,
-    loadRoadmap, loadCapacity, refresh, startAutoRefresh, stopAutoRefresh,
+    loadRoadmap, loadCapacity, loadTimesheet, loadCurrentUser, refresh, startAutoRefresh, stopAutoRefresh,
   };
 }
 

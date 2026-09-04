@@ -40,6 +40,13 @@ export type LabelRef = {
   color: string;
 };
 
+// AssigneeAvatar pairs a card's or bar's assignee login with the avatar url the server already
+// resolved through the user's own avatar link, so a client never re-derives it from the login.
+export type AssigneeAvatar = {
+  login: string;
+  avatar_url: string;
+};
+
 export type TreeEdge = {
   issue_id: number;
   parent_issue_id: number;
@@ -60,6 +67,7 @@ export type Card = {
   type_icon?: string;
   labels: string[];
   assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
   milestone?: string;
   milestone_id?: number;
   is_closed: boolean;
@@ -132,6 +140,7 @@ export type Bar = {
   end_unix: number;
   labels: string[];
   assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
   start_source: StartSource;
   end_source: EndSource;
   end_inferred: boolean;
@@ -155,6 +164,7 @@ export type Unmanaged = {
   suggested_action: string;
   labels: string[];
   assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
   type?: string;
   type_id?: number;
   milestone_id?: number;
@@ -316,6 +326,62 @@ export type RoadmapCapacity = {
   lanes: CapacityLane[];
   sprints: CapacitySprint[];
   sprints_unscheduled: CapacitySprintUnscheduled[];
+  truncated: boolean;
+};
+
+export type TimesheetEntry = {
+  id: number;
+  issue_id: number;
+  number: number;
+  title: string;
+  seconds: number;
+  created_unix: number;
+  editable: boolean;
+};
+
+export type TimesheetDay = {
+  unix: number;
+  seconds: number;
+  entries: TimesheetEntry[];
+};
+
+export type TimesheetLane = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  days: TimesheetDay[];
+  total_seconds: number;
+};
+
+export type TimesheetRow = {
+  user_id: number;
+  login: string;
+  issue_id: number;
+  number: number;
+  title: string;
+  started_unix: number;
+};
+
+export type TimesheetIssueTotal = {issue_id: number; number: number; title: string; seconds: number};
+export type TimesheetUserTotal = {user_id: number; login: string; seconds: number};
+export type TimesheetMilestoneTotal = {milestone_id: number; title: string; seconds: number};
+export type TimesheetTypeTotal = {type_id: number; name: string; seconds: number};
+
+export type TimesheetTotals = {
+  by_issue: TimesheetIssueTotal[];
+  by_user: TimesheetUserTotal[];
+  by_milestone: TimesheetMilestoneTotal[];
+  by_type: TimesheetTypeTotal[];
+};
+
+export type Timesheet = {
+  repo_id: number;
+  from_unix: number;
+  to_unix: number;
+  lanes: TimesheetLane[];
+  running: TimesheetRow[];
+  totals: TimesheetTotals;
   truncated: boolean;
 };
 

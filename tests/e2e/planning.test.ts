@@ -14,6 +14,12 @@ async function apiRepoID(request: APIRequestContext, owner: string, name: string
   return (await response.json()).id;
 }
 
+async function apiUserID(request: APIRequestContext, username: string): Promise<number> {
+  const response = await request.get(`${baseUrl()}/api/v1/users/${username}`, {headers: apiHeaders()});
+  expect(response.ok(), `get user ${username}: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
+}
+
 // The chart draws an issue that is managed: one carrying an assigned type, with a deadline for
 // its end.
 async function apiCreateManagedIssue(request: APIRequestContext, owner: string, name: string, title: string, due: string): Promise<number> {
@@ -87,6 +93,56 @@ async function apiRoadmapBar(request: APIRequestContext, repoID: number, issueID
   const bar = roadmap.bars.find((b) => b.issue_id === issueID);
   expect(bar, `issue ${issueID} has a bar`).toBeTruthy();
   return bar!;
+}
+
+async function apiRoadmapArrows(request: APIRequestContext, repoID: number): Promise<Array<{from_issue_id: number, to_issue_id: number}>> {
+  const response = await request.get(`${baseUrl()}/api/planning/v1/roadmap?repo_id=${repoID}`, {headers: apiHeaders()});
+  expect(response.ok(), `get roadmap: ${await response.text()}`).toBe(true);
+  return (await response.json() as {arrows: Array<{from_issue_id: number, to_issue_id: number}>}).arrows;
+}
+
+// A fresh repository's Issues unit does not have dependencies turned on: the write endpoint
+// refuses dependencies_disabled otherwise.
+async function apiEnableDependencies(request: APIRequestContext, owner: string, name: string) {
+  const response = await request.patch(`${baseUrl()}/api/v1/repos/${owner}/${name}`, {
+    headers: apiHeaders(),
+    data: {has_issues: true, internal_tracker: {enable_issue_dependencies: true}},
+  });
+  expect(response.ok(), `enable dependencies: ${await response.text()}`).toBe(true);
+}
+
+// A fresh repository's Issues unit does not have time tracking turned on either: adding a
+// tracked-time entry, through the API or through the Time tab's own form, is refused otherwise.
+async function apiEnableTimeTracker(request: APIRequestContext, owner: string, name: string) {
+  const response = await request.patch(`${baseUrl()}/api/v1/repos/${owner}/${name}`, {
+    headers: apiHeaders(),
+    data: {has_issues: true, internal_tracker: {enable_time_tracker: true}},
+  });
+  expect(response.ok(), `enable time tracker: ${await response.text()}`).toBe(true);
+}
+
+async function apiAddDependency(request: APIRequestContext, owner: string, name: string, blockedIssueID: number, blockerIssueID: number) {
+  const response = await request.post(`${baseUrl()}/api/planning/v1/issues/${blockedIssueID}/dependencies`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, depends_on_issue_id: blockerIssueID},
+  });
+  expect(response.ok(), `add dependency: ${await response.text()}`).toBe(true);
+}
+
+// The doer Gitea records is whoever the request's own token belongs to, so a headers
+// override lets a caller log time (or run a stopwatch) as a user other than the default
+// admin token's own account.
+async function apiAddTrackedTime(request: APIRequestContext, owner: string, name: string, issueNumber: number, timeSeconds: number, createdISO: string, headers?: Record<string, string>) {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues/${issueNumber}/times`, {
+    headers: headers || apiHeaders(),
+    data: {time: timeSeconds, created: createdISO},
+  });
+  expect(response.ok(), `add tracked time: ${await response.text()}`).toBe(true);
+}
+
+async function apiStartStopwatch(request: APIRequestContext, owner: string, name: string, issueNumber: number, headers?: Record<string, string>) {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues/${issueNumber}/stopwatch/start`, {headers: headers || apiHeaders()});
+  expect(response.ok(), `start stopwatch: ${await response.text()}`).toBe(true);
 }
 
 async function apiCreateMilestone(request: APIRequestContext, owner: string, name: string, title: string, dueOn: string): Promise<number> {
@@ -509,6 +565,73 @@ test('planning board offers a reader no drag handle', async ({page}) => {
   }
 });
 
+test('planning roadmap draws and removes a dependency arrow', async ({page}) => {
+  const repoName = `e2e-planning-arrows-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Arrows e2e');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+
+  const blockerNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'blocker', '2030-03-15T00:00:00Z');
+  const blockedNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'blocked', '2030-03-25T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, blockerNumber, storyTypeID);
+  await apiSetIssueType(page.request, owner, repoName, blockedNumber, storyTypeID);
+  const blockerID = await apiIssueGlobalID(page.request, owner, repoName, blockerNumber);
+  const blockedID = await apiIssueGlobalID(page.request, owner, repoName, blockedNumber);
+  await apiSetIssueDates(page.request, owner, repoName, blockerID, '2030-03-10', '2030-03-15');
+  await apiSetIssueDates(page.request, owner, repoName, blockedID, '2030-03-20', '2030-03-25');
+  await apiEnableDependencies(page.request, owner, repoName);
+  await apiAddDependency(page.request, owner, repoName, blockedID, blockerID);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  const arrow = page.locator(`path[data-arrow="${blockerID}>${blockedID}"]`);
+  await expect(arrow).toBeVisible();
+  // The path is a thin SVG stroke: dispatching straight to the element exercises the click
+  // handler without fighting SVG hit-testing over an orthogonal line's bounding box.
+  await arrow.dispatchEvent('click');
+
+  await expect.poll(async () => (await apiRoadmapArrows(page.request, repoID)).length).toBe(0);
+});
+
+test('planning time view adds and removes an entry', async ({page}) => {
+  const repoName = `e2e-planning-time-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const userID = await apiUserID(page.request, owner);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Time e2e');
+  await apiEnableTimeTracker(page.request, owner, repoName);
+  const issueNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'log time on me', '2099-01-01T00:00:00Z');
+
+  // Gitea's own AddTime persists the CURRENT time regardless of a caller-supplied created
+  // date (its POST response echoes the request, but the row it stores does not), so the
+  // entry this form adds lands on today — the cell this test targets, and the only week
+  // navigating with no at= reads.
+  const today = new Date().toISOString().slice(0, 10);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=time`);
+  const cell = page.locator(`[data-time-cell="${userID}:${today}"]`);
+  await cell.click();
+  await page.locator('form select').selectOption({label: `log time on me #${issueNumber}`});
+  await page.getByPlaceholder('1h 30m').fill('1h 30m');
+  await page.getByRole('button', {name: 'Add'}).click();
+
+  await expect(cell).toContainText('1h 30m');
+  await expect.poll(async () => {
+    const response = await page.request.get(`${baseUrl()}/api/planning/v1/timesheet?repo_id=${repoID}`, {headers: apiHeaders()});
+    const sheet = await response.json() as {lanes: Array<{days: Array<{unix: number, seconds: number}>}>};
+    return sheet.lanes.flatMap((l) => l.days).reduce((sum, d) => sum + d.seconds, 0);
+  }).toBe(5400);
+
+  await cell.getByText('×', {exact: true}).click();
+  await expect(cell).not.toContainText('1h 30m');
+});
+
 test('planning pages screenshot', async ({page}) => {
   const shotsDir = env.PLANNING_SHOTS_DIR;
   test.skip(!shotsDir, 'PLANNING_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
@@ -557,6 +680,22 @@ test('planning pages screenshot', async ({page}) => {
   const milestoneID = await apiCreateMilestone(page.request, owner, repoName, 'Shot sprint', '2030-04-20T00:00:00Z');
   await apiSetMilestoneSchedule(page.request, owner, repoName, milestoneID, '2030-04-06');
 
+  // One dependency arrow, between two bars already visible in the day-scale window.
+  const blockerID = await apiIssueGlobalID(page.request, owner, repoName, numbers[3]);
+  const blockedID = await apiIssueGlobalID(page.request, owner, repoName, numbers[4]);
+  await apiEnableDependencies(page.request, owner, repoName);
+  await apiAddDependency(page.request, owner, repoName, blockedID, blockerID);
+
+  // Two tracked-time entries and a running stopwatch. Gitea's own AddTime persists the
+  // CURRENT time regardless of a caller-supplied created date — its echoed POST response
+  // reflects the request, but the row it actually stores does not — so these land on
+  // today, not on the 2030 window every other shot lives in; the Time tab's own shot
+  // therefore reads the current week rather than at=2030-04-08.
+  await apiEnableTimeTracker(page.request, owner, repoName);
+  await apiAddTrackedTime(page.request, owner, repoName, numbers[3], 3600, '2030-04-08T00:00:00Z', headers);
+  await apiAddTrackedTime(page.request, owner, repoName, numbers[3], 5400, '2030-04-09T00:00:00Z', headers);
+  await apiStartStopwatch(page.request, owner, repoName, numbers[4], headers);
+
   await loginUser(page, owner);
   const base = `/planning/projects/${owner}/${repoName}/${projectID}`;
   // Every bar lives around 2030-04, so at= centers each roadmap shot's window on that range —
@@ -566,6 +705,8 @@ test('planning pages screenshot', async ({page}) => {
     ['board-none.png', `${base}?view=board`],
     ['board-assignee.png', `${base}?view=board&group_by=assignee`],
     ['roadmap-day.png', `${base}?view=roadmap&scale=day&at=2030-04-10`],
+    ['roadmap-arrows.png', `${base}?view=roadmap&scale=day&at=2030-04-10`],
+    ['time.png', `${base}?view=time`],
     ['roadmap-month.png', `${base}?view=roadmap&scale=month&at=2030-04-10`],
     ['roadmap-parent.png', `${base}?view=roadmap&group_by=parent&at=2030-04-10`],
   ];

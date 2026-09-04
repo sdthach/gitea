@@ -67,6 +67,24 @@ func ParseGrouping(s string) (Grouping, bool) {
 	return GroupNone, false
 }
 
+// AssigneeAvatar pairs an assignee's login with the avatar url the caller resolved through the
+// user's own avatar link (u.AvatarLink(ctx)), the same way capacity.go resolves one for a
+// capacity lane — so gravatar and local avatar settings are honoured here too, rather than a
+// client guessing a URL from the login alone.
+type AssigneeAvatar struct {
+	Login     string `json:"login"`
+	AvatarURL string `json:"avatar_url"`
+}
+
+// nonNilAvatars gives a nil slice an empty one in its place, the same contract nonNilStrings
+// carries for Labels and Assignees: the field is always an array, never a JSON null.
+func nonNilAvatars(a []AssigneeAvatar) []AssigneeAvatar {
+	if a == nil {
+		return []AssigneeAvatar{}
+	}
+	return a
+}
+
 // Card is one issue on the board, reduced to what group assignment depends on.
 type Card struct {
 	IssueID  int64  `json:"issue_id"`
@@ -84,6 +102,9 @@ type Card struct {
 	TypeIcon  string   `json:"type_icon,omitempty"`
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
+	// AssigneeAvatars pairs each of Assignees with the avatar url the handler resolved for
+	// them, so a client renders an avatar without deriving a URL of its own from the login.
+	AssigneeAvatars []AssigneeAvatar `json:"assignee_avatars"`
 	// Milestone is the milestone's title, empty when the issue is filed under none;
 	// MilestoneID is its id.
 	Milestone   string `json:"milestone,omitempty"`
@@ -300,6 +321,7 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 					if card.Assignees == nil {
 						card.Assignees = []string{}
 					}
+					card.AssigneeAvatars = nonNilAvatars(card.AssigneeAvatars)
 					lc.Cards = append(lc.Cards, card)
 				}
 			}
@@ -353,7 +375,7 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 		cards = append(cards, Card{
 			IssueID: bar.IssueID, Number: bar.Number, Title: bar.Title, URL: bar.URL,
 			Type: bar.Type, TypeID: bar.TypeID, TypeColor: bar.TypeColor, TypeIcon: bar.TypeIcon,
-			Labels: bar.Labels, Assignees: bar.Assignees, IsClosed: bar.IsClosed,
+			Labels: bar.Labels, Assignees: bar.Assignees, AssigneeAvatars: bar.AssigneeAvatars, IsClosed: bar.IsClosed,
 			ParentIssueID: bar.ParentIssueID, RootIssueID: bar.RootIssueID,
 			Depth: bar.Depth, HasChildren: bar.HasChildren,
 			Fields: bar.Fields, Points: bar.Points,

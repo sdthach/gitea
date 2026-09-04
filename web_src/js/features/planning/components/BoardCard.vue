@@ -14,6 +14,8 @@ function labelColor(name: string): string {
   return labelsByName.value.get(name)?.color ?? '#cccccc';
 }
 
+const avatarByLogin = computed(() => new Map(props.card.assignee_avatars.map((a) => [a.login, a.avatar_url])));
+
 </script>
 
 <template>
@@ -36,7 +38,7 @@ function labelColor(name: string): string {
 
     <div class="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-mt-1 tw-text-text-light tw-text-xs">
       <div class="tw-flex tw-items-center tw-gap-1">
-        <AvatarImg v-for="login in card.assignees" :key="login" :login="login" :size="20"/>
+        <AvatarImg v-for="login in card.assignees" :key="login" :login="login" :size="20" :avatar-url="avatarByLogin.get(login)"/>
       </div>
       <span v-if="card.milestone" class="tw-truncate">{{ card.milestone }}</span>
       <span v-if="card.points">{{ card.points }}pt</span>

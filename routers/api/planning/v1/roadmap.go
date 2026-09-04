@@ -373,7 +373,7 @@ func renderRoadmap(ctx *context.APIContext, repo *repo_model.Repository, opts *i
 	bars := make([]planning_service.Bar, 0, len(issues))
 	drawn := make(map[int64]bool, len(issues))
 	for _, issue := range issues {
-		in := barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])
+		in := barInputFor(ctx, issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])
 		if bar, ok := planning_service.ResolveBar(in); ok {
 			bars = append(bars, bar)
 			drawn[issue.ID] = true
@@ -587,7 +587,7 @@ func roadmapParentRollup(ctx *context.APIContext, repo *repo_model.Repository, s
 			continue
 		}
 		held = append(held, issue)
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(ctx, issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
 			bars = append(bars, bar)
 		}
 	}
@@ -675,7 +675,7 @@ func roadmapRollup(ctx *context.APIContext, repo *repo_model.Repository, state o
 	}
 	children := make([]planning_service.Bar, 0, len(issues))
 	for _, issue := range issues {
-		if bar, ok := planning_service.ResolveBar(barInputFor(issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
+		if bar, ok := planning_service.ResolveBar(barInputFor(ctx, issue, starts[issue.ID], assigned[issue.ID], hier, values[issue.ID])); ok {
 			children = append(children, bar)
 		}
 	}
@@ -755,7 +755,7 @@ type hierarchyMaps struct {
 // barInputFor reduces one issue to what bar resolution depends on. assigned is the issue's own
 // type assignment, zero when it has none; values is its own custom field values, nil when it
 // has none.
-func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType, hier hierarchyMaps, values map[string]any) planning_service.BarInput {
+func barInputFor(ctx *context.APIContext, issue *issues_model.Issue, startedUnix int64, assigned planning_service.AssignedType, hier hierarchyMaps, values map[string]any) planning_service.BarInput {
 	in := planning_service.BarInput{
 		IssueID: issue.ID, Number: issue.Index, Title: issue.Title, URL: issue.Link(),
 		ScheduledStartUnix: startedUnix,
@@ -780,8 +780,10 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)
 	}
+	in.AssigneeAvatars = make([]planning_service.AssigneeAvatar, 0, len(issue.Assignees))
 	for _, assignee := range issue.Assignees {
 		in.Assignees = append(in.Assignees, assignee.Name)
+		in.AssigneeAvatars = append(in.AssigneeAvatars, planning_service.AssigneeAvatar{Login: assignee.Name, AvatarURL: assignee.AvatarLink(ctx)})
 	}
 	if issue.Milestone != nil {
 		in.MilestoneID, in.Milestone = issue.Milestone.ID, issue.Milestone.Name

@@ -128,6 +128,9 @@ type BarInput struct {
 	// definition the board does.
 	Labels    []string
 	Assignees []string
+	// AssigneeAvatars pairs each of Assignees, in the same order, with their resolved avatar
+	// url, so a client renders an avatar for every assignee a bar or unmanaged row lists.
+	AssigneeAvatars []AssigneeAvatar
 	// ScheduledStartUnix is the recorded plan_issue_schedule row, 0 when the issue has none.
 	ScheduledStartUnix int64
 	CreatedUnix        int64
@@ -173,6 +176,9 @@ type Bar struct {
 	// no labels or assignees an empty slice, so the field is always an array, never null.
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
+	// AssigneeAvatars pairs each of Assignees with their resolved avatar url. Never nil, the
+	// same contract Labels and Assignees carry.
+	AssigneeAvatars []AssigneeAvatar `json:"assignee_avatars"`
 	// StartSource and EndSource are on every bar: declaring where an endpoint came from is
 	// the point of the view rather than a detail of it.
 	StartSource StartSource `json:"start_source"`
@@ -210,12 +216,13 @@ type Unmanaged struct {
 	// Labels, Assignees, Type, TypeID, MilestoneID and IsClosed are the same fields a bar
 	// would have carried, published even without a bar so a client can still filter and
 	// group the issues it lists here.
-	Labels      []string `json:"labels"`
-	Assignees   []string `json:"assignees"`
-	Type        string   `json:"type,omitempty"`
-	TypeID      int64    `json:"type_id,omitempty"`
-	MilestoneID int64    `json:"milestone_id,omitempty"`
-	IsClosed    bool     `json:"is_closed"`
+	Labels          []string         `json:"labels"`
+	Assignees       []string         `json:"assignees"`
+	AssigneeAvatars []AssigneeAvatar `json:"assignee_avatars"`
+	Type            string           `json:"type,omitempty"`
+	TypeID          int64            `json:"type_id,omitempty"`
+	MilestoneID     int64            `json:"milestone_id,omitempty"`
+	IsClosed        bool             `json:"is_closed"`
 	// Fields and Points are the same custom field values a bar would have carried.
 	Fields map[string]any `json:"fields"`
 	Points int            `json:"points"`
@@ -252,7 +259,7 @@ func ResolveBar(in BarInput) (Bar, bool) {
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Milestone: in.Milestone, MilestoneID: in.MilestoneID,
 		Type: in.TypeName, TypeID: in.TypeID, TypeColor: in.TypeColor, TypeIcon: in.TypeIcon,
-		Labels: nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees),
+		Labels: nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees), AssigneeAvatars: nonNilAvatars(in.AssigneeAvatars),
 		IsClosed:      in.IsClosed,
 		ParentIssueID: in.ParentIssueID, RootIssueID: in.RootIssueID,
 		Depth: in.Depth, HasChildren: in.HasChildren,
@@ -297,7 +304,7 @@ func UnmanagedFor(in BarInput) Unmanaged {
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Reason:          "this issue has no type, no parent and no start date, so there is no bar to draw",
 		SuggestedAction: "Set a type, a parent or a start date first. A bar drawn from creation alone would present a guess as a schedule.",
-		Labels:          nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees),
+		Labels:          nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees), AssigneeAvatars: nonNilAvatars(in.AssigneeAvatars),
 		Type: in.TypeName, TypeID: in.TypeID, MilestoneID: in.MilestoneID, IsClosed: in.IsClosed,
 		Fields: in.Fields, Points: PointsOf(in.Fields),
 		TimeEstimate: in.TimeEstimate, TrackedSeconds: in.TrackedSeconds,

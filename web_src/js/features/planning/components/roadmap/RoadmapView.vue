@@ -4,16 +4,18 @@ import {PX_PER_DAY, ticks, unixAtX, visibleWindow, weekendDayIndexes, xOf} from 
 import type {Scale} from '../../scale.ts';
 import {isoDate} from '../../drag.ts';
 import type {DragWrite, RowGeometry, RowKind} from '../../drag.ts';
-import {createIssue, setIssueDates, setIssueGroup, setIssueMilestone, setIssueParent, setMilestoneSchedule} from '../../api.ts';
+import {addIssueDependency, createIssue, removeIssueDependency, setIssueDates, setIssueGroup, setIssueMilestone, setIssueParent, setMilestoneSchedule} from '../../api.ts';
 import {groupKey, orderGroupKeys} from '../../groups.ts';
 import {treeOrder, visibleRows} from '../../tree.ts';
 import {hasKnownStart} from '../../schedule.ts';
 import {allowedChildTypes, defaultChildType} from '../../hierarchy.ts';
+import type {ArrowRect} from '../../arrows.ts';
 import type {PlanningStore} from '../../store.ts';
-import type {Bar, IssueType, RoadmapBarModel} from '../../types.ts';
+import type {Arrow, Bar, IssueType, RoadmapBarModel} from '../../types.ts';
 import SvgIcon from '../../../../components/SvgIcon.vue';
 import type {SvgName} from '../../../../svg.ts';
 import RoadmapAxis from './RoadmapAxis.vue';
+import RoadmapArrows from './RoadmapArrows.vue';
 import RoadmapBar from './RoadmapBar.vue';
 import SprintBands from './SprintBands.vue';
 import RollupBracket from './RollupBracket.vue';
@@ -213,6 +215,48 @@ const barRows = computed(() => nonHeaderRows.value
 // + ":" + key), so a parent or milestone bracket resolves instead of missing by key alone.
 const rollupByKey = computed(() => new Map((roadmap.value?.rollups ?? []).map((rollup) => [`${rollup.kind}:${rollup.key}`, rollup])));
 
+// arrowGeometry is every drawn bar's own rect, keyed by issue id — the same rect RoadmapBar
+// itself draws at, so an arrow lands exactly on the bar's edge rather than a second, drifting
+// computation of it.
+const arrowGeometry = computed<Map<string, ArrowRect>>(() => {
+  const map = new Map<string, ArrowRect>();
+  for (const entry of barRows.value) {
+    const bar = entry.row.bar;
+    const x = xOf(bar.startUnix, windowValue.value.origin, scaleValue.value);
+    const width = Math.max(1, xOf(bar.endUnix, windowValue.value.origin, scaleValue.value) - x);
+    map.set(String(bar.issueId), {x, y: AXIS_HEIGHT + entry.row.top + 2, width, height: entry.row.height - 4});
+  }
+  return map;
+});
+
+const arrows = computed<Arrow[]>(() => roadmap.value?.arrows ?? []);
+
+async function onArrowRemove(arrow: Arrow) {
+  const config = props.store.state.config;
+  await props.store.applyOptimistic(
+    () => {
+      const before = roadmap.value;
+      if (!before) return;
+      const kept = before.arrows.filter((a) => a !== arrow);
+      before.arrows = kept;
+      return () => { before.arrows = [...before.arrows, arrow]; };
+    },
+    async () => {
+      const result = await removeIssueDependency(config, arrow.to_issue_id, arrow.from_issue_id, config.repoFullName);
+      props.store.setRoadmap(result);
+    },
+  );
+}
+
+async function onArrowLink(payload: {fromIssueId: number; toIssueId: number}) {
+  if (!props.canEditIssues) return;
+  const config = props.store.state.config;
+  await props.store.applyOptimistic(() => {}, async () => {
+    const result = await addIssueDependency(config, payload.toIssueId, {repo: config.repoFullName, depends_on_issue_id: payload.fromIssueId});
+    props.store.setRoadmap(result);
+  });
+}
+
 function capacityLane(login: string) {
   return capacity.value?.lanes.find((lane) => lane.login === login);
 }
@@ -369,6 +413,16 @@ function onRowDrop(row: LayoutRow, event: DragEvent) {
   });
 }
 
+// avatarByLogin pools every bar's own assignee_avatars, so a lane header can look one up by
+// login without a second fetch — the same avatar url the bars in that lane already carry.
+const avatarByLogin = computed(() => {
+  const map = new Map<string, string>();
+  for (const bar of bars.value) {
+    for (const avatar of bar.assignee_avatars) map.set(avatar.login, avatar.avatar_url);
+  }
+  return map;
+});
+
 const unmanaged = computed(() => roadmap.value?.unmanaged ?? []);
 const unscheduledBars = computed(() => bars.value.filter((bar) => bar.start_source === 'issue_created')
   .map((bar) => ({issue_id: bar.issue_id, number: bar.number, title: bar.title, url: bar.url})));
@@ -410,7 +464,7 @@ const unscheduledBars = computed(() => bars.value.filter((bar) => bar.start_sour
               role="button" :aria-label="collapsedSet.has(row.issueId!) ? 'Expand' : 'Collapse'"
               @click="emit('toggle-collapse', row.issueId!)"
             ><svg-icon :name="(collapsedSet.has(row.issueId!) ? 'octicon-chevron-right' : 'octicon-chevron-down') as SvgName"/></span>
-            <AvatarImg v-if="row.isHeader && row.kind === 'assignee' && row.key" :login="row.key" :size="16"/>
+            <AvatarImg v-if="row.isHeader && row.kind === 'assignee' && row.key" :login="row.key" :size="16" :avatar-url="avatarByLogin.get(row.key)"/>
             <span class="tw-truncate">{{ row.label }}<span v-if="row.isHeader" class="tw-text-text-light"> ({{ row.count }})</span></span>
           </div>
         </div>
@@ -456,11 +510,17 @@ const unscheduledBars = computed(() => bars.value.filter((bar) => bar.start_sour
             </form>
           </div>
 
+          <RoadmapArrows
+            :arrows="arrows" :geometry="arrowGeometry" :width-px="contentWidth" :height-px="AXIS_HEIGHT + totalHeight"
+            :can-edit-issues="canEditIssues" @remove="onArrowRemove"
+          />
+
           <RoadmapBar
             v-for="entry in barRows" :key="entry.row.bar.issueId"
             :bar="entry.row.bar" :origin="windowValue.origin" :scale="scaleValue" :row-geometry="rowGeometry"
             :row-index="entry.rowIndex" :can-edit-issues="canEditIssues" :top="AXIS_HEIGHT + entry.row.top + 2" :height="entry.row.height - 4"
             @commit="(writes) => onBarCommit(entry.row.bar.issueId, writes)"
+            @link="onArrowLink"
           />
         </div>
       </div>
