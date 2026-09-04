@@ -33,6 +33,7 @@
 					</label>
 					<input type="date" name="deadline" class="tw-w-auto" value="{{.deadline}}" placeholder="{{ctx.Locale.Tr "repo.issues.due_date_form"}}">
 				</div>
+				{{template "planning/milestone_start" $}}
 				<div class="field">
 					<label>{{ctx.Locale.Tr "repo.milestones.desc"}}</label>
 					{{template "shared/combomarkdowneditor" (dict

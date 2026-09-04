@@ -1,0 +1,8 @@
+{{if not .Issue.IsPull}}
+<div class="divider"></div>
+<span class="text"><strong>Planning</strong></span>
+{{/* web_src/js/features/planning/issue-sidebar.ts fetches GET /api/planning/v1/issues/{id}, which
+	always answers; the writes below 403 when the planning pages are disabled in settings, but
+	this fragment and its read render regardless. */}}
+<div class="issue-sidebar-planning" data-global-init="initPlanningIssueSidebar" data-issue-id="{{.Issue.ID}}" data-can-write="{{.HasIssuesOrPullsWritePermission}}" data-post-base="{{AppSubUrl}}/planning"></div>
+{{end}}

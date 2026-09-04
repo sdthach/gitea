@@ -40,7 +40,10 @@ var planningPages = []forkPage{
 }
 
 var planningFragments = map[string]bool{
-	"swimlanes.tmpl": true,
+	"swimlanes.tmpl":       true,
+	"issue_sidebar.tmpl":   true,
+	"issue_type_icon.tmpl": true,
+	"milestone_start.tmpl": true,
 }
 
 var planningGates = map[string]func(*context.Context){

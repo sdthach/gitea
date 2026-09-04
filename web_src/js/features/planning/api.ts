@@ -1,12 +1,23 @@
 import {request} from '../../modules/fetch.ts';
 import type {
-  Board, IssueFacets, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity, Timesheet,
+  Board, IssueFacets, IssueTypeAssignment, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity, Timesheet,
 } from './types.ts';
 
 export type PlanningApiConfig = {
   apiBase: string;
   token: string;
 };
+
+// v1BasePath is where routers/api/planning/v1 mounts, spelled the way routers/init.go spells
+// it. A page outside /planning/* (an issue's own sidebar, an issue list) has no server-rendered
+// APIBase of its own, so it builds one from this and window.config.appSubUrl.
+const v1BasePath = '/api/planning/v1';
+
+// sessionConfig is a read-only config for a page that authenticates with the browser session
+// rather than a minted page token: GET needs no token header (see call, below).
+export function sessionConfig(): PlanningApiConfig {
+  return {apiBase: `${window.config.appSubUrl}${v1BasePath}`, token: ''};
+}
 
 // paths is every operation path the planning page fetches, spelled exactly as
 // docs/planning/openapi.json spells them, so a page names the endpoint it is a client of
@@ -19,6 +30,8 @@ export const paths = {
   projectViews: '/projects/{project_id}/views',
   projectView: '/projects/{project_id}/views/{view_id}',
   issues: '/issues',
+  issue: '/issues/{issue_id}',
+  issueTypeAssignments: '/issue-type-assignments',
   issueMilestone: '/issues/{issue_id}/milestone',
   issueDates: '/issues/{issue_id}/dates',
   issueType: '/issues/{issue_id}/type',
@@ -117,6 +130,17 @@ export function getRoadmap(config: PlanningApiConfig, opts: {repoId: number; gro
     parent_issue_id: opts.parentIssueId, milestone_id: opts.milestoneId,
   });
   return call<Roadmap>(config, `${paths.roadmap}?${qs}`);
+}
+
+export function getIssueFacets(config: PlanningApiConfig, issueId: number): Promise<IssueFacets> {
+  return call<IssueFacets>(config, withParam(paths.issue, 'issue_id', issueId));
+}
+
+// getIssueTypeAssignments batches GET /issue-type-assignments: at most 200 issue ids per call,
+// enforced by the caller (see batchByRepo in type-icons.ts), not by this function.
+export function getIssueTypeAssignments(config: PlanningApiConfig, repoId: number, issueIds: number[]): Promise<IssueTypeAssignment[]> {
+  const qs = query({repo_id: repoId, issue_ids: issueIds.join(',')});
+  return call<IssueTypeAssignment[]>(config, `${paths.issueTypeAssignments}?${qs}`);
 }
 
 export function getProjects(config: PlanningApiConfig, repoId?: number): Promise<ProjectsPage> {

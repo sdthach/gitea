@@ -446,3 +446,14 @@ export type IssueFacets = {
   types: IssueType[];
   values: FieldValues;
 };
+
+// IssueTypeAssignment is one row GET /issue-type-assignments answers with: icon_svg is
+// pre-rendered, so a batch caller needs no client-side icon registry of its own.
+export type IssueTypeAssignment = {
+  issue_id: number;
+  type_id: number;
+  name: string;
+  color: string;
+  icon: string;
+  icon_svg: string;
+};

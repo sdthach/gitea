@@ -1,0 +1,6 @@
+{{if .PageIsEditMilestone}}
+{{/* The milestone's own id is not among this page's Go data (upstream keeps only the
+	title/deadline/content strings), so web_src/js/features/planning/milestone-start.ts reads it
+	from this request's own URL, ".../milestones/{id}/edit", rather than adding it upstream. */}}
+<div class="field" data-global-init="initPlanningMilestoneStart" data-repo-id="{{.Repository.ID}}" data-post-base="{{AppSubUrl}}/planning"></div>
+{{end}}

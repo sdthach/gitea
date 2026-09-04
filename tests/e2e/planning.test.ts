@@ -632,6 +632,64 @@ test('planning time view adds and removes an entry', async ({page}) => {
   await expect(cell).not.toContainText('1h 30m');
 });
 
+test('planning issue sidebar sets a type then a parent', async ({page}) => {
+  const repoName = `e2e-planning-sidebar-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const typeID = await apiIssueTypeID(page.request, repoID, 'task');
+  // SetIssueParent ranks by type: the parent's must outrank the child's, so the parent needs
+  // one that outranks task (rank 4) — epic (rank 1) does, and both are instance-seeded.
+  const parentTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+  const {index: parentNumber} = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'sidebar parent'});
+  const {index: childNumber} = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'sidebar child'});
+  const childID = await apiIssueGlobalID(page.request, owner, repoName, childNumber);
+  await apiSetIssueType(page.request, owner, repoName, parentNumber, parentTypeID);
+
+  await page.goto(`/${owner}/${repoName}/issues/${childNumber}`);
+  const sidebar = page.locator('.issue-sidebar-planning');
+  await expect(sidebar).toBeVisible();
+
+  await sidebar.getByLabel('Type').selectOption(String(typeID));
+  await sidebar.getByRole('button', {name: 'Save type'}).click();
+  await expect(sidebar).toContainText('task');
+
+  await sidebar.getByLabel('Parent issue').fill(String(parentNumber));
+  await sidebar.getByRole('button', {name: 'Save parent'}).click();
+  await expect(sidebar.getByRole('link', {name: `#${parentNumber} sidebar parent`})).toBeVisible();
+
+  // The sidebar's own DOM and the API it reads from must agree — a sidebar that reads
+  // stale or a different endpoint would still "look right" without this check.
+  const facetsResponse = await page.request.get(`${baseUrl()}/api/planning/v1/issues/${childID}`, {headers: apiHeaders()});
+  const facets = await facetsResponse.json() as {type: {name: string} | null; parent: {number: number} | null};
+  expect(facets.type?.name).toBe('task');
+  expect(facets.parent?.number).toBe(parentNumber);
+});
+
+test('planning milestone form sets a start', async ({page}) => {
+  const repoName = `e2e-planning-milestone-form-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const milestoneID = await apiCreateMilestone(page.request, owner, repoName, 'sidebar sprint', '2030-06-01T00:00:00Z');
+
+  await page.goto(`/${owner}/${repoName}/milestones/${milestoneID}/edit`);
+  const field = page.locator('[data-global-init="initPlanningMilestoneStart"]');
+  await expect(field).toBeVisible();
+  await field.getByLabel('Start date').fill('2030-05-01');
+  await field.getByRole('button', {name: 'Save start'}).click();
+
+  await expect.poll(async () => {
+    const response = await page.request.get(`${baseUrl()}/api/planning/v1/roadmap?repo_id=${repoID}`, {headers: apiHeaders()});
+    const roadmap = await response.json() as {milestones?: Array<{milestone_id: number, start_unix: number}>};
+    return roadmap.milestones?.find((m) => m.milestone_id === milestoneID)?.start_unix;
+  }).toBe(Math.floor(Date.UTC(2030, 4, 1) / 1000));
+});
+
 test('planning pages screenshot', async ({page}) => {
   const shotsDir = env.PLANNING_SHOTS_DIR;
   test.skip(!shotsDir, 'PLANNING_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
@@ -714,4 +772,39 @@ test('planning pages screenshot', async ({page}) => {
     await page.goto(url);
     await page.screenshot({path: `${shotsDir}/${file}`, fullPage: true});
   }
+});
+
+// One browser is enough for a static screenshot; running it on both would just double the
+// wait for two identical files.
+test('planning issue and milestone screenshots', async ({page}, testInfo) => {
+  const shotsDir = env.PLANNING_SHOTS_DIR;
+  test.skip(!shotsDir, 'PLANNING_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
+  test.skip(testInfo.project.name !== 'firefox', 'isolated on firefox, see the comment above'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
+
+  const repoName = `e2e-planning-sidebar-shots-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const typeID = await apiIssueTypeID(page.request, repoID, 'task');
+  const parentTypeID = await apiIssueTypeID(page.request, repoID, 'epic'); // must outrank the child's type
+  const {index: parentNumber} = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'shots parent'});
+  const {index: childNumber} = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'shots child'});
+  await apiSetIssueType(page.request, owner, repoName, childNumber, typeID);
+  await apiSetIssueType(page.request, owner, repoName, parentNumber, parentTypeID);
+  await apiSetIssueParent(page.request, owner, repoName, childNumber, parentNumber);
+  const milestoneID = await apiCreateMilestone(page.request, owner, repoName, 'shots sprint', '2030-06-01T00:00:00Z');
+
+  await page.goto(`/${owner}/${repoName}/issues/${childNumber}`);
+  await expect(page.locator('.issue-sidebar-planning')).toContainText('task');
+  await page.screenshot({path: `${shotsDir}/issue-sidebar.png`, fullPage: true});
+
+  await page.goto(`/${owner}/${repoName}/issues`);
+  await expect(page.locator('.planning-type-icon svg').first()).toBeVisible();
+  await page.screenshot({path: `${shotsDir}/issue-list-icons.png`, fullPage: true});
+
+  await page.goto(`/${owner}/${repoName}/milestones/${milestoneID}/edit`);
+  await expect(page.locator('[data-global-init="initPlanningMilestoneStart"]')).toBeVisible();
+  await page.screenshot({path: `${shotsDir}/milestone-edit.png`, fullPage: true});
 });

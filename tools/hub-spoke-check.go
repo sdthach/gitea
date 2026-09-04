@@ -35,15 +35,18 @@ type spoke struct {
 }
 
 var spokes = map[string]spoke{
-	"routers/init.go":                  {Budget: 6, Why: "hub mount and two API namespace mounts, each one call plus its import"},
-	"routers/web/web.go":               {Budget: 2, Why: "web route registration beside /milestones, one call plus its import"},
-	"models/secret/secret.go":          {Budget: 2, Why: "secret narrowing tail call in GetSecretsOfTask, one call plus its import"},
-	"templates/base/head_navbar.tmpl":  {Budget: 1, Why: "one navigation entry delegating to a hub template"},
-	"templates/repo/release/list.tmpl": {Budget: 1, Why: "one line delegating to a hub template that badges each release with the environments holding it"},
-	"templates/projects/view.tmpl":     {Budget: 2, Why: "one swimlane block delegating to a hub template, plus the blank line separating it"},
-	"routers/web/repo/projects.go":     {Budget: 2, Why: "the swimlane feature flag in the project page's data, one assignment plus its import"},
-	"models/unit/unit.go":              {Budget: 1, Why: "at most one unit enum entry"},
-	"web_src/js/index.ts":              {Budget: 1, Why: "one import of the fork's bundled planning and deployments features"},
+	"routers/init.go":                                {Budget: 6, Why: "hub mount and two API namespace mounts, each one call plus its import"},
+	"routers/web/web.go":                             {Budget: 2, Why: "web route registration beside /milestones, one call plus its import"},
+	"models/secret/secret.go":                        {Budget: 2, Why: "secret narrowing tail call in GetSecretsOfTask, one call plus its import"},
+	"templates/base/head_navbar.tmpl":                {Budget: 1, Why: "one navigation entry delegating to a hub template"},
+	"templates/repo/release/list.tmpl":               {Budget: 1, Why: "one line delegating to a hub template that badges each release with the environments holding it"},
+	"templates/projects/view.tmpl":                   {Budget: 2, Why: "one swimlane block delegating to a hub template, plus the blank line separating it"},
+	"routers/web/repo/projects.go":                   {Budget: 2, Why: "the swimlane feature flag in the project page's data, one assignment plus its import"},
+	"models/unit/unit.go":                            {Budget: 1, Why: "at most one unit enum entry"},
+	"web_src/js/index.ts":                            {Budget: 2, Why: "one import each for the fork's bundled planning and deployments features"},
+	"templates/repo/issue/view_content/sidebar.tmpl": {Budget: 1, Why: "one line delegating to the planning sidebar fragment"},
+	"templates/shared/issuelist.tmpl":                {Budget: 1, Why: "one line delegating to the planning type-icon fragment"},
+	"templates/repo/issue/milestone_new.tmpl":        {Budget: 1, Why: "one line delegating to the planning milestone-start fragment"},
 	// The other spokes are tail calls, which are one statement and so one line. This one is
 	// a GUARD inside CreateTaskForRunner's candidate loop: it has to skip the job, and gofmt
 	// renders `if cond { continue }` as three lines (measured: gofmt expands a one-line if
