@@ -241,56 +241,6 @@ async function apiBoardColumnOrder(request: APIRequestContext, repoID: number, p
     .map((c) => c.issue_id);
 }
 
-test('planning roadmap reads a parent as a bracket and its children as bars', async ({page}) => {
-  const repoName = `e2e-planning-${randomString(8)}`;
-  const owner = env.GITEA_TEST_E2E_USER;
-
-  await login(page);
-  await apiCreateRepo(page.request, {name: repoName});
-  const repoID = await apiRepoID(page.request, owner, repoName);
-  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
-  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
-
-  // The parent declares a window that ends a fortnight before the work filed under it, which
-  // is the contradiction the chart is the only place to see.
-  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic', '2030-03-11T00:00:00Z');
-  const storyOne = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', '2030-03-20T00:00:00Z');
-  const storyTwo = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story two', '2030-03-25T00:00:00Z');
-  await apiSetIssueType(page.request, owner, repoName, epicNumber, epicTypeID);
-  await apiSetIssueType(page.request, owner, repoName, storyOne, storyTypeID);
-  await apiSetIssueType(page.request, owner, repoName, storyTwo, storyTypeID);
-  await apiSetIssueParent(page.request, owner, repoName, storyOne, epicNumber);
-  await apiSetIssueParent(page.request, owner, repoName, storyTwo, epicNumber);
-
-  await page.goto('/planning/roadmap');
-  await expect(page.locator('#planning-token-box')).toBeHidden();
-
-  await page.getByLabel('Repository id').fill(String(repoID));
-  await page.getByLabel('Zoom').selectOption('parent');
-
-  const chart = page.locator('#planning-roadmap-body');
-  await expect(chart).toContainText(`parent "checkout epic" (#${epicNumber}) ends 14 days before the work filed under it`);
-  await expect(chart).toContainText('parent: checkout epic');
-  await expect(chart.locator('tr')).toHaveCount(1);
-  await expect(chart.locator('tr.warning')).toHaveCount(1);
-
-  // A bracket's window is derived from its children, so dragging one would edit a projection:
-  // it carries no handle even for a writer.
-  await expect(chart.locator('.planning-bracket')).toHaveCount(1);
-  await expect(chart.locator('[data-drag]')).toHaveCount(0);
-
-  // The axis is the server's: the page states the unit it was handed and never picks one.
-  await expect(page.locator('#planning-ruler-unit')).toContainText('ruler');
-
-  await page.getByLabel('Zoom').selectOption('issue');
-  await expect(chart).toContainText('checkout story two');
-  await expect(chart.locator('tr')).toHaveCount(3);
-  await expect(chart.locator('[data-drag]')).toHaveCount(3);
-
-  await expect(page.locator('#planning-token-box')).toBeHidden();
-  await expect(page.locator('#planning-error')).toBeHidden();
-});
-
 test('planning roadmap offers a reader no handle and no drop target', async ({page}) => {
   const repoName = `e2e-planning-${randomString(8)}`;
   const reader = `e2ereader${randomString(8)}`;

@@ -59,6 +59,16 @@ func TestPlanningProjectPage(t *testing.T) {
 	readerBody := resp.Body.String()
 	assert.Contains(t, readerBody, `"canWrite":false`)
 	assert.Contains(t, readerBody, `"canEditIssues":false`)
+
+	// The board and roadmap no longer render on their own: both URLs now redirect to the
+	// project page's own views.
+	req = NewRequest(t, "GET", "/planning/board")
+	resp = MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "/planning/projects?view=board", resp.Header().Get("Location"))
+
+	req = NewRequest(t, "GET", "/planning/roadmap")
+	resp = MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "/planning/projects?view=roadmap", resp.Header().Get("Location"))
 }
 
 // TestPlanningAPIAcceptsTheBrowserSessionForReads: a page's own JS calls the API with

@@ -10,18 +10,6 @@ import (
 
 var planningPages = []forkPage{
 	{
-		dir:       "planning",
-		template:  "board.tmpl",
-		endpoints: []string{"/board", "/board/cards/{issue_id}/column", "/board/cards/{issue_id}/group"},
-		fetch:     "/board?",
-	},
-	{
-		dir:       "planning",
-		template:  "roadmap.tmpl",
-		endpoints: []string{"/roadmap"},
-		fetch:     "/roadmap?",
-	},
-	{
 		dir:      "planning",
 		template: "project.tmpl",
 		endpoints: []string{
@@ -56,9 +44,7 @@ var planningFragments = map[string]bool{
 }
 
 var planningGates = map[string]func(*context.Context){
-	"/planning/board":    hub_web.PlanningPagesEnabled,
-	"/planning/roadmap":  hub_web.PlanningPagesEnabled,
-	"/planning/projects": hub_web.PlanningPagesEnabled,
+	"/planning/projects":                             hub_web.PlanningPagesEnabled,
 	"/planning/projects/{owner}/{repo}/{project_id}": hub_web.PlanningPagesEnabled,
 	"/planning/settings/{owner}":                     hub_web.PlanningPagesEnabled,
 	"/planning/settings/{owner}/{repo}":              hub_web.PlanningPagesEnabled,
@@ -73,7 +59,6 @@ var planningGates = map[string]func(*context.Context){
 var planningPatterns = []string{
 	"/planning/projects", "/planning/projects/{owner}/{repo}/{project_id}",
 	"/planning/settings/{owner}", "/planning/settings/{owner}/{repo}",
-	"/planning/board", "/planning/roadmap",
 	"/planning/issues/{id}/schedule", "/planning/issues/{id}/type", "/planning/issues/{id}/parent",
 	"/planning/issues/{id}/fields", "/planning/issues/{id}/estimate", "/planning/milestones/{id}/schedule",
 }

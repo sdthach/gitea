@@ -129,14 +129,12 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 			require.NoError(t, err)
 			body := string(raw)
 
-			checked := body
-			if page.client != "" {
-				clientRaw, err := os.ReadFile(filepath.Join(repoRoot(t), page.client))
-				require.NoError(t, err)
-				checked = string(clientRaw)
-				assert.Regexp(t, `data-global-init="init[A-Za-z]+"`, body,
-					"the page mounts the bundled feature that is the API's actual client")
-			}
+			require.NotEmpty(t, page.client, "%s must be a client of a bundled feature", page.template)
+			clientRaw, err := os.ReadFile(filepath.Join(repoRoot(t), page.client))
+			require.NoError(t, err)
+			checked := string(clientRaw)
+			assert.Regexp(t, `data-global-init="init[A-Za-z]+"`, body,
+				"the page mounts the bundled feature that is the API's actual client")
 			assert.Contains(t, checked, page.fetch, "the page reads its rows over the API")
 			assert.Contains(t, checked, "suggested_action", "the page surfaces the API's suggested next action")
 
@@ -147,23 +145,13 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 			for _, endpoint := range page.endpoints {
 				assert.True(t, published[endpoint],
 					"the page's endpoint %s must be a published operation", endpoint)
-				// The template has to name it, so an endpoint listed here but no longer
-				// fetched is caught rather than standing as a claim about a dead page. A page
-				// may name the documented path verbatim, as board.tmpl does, or interpolate the
-				// repository into it, as matrix.tmpl does; either one names the operation.
-				if page.client != "" {
-					// A client's own path table spells every endpoint as a complete quoted
-					// literal (docs/planning/openapi.json's own path, verbatim), so requiring
-					// the closing quote catches a renamed literal that a plain substring check
-					// would miss against a sibling endpoint sharing the same prefix, such as
-					// /issues/{issue_id}/estimate for /issues/{issue_id}.
-					assert.True(t, quotedLiteral(checked, endpoint),
-						"the client %s must name the exact endpoint %s as a quoted literal, not merely contain it as a sibling path's prefix", page.client, endpoint)
-					continue
-				}
-				interpolated := strings.ReplaceAll(strings.ReplaceAll(endpoint, "{owner}", "${row.repo_full_name}"), "/{repo}", "")
-				assert.True(t, strings.Contains(checked, endpoint) || strings.Contains(checked, interpolated),
-					"the page fetches %s", endpoint)
+				// A client's own path table spells every endpoint as a complete quoted
+				// literal (docs/planning/openapi.json's own path, verbatim), so requiring
+				// the closing quote catches a renamed literal that a plain substring check
+				// would miss against a sibling endpoint sharing the same prefix, such as
+				// /issues/{issue_id}/estimate for /issues/{issue_id}.
+				assert.True(t, quotedLiteral(checked, endpoint),
+					"the client %s must name the exact endpoint %s as a quoted literal, not merely contain it as a sibling path's prefix", page.client, endpoint)
 			}
 		})
 	}
@@ -189,6 +177,7 @@ var redirectPatterns = []string{
 	"/delivery/environments/{id}/edit", "/delivery/environments/{name}/approvals",
 	"/delivery/grid", "/delivery/promote", "/delivery/approvals", "/delivery/ci",
 	"/delivery/board", "/delivery/timeline",
+	"/planning/board", "/planning/roadmap",
 }
 
 func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
@@ -250,6 +239,8 @@ func TestOldURLsRedirect(t *testing.T) {
 		{pattern: "/delivery/ci", wantLocation: "/deployments/insights"},
 		{pattern: "/delivery/board", wantLocation: "/planning/board"},
 		{pattern: "/delivery/timeline", wantLocation: "/planning/roadmap"},
+		{pattern: "/planning/board", wantLocation: "/planning/projects?view=board"},
+		{pattern: "/planning/roadmap", wantLocation: "/planning/projects?view=roadmap"},
 	}
 	for _, c := range cases {
 		t.Run(c.pattern, func(t *testing.T) {

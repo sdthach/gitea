@@ -71,21 +71,21 @@ func TestForkTemplatesParse(t *testing.T) {
 	}
 }
 
-// TestNoForkTemplateCarriesAnInlineScript: every deployments page is a bundled Vue island now,
-// so no template under it needs the CSP nonce an inline script would require. Planning is not
-// scanned yet: board.tmpl, roadmap.tmpl and swimlanes.tmpl still carry one apiece.
+// TestNoForkTemplateCarriesAnInlineScript: every fork page is a bundled Vue island now, so no
+// template under any fork directory needs the CSP nonce an inline script would require.
 func TestNoForkTemplateCarriesAnInlineScript(t *testing.T) {
-	dir := filepath.Join(templateDir(t), "deployments")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	require.NotEmpty(t, entries)
-
 	templates := 0
-	for _, entry := range entries {
-		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+	for _, dir := range forkTemplateDirs(t) {
+		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
-		templates++
-		assert.NotContains(t, string(raw), "<script", "%s carries an inline script", entry.Name())
+		require.NotEmpty(t, entries)
+
+		for _, entry := range entries {
+			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+			require.NoError(t, err)
+			templates++
+			assert.NotContains(t, string(raw), "<script", "%s carries an inline script", entry.Name())
+		}
 	}
 	assert.Positive(t, templates, "the scan must actually have found the fork's templates")
 }

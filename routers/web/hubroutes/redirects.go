@@ -32,6 +32,8 @@ var redirectTable = []struct {
 	{"/delivery/ci", func(*context.Context) string { return "/deployments/insights" }},
 	{"/delivery/board", func(*context.Context) string { return "/planning/board" }},
 	{"/delivery/timeline", func(*context.Context) string { return "/planning/roadmap" }},
+	{"/planning/board", func(*context.Context) string { return "/planning/projects?view=board" }},
+	{"/planning/roadmap", func(*context.Context) string { return "/planning/projects?view=roadmap" }},
 }
 
 // registerRedirects mounts every entry of redirectTable as a 303 to its replacement, query

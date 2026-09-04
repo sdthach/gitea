@@ -67,10 +67,7 @@ func TestPlanningSwimlanesAreGatedOnTheFlag(t *testing.T) {
 	withHubConfig(t, "[planning]\nENABLE_SWIMLANES = true\n")
 	req = NewRequest(t, "GET", "/user2/repo1/projects/1")
 	body = session.MakeRequest(t, req, http.StatusOK).Body.String()
-	assert.Contains(t, body, "planning-swimlane-grouping", "with it on the grouping selector renders")
-	assert.Contains(t, body, `data-repo-id="1"`, "and names the repository the board API is asked about")
-	assert.Contains(t, body, `data-project-id="1"`)
-	for _, grouping := range []string{"type", "parent", "assignee"} {
-		assert.Contains(t, body, `value="`+grouping+`"`, "the selector offers the grouping %q", grouping)
-	}
+	assert.Contains(t, body, `href="/planning/projects/user2/repo1/1?view=board"`,
+		"with it on the fragment links to the project page's board view")
+	assert.Contains(t, body, "Open in Projects board")
 }
