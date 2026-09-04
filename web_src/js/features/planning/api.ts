@@ -1,6 +1,6 @@
 import {request} from '../../modules/fetch.ts';
 import type {
-  Board, IssueFacets, ProjectsPage, ProjectViewList, Roadmap,
+  Board, IssueFacets, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity,
 } from './types.ts';
 
 export type PlanningApiConfig = {
@@ -14,18 +14,23 @@ export type PlanningApiConfig = {
 export const paths = {
   board: '/board',
   roadmap: '/roadmap',
+  roadmapCapacity: '/roadmap/capacity',
   projects: '/projects',
   projectViews: '/projects/{project_id}/views',
   projectView: '/projects/{project_id}/views/{view_id}',
+  issues: '/issues',
   issueMilestone: '/issues/{issue_id}/milestone',
   issueDates: '/issues/{issue_id}/dates',
   issueType: '/issues/{issue_id}/type',
   issueFields: '/issues/{issue_id}/fields',
   issueEstimate: '/issues/{issue_id}/estimate',
+  issueGroup: '/issues/{issue_id}/group',
+  issueParent: '/issues/{issue_id}/parent',
   boardCards: '/board/cards',
   boardCardColumn: '/board/cards/{issue_id}/column',
   boardCardGroup: '/board/cards/{issue_id}/group',
   boardColumnOrder: '/board/columns/{column_id}/order',
+  milestoneSchedule: '/milestones/{milestone_id}/schedule',
 };
 
 function withParam(template: string, name: string, value: number): string {
@@ -157,4 +162,30 @@ export function orderColumn(config: PlanningApiConfig, columnId: number, body: {
 
 export function addCard(config: PlanningApiConfig, body: {repo: string; project_id: number; column_id: number; title: string; group_by?: string; group?: string; type_id?: number}): Promise<Board> {
   return call<Board>(config, paths.boardCards, {method: 'POST', body});
+}
+
+export function getRoadmapCapacity(config: PlanningApiConfig, opts: {repoId: number; from?: string; to?: string}): Promise<RoadmapCapacity> {
+  const qs = query({repo_id: opts.repoId, from: opts.from, to: opts.to});
+  return call<RoadmapCapacity>(config, `${paths.roadmapCapacity}?${qs}`);
+}
+
+// setIssueGroup is the roadmap's own vertical drag: it edits the grouping field directly through
+// /issues/{issue_id}/group, distinct from the board's own card group move.
+export function setIssueGroup(config: PlanningApiConfig, issueId: number, body: {repo: string; group_by: string; group?: string}): Promise<Roadmap> {
+  return call<Roadmap>(config, withParam(paths.issueGroup, 'issue_id', issueId), {method: 'POST', body});
+}
+
+export function setIssueParent(config: PlanningApiConfig, issueId: number, body: {repo: string; parent_issue_id: number}): Promise<IssueFacets> {
+  return call<IssueFacets>(config, withParam(paths.issueParent, 'issue_id', issueId), {method: 'PUT', body});
+}
+
+export function createIssue(config: PlanningApiConfig, body: {
+  repo: string; title: string; description?: string; start?: string; end?: string;
+  type_id?: number; parent_issue_id?: number; milestone_id?: number; group_by?: string; group?: string;
+}): Promise<Roadmap> {
+  return call<Roadmap>(config, paths.issues, {method: 'POST', body});
+}
+
+export function setMilestoneSchedule(config: PlanningApiConfig, milestoneId: number, body: {repo: string; start: string}): Promise<MilestoneSchedule> {
+  return call<MilestoneSchedule>(config, withParam(paths.milestoneSchedule, 'milestone_id', milestoneId), {method: 'PUT', body});
 }

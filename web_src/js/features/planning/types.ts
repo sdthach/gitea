@@ -238,6 +238,87 @@ export type Roadmap = {
   truncated: boolean;
 };
 
+export type CapacityDay = {
+  unix: number;
+  load_hours: number;
+  available_hours: number;
+  over: boolean;
+};
+
+export type CapacityUnestimated = {
+  issue_id: number;
+  number: number;
+  title: string;
+};
+
+export type CapacityLane = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  hours_per_day: number;
+  utilization: number;
+  workdays: number;
+  total_load_hours: number;
+  total_available_hours: number;
+  over: boolean;
+  days: CapacityDay[];
+  unestimated: CapacityUnestimated[];
+};
+
+export type CapacitySprintLane = {
+  user_id: number;
+  login: string;
+  load_hours: number;
+  available_hours: number;
+  over: boolean;
+  points: number;
+};
+
+export type CapacitySprint = {
+  milestone_id: number;
+  title: string;
+  start_unix: number;
+  end_unix: number;
+  working_days: number;
+  lanes: CapacitySprintLane[];
+};
+
+export type CapacitySprintUnscheduled = {
+  milestone_id: number;
+  title: string;
+  missing: string;
+};
+
+// RoadmapBarModel is the display shape RoadmapBar.vue renders: a Bar narrowed to what one bar
+// draws, plus the row key it currently sits in under whichever row mode is active.
+export type RoadmapBarModel = {
+  issueId: number;
+  number: number;
+  title: string;
+  url: string;
+  startUnix: number;
+  endUnix: number;
+  endInferred: boolean;
+  typeColor?: string;
+  typeIcon?: string;
+  rowKey: string;
+};
+
+export type MilestoneSchedule = {
+  milestone_id: number;
+  title: string;
+  start_unix: number;
+  due_unix: number;
+};
+
+export type RoadmapCapacity = {
+  lanes: CapacityLane[];
+  sprints: CapacitySprint[];
+  sprints_unscheduled: CapacitySprintUnscheduled[];
+  truncated: boolean;
+};
+
 export type ProjectView = {
   id: number;
   project_id: number;

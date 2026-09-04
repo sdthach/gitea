@@ -4,6 +4,7 @@ import SvgIcon from '../../../components/SvgIcon.vue';
 import type {SvgName} from '../../../svg.ts';
 import {contrastColor} from '../../../utils/color.ts';
 import type {Card, LabelRef} from '../types.ts';
+import AvatarImg from './AvatarImg.vue';
 
 const props = defineProps<{card: Card; labels: LabelRef[]; canEditIssues: boolean}>();
 
@@ -35,10 +36,7 @@ function labelColor(name: string): string {
 
     <div class="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-mt-1 tw-text-text-light tw-text-xs">
       <div class="tw-flex tw-items-center tw-gap-1">
-        <img
-          v-for="login in card.assignees" :key="login" class="ui avatar image"
-          :src="`/user/avatar/${login}/24`" width="20" height="20" :alt="login"
-        >
+        <AvatarImg v-for="login in card.assignees" :key="login" :login="login" :size="20"/>
       </div>
       <span v-if="card.milestone" class="tw-truncate">{{ card.milestone }}</span>
       <span v-if="card.points">{{ card.points }}pt</span>

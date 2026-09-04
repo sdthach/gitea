@@ -1,7 +1,7 @@
 import {env} from 'node:process';
 import {test, expect} from '@playwright/test';
 import type {APIRequestContext} from '@playwright/test';
-import {login, loginUser, apiCreateIssue, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
+import {login, loginUser, apiCreateIssue, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, apiUserHeaders, baseUrl, randomString} from './utils.ts';
 
 // The planning pages authenticate with a token, not the browser session, cached in the
 // session store and reused across renders rather than minted fresh each time. These tests
@@ -20,6 +20,17 @@ async function apiCreateManagedIssue(request: APIRequestContext, owner: string, 
   const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues`, {
     headers: apiHeaders(),
     data: {title, due_date: due},
+  });
+  expect(response.ok(), `create issue ${title}: ${await response.text()}`).toBe(true);
+  return (await response.json()).number;
+}
+
+// apiCreateManagedIssueInProject is apiCreateManagedIssue's own board-ready counterpart: the
+// project a board card move requires the issue to already belong to.
+async function apiCreateManagedIssueInProject(request: APIRequestContext, owner: string, name: string, title: string, due: string, projectID: number): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues`, {
+    headers: apiHeaders(),
+    data: {title, due_date: due, projects: [projectID]},
   });
   expect(response.ok(), `create issue ${title}: ${await response.text()}`).toBe(true);
   return (await response.json()).number;
@@ -49,6 +60,50 @@ async function apiSetIssueType(request: APIRequestContext, owner: string, name: 
     data: {repo: `${owner}/${name}`, type_id: typeID},
   });
   expect(response.ok(), `set issue type: ${await response.text()}`).toBe(true);
+}
+
+async function apiSetIssueDates(request: APIRequestContext, owner: string, name: string, issueID: number, start: string, end: string) {
+  const response = await request.post(`${baseUrl()}/api/planning/v1/issues/${issueID}/dates`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, start, end},
+  });
+  expect(response.ok(), `set issue dates: ${await response.text()}`).toBe(true);
+}
+
+// apiSetIssueEstimate gives an issue remaining work capacity can turn into a heat strip: with no
+// estimate at all an assignee's every day reads as zero load, however many issues they carry.
+async function apiSetIssueEstimate(request: APIRequestContext, owner: string, name: string, issueID: number, timeEstimate: string) {
+  const response = await request.put(`${baseUrl()}/api/planning/v1/issues/${issueID}/estimate`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, time_estimate: timeEstimate},
+  });
+  expect(response.ok(), `set issue estimate: ${await response.text()}`).toBe(true);
+}
+
+async function apiRoadmapBar(request: APIRequestContext, repoID: number, issueID: number): Promise<{start_unix: number, end_unix: number}> {
+  const response = await request.get(`${baseUrl()}/api/planning/v1/roadmap?repo_id=${repoID}`, {headers: apiHeaders()});
+  expect(response.ok(), `get roadmap: ${await response.text()}`).toBe(true);
+  const roadmap = await response.json() as {bars: Array<{issue_id: number, start_unix: number, end_unix: number}>};
+  const bar = roadmap.bars.find((b) => b.issue_id === issueID);
+  expect(bar, `issue ${issueID} has a bar`).toBeTruthy();
+  return bar!;
+}
+
+async function apiCreateMilestone(request: APIRequestContext, owner: string, name: string, title: string, dueOn: string): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/milestones`, {
+    headers: apiHeaders(),
+    data: {title, due_on: dueOn},
+  });
+  expect(response.ok(), `create milestone: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
+}
+
+async function apiSetMilestoneSchedule(request: APIRequestContext, owner: string, name: string, milestoneID: number, start: string) {
+  const response = await request.put(`${baseUrl()}/api/planning/v1/milestones/${milestoneID}/schedule`, {
+    headers: apiHeaders(),
+    data: {repo: `${owner}/${name}`, start},
+  });
+  expect(response.ok(), `set milestone schedule: ${await response.text()}`).toBe(true);
 }
 
 async function apiSetIssueParent(request: APIRequestContext, owner: string, name: string, childNumber: number, parentNumber: number) {
@@ -190,34 +245,146 @@ test('planning roadmap offers a reader no handle and no drop target', async ({pa
   await apiCreateRepo(page.request, {name: repoName});
   await apiMakeRepoPublic(page.request, owner, repoName);
   const repoID = await apiRepoID(page.request, owner, repoName);
-  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Roadmap reader e2e');
   const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
-  const epicNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout epic', '2030-03-11T00:00:00Z');
   const storyOne = await apiCreateManagedIssue(page.request, owner, repoName, 'checkout story one', '2030-03-20T00:00:00Z');
-  await apiSetIssueType(page.request, owner, repoName, epicNumber, epicTypeID);
   await apiSetIssueType(page.request, owner, repoName, storyOne, storyTypeID);
-  await apiSetIssueParent(page.request, owner, repoName, storyOne, epicNumber);
+  // A due date alone leaves the start inferred, and an inferred-start bar draws only in the
+  // "Needs a start" panel, not on the timeline this test means to check for a drag handle on.
+  const storyOneID = await apiIssueGlobalID(page.request, owner, repoName, storyOne);
+  const today = new Date().toISOString().slice(0, 10);
+  await apiSetIssueDates(page.request, owner, repoName, storyOneID, today, today);
   await apiCreateUser(page.request, reader);
 
   try {
     await loginUser(page, reader);
-    await page.goto('/planning/roadmap');
-    await page.getByLabel('Repository id').fill(String(repoID));
-    await page.getByLabel('Group by').selectOption('type');
+    await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap`);
 
-    // The reader sees the whole chart and every group it is grouped into...
-    const chart = page.locator('#planning-roadmap-body');
-    await expect(chart).toContainText('checkout story one');
-    await expect(chart.locator('tr.planning-group').first()).toBeVisible();
-
-    // ...and no way to move anything: no bar is a handle and no group is a drop target.
-    await expect(chart.locator('[data-drag]')).toHaveCount(0);
-    await expect(chart.locator('tr[data-group]')).toHaveCount(0);
-    await expect(page.locator('#planning-token-box')).toBeHidden();
-    await expect(page.locator('#planning-error')).toBeHidden();
+    // The reader sees the chart...
+    await expect(page.getByText('checkout story one', {exact: true})).toBeVisible();
+    // ...and no way to move anything: no bar is a handle and no drop target.
+    await expect(page.locator('[data-drag]')).toHaveCount(0);
+    await expect(page.locator('.ui.negative.message')).toHaveCount(0);
   } finally {
     await apiDeleteUser(page.request, reader);
   }
+});
+
+test('planning roadmap keys a rollup bracket by kind, and its chevron collapses the parent row', async ({page}) => {
+  const repoName = `e2e-planning-roadmap-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Roadmap bracket e2e');
+  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+
+  const parentNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'bracket parent', '2030-03-22T00:00:00Z');
+  const childNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'bracket child', '2030-03-16T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, parentNumber, epicTypeID);
+  await apiSetIssueType(page.request, owner, repoName, childNumber, storyTypeID);
+  const parentIssueID = await apiIssueGlobalID(page.request, owner, repoName, parentNumber);
+  const childIssueID = await apiIssueGlobalID(page.request, owner, repoName, childNumber);
+  await apiSetIssueDates(page.request, owner, repoName, parentIssueID, '2030-03-05', '2030-03-22');
+  await apiSetIssueDates(page.request, owner, repoName, childIssueID, '2030-03-10', '2030-03-16');
+  await apiSetIssueParent(page.request, owner, repoName, childNumber, parentNumber);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&group_by=parent&scale=day&at=2030-03-10`);
+
+  const bracket = page.locator('.planning-bracket');
+  await expect(bracket).toBeVisible();
+  await expect(bracket).toHaveAttribute('title', /bracket parent/);
+
+  const childBar = page.locator('.planning-roadmap-bar').filter({hasText: 'bracket child'});
+  await expect(childBar).toBeVisible();
+
+  // The chevron sits on the parent issue's own row, keyed by kind:key the same way the server
+  // names a bracket — a mismatched key is the regression this bracket's own visibility guards.
+  await page.getByRole('button', {name: 'Collapse'}).click();
+  await expect(childBar).toBeHidden();
+  await expect(page).toHaveURL(/collapsed=/);
+});
+
+test('planning roadmap drags a bar by two days', async ({page}) => {
+  const repoName = `e2e-planning-roadmap-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Roadmap drag e2e');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+  const issueNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'drag me', '2030-03-20T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, issueNumber, storyTypeID);
+  const issueID = await apiIssueGlobalID(page.request, owner, repoName, issueNumber);
+  await apiSetIssueDates(page.request, owner, repoName, issueID, '2030-03-10', '2030-03-15');
+  const before = await apiRoadmapBar(page.request, repoID, issueID);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  const outerBar = page.locator('.planning-roadmap-bar').filter({hasText: 'drag me'});
+  const bar = page.locator('.planning-roadmap-bar-body').filter({hasText: 'drag me'});
+  await expect(bar).toBeVisible();
+
+  const box = (await bar.boundingBox())!;
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step++) {
+    await page.mouse.move(startX + (96 * step) / 8, startY);
+  }
+  await page.mouse.up();
+
+  // The committed preview reflects the new date immediately, before the write round-trip is
+  // even polled for: a bar that reset itself on commit would still read the old start here.
+  const expectedStart = new Date((before.start_unix + 172800) * 1000).toISOString().slice(0, 10);
+  await expect(outerBar).toHaveAttribute('data-start', expectedStart);
+
+  await expect.poll(async () => (await apiRoadmapBar(page.request, repoID, issueID)).start_unix).toBe(before.start_unix + 172800);
+  const after = await apiRoadmapBar(page.request, repoID, issueID);
+  expect(after.end_unix - after.start_unix, 'duration is unchanged').toBe(before.end_unix - before.start_unix);
+});
+
+test('planning roadmap cancels a drag with Escape, writing nothing', async ({page}) => {
+  const repoName = `e2e-planning-roadmap-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Roadmap escape e2e');
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+  const issueNumber = await apiCreateManagedIssue(page.request, owner, repoName, 'escape me', '2030-03-20T00:00:00Z');
+  await apiSetIssueType(page.request, owner, repoName, issueNumber, storyTypeID);
+  const issueID = await apiIssueGlobalID(page.request, owner, repoName, issueNumber);
+  await apiSetIssueDates(page.request, owner, repoName, issueID, '2030-03-10', '2030-03-15');
+  const before = await apiRoadmapBar(page.request, repoID, issueID);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=roadmap&scale=day&at=2030-03-10`);
+  const outerBar = page.locator('.planning-roadmap-bar').filter({hasText: 'escape me'});
+  const bar = page.locator('.planning-roadmap-bar-body').filter({hasText: 'escape me'});
+  await expect(bar).toBeVisible();
+
+  const box = (await bar.boundingBox())!;
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  const expectedStart = new Date(before.start_unix * 1000).toISOString().slice(0, 10);
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step++) {
+    await page.mouse.move(startX + (96 * step) / 8, startY);
+  }
+  await expect(outerBar).not.toHaveAttribute('data-start', expectedStart);
+  await page.keyboard.press('Escape');
+  await expect(outerBar).toHaveAttribute('data-start', expectedStart);
+  await page.mouse.up();
+
+  const after = await apiRoadmapBar(page.request, repoID, issueID);
+  expect(after.start_unix, 'the write the cancelled drag would have made never happened').toBe(before.start_unix);
 });
 
 test('planning board drags a card between columns', async ({page}) => {
@@ -339,5 +506,71 @@ test('planning board offers a reader no drag handle', async ({page}) => {
     await expect(page.locator('[data-drag]')).toHaveCount(0);
   } finally {
     await apiDeleteUser(page.request, reader);
+  }
+});
+
+test('planning pages screenshot', async ({page}) => {
+  const shotsDir = env.PLANNING_SHOTS_DIR;
+  test.skip(!shotsDir, 'PLANNING_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
+
+  const repoName = `e2e-planning-shots-${randomString(8)}`;
+  const owner = `e2eshots${randomString(8)}`;
+
+  await apiCreateUser(page.request, owner);
+  const headers = apiUserHeaders(owner);
+  await apiCreateRepo(page.request, {name: repoName, headers});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Shots project');
+  const columns = [
+    await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Todo'),
+    await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Doing'),
+    await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Done'),
+  ];
+  const storyTypeID = await apiIssueTypeID(page.request, repoID, 'story');
+  const epicTypeID = await apiIssueTypeID(page.request, repoID, 'epic');
+
+  const numbers: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const day = 10 + i;
+    const number = await apiCreateManagedIssueInProject(page.request, owner, repoName, `shot issue ${i + 1}`, `2030-04-${day}T00:00:00Z`, projectID);
+    await apiSetIssueType(page.request, owner, repoName, number, storyTypeID);
+    const issueID = await apiIssueGlobalID(page.request, owner, repoName, number);
+    await apiSetIssueDates(page.request, owner, repoName, issueID, `2030-04-0${i + 1}`, `2030-04-${day}`);
+    await apiMoveCardToColumn(page.request, issueID, `${owner}/${repoName}`, projectID, columns[i % columns.length]);
+    numbers.push(number);
+  }
+  for (const number of numbers.slice(0, 3)) {
+    await apiAssignIssue(page.request, owner, repoName, number, owner);
+    // A heat strip needs load: an assignee with no estimated work reads as zero every day.
+    const issueID = await apiIssueGlobalID(page.request, owner, repoName, number);
+    await apiSetIssueEstimate(page.request, owner, repoName, issueID, '8h');
+  }
+
+  const parentNumber = await apiCreateManagedIssueInProject(page.request, owner, repoName, 'shot parent epic', '2030-05-01T00:00:00Z', projectID);
+  await apiSetIssueType(page.request, owner, repoName, parentNumber, epicTypeID);
+  await apiSetIssueParent(page.request, owner, repoName, numbers[0], parentNumber);
+  await apiSetIssueParent(page.request, owner, repoName, numbers[1], parentNumber);
+  const parentIssueID = await apiIssueGlobalID(page.request, owner, repoName, parentNumber);
+  await apiSetIssueDates(page.request, owner, repoName, parentIssueID, '2030-04-01', '2030-04-20');
+  await apiMoveCardToColumn(page.request, parentIssueID, `${owner}/${repoName}`, projectID, columns[0]);
+
+  const milestoneID = await apiCreateMilestone(page.request, owner, repoName, 'Shot sprint', '2030-04-20T00:00:00Z');
+  await apiSetMilestoneSchedule(page.request, owner, repoName, milestoneID, '2030-04-06');
+
+  await loginUser(page, owner);
+  const base = `/planning/projects/${owner}/${repoName}/${projectID}`;
+  // Every bar lives around 2030-04, so at= centers each roadmap shot's window on that range —
+  // the default (today's date) window would show none of them.
+  const shots: Array<[string, string]> = [
+    ['table.png', `${base}?view=table`],
+    ['board-none.png', `${base}?view=board`],
+    ['board-assignee.png', `${base}?view=board&group_by=assignee`],
+    ['roadmap-day.png', `${base}?view=roadmap&scale=day&at=2030-04-10`],
+    ['roadmap-month.png', `${base}?view=roadmap&scale=month&at=2030-04-10`],
+    ['roadmap-parent.png', `${base}?view=roadmap&group_by=parent&at=2030-04-10`],
+  ];
+  for (const [file, url] of shots) {
+    await page.goto(url);
+    await page.screenshot({path: `${shotsDir}/${file}`, fullPage: true});
   }
 });

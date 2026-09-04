@@ -1,6 +1,6 @@
 import {reactive} from 'vue';
-import {ApiError, getBoard, getProjectViews, getRoadmap, createProjectView, deleteProjectView} from './api.ts';
-import type {Board, PlanningProjectConfig, ProjectView, Roadmap} from './types.ts';
+import {ApiError, getBoard, getProjectViews, getRoadmap, getRoadmapCapacity, createProjectView, deleteProjectView} from './api.ts';
+import type {Board, PlanningProjectConfig, ProjectView, Roadmap, RoadmapCapacity, RoadmapMilestone} from './types.ts';
 
 export type PlanningError = {
   message: string;
@@ -23,9 +23,12 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     config,
     board: null as Board | null,
     roadmap: null as Roadmap | null,
+    capacity: null as RoadmapCapacity | null,
+    milestones: [] as RoadmapMilestone[],
     views: [] as ProjectView[],
     boardError: null as PlanningError | null,
     roadmapError: null as PlanningError | null,
+    capacityError: null as PlanningError | null,
     viewsError: null as PlanningError | null,
     writeError: null as PlanningError | null,
     loadingBoard: false,
@@ -47,6 +50,13 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     state.board = board;
   }
 
+  // setRoadmap is setBoard's roadmap counterpart: a roadmap write's own response replaces the
+  // roadmap outright, milestones included.
+  function setRoadmap(roadmap: Roadmap): void {
+    state.roadmap = roadmap;
+    state.milestones = roadmap.milestones ?? [];
+  }
+
   async function loadBoard(): Promise<void> {
     state.loadingBoard = true;
     try {
@@ -63,6 +73,7 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     state.loadingRoadmap = true;
     try {
       state.roadmap = await getRoadmap(state.config, {repoId: state.config.repoId});
+      state.milestones = state.roadmap.milestones ?? [];
       state.roadmapError = null;
     } catch (err) {
       state.roadmapError = toError(err);
@@ -71,10 +82,21 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     }
   }
 
-  // loadAll fetches board and roadmap in parallel: a board failure sets boardError only, so
-  // a repository with Projects disabled still renders the roadmap-backed views.
+  // loadCapacity fails into capacityError alone, same as loadBoard and loadRoadmap: a repository
+  // whose capacity read fails still shows a roadmap with no heat strips rather than nothing.
+  async function loadCapacity(range: {from?: string; to?: string} = {}): Promise<void> {
+    try {
+      state.capacity = await getRoadmapCapacity(state.config, {repoId: state.config.repoId, ...range});
+      state.capacityError = null;
+    } catch (err) {
+      state.capacityError = toError(err);
+    }
+  }
+
+  // loadAll fetches board, roadmap and capacity in parallel: a board failure sets boardError
+  // only, so a repository with Projects disabled still renders the roadmap-backed views.
   async function loadAll(): Promise<void> {
-    await Promise.all([loadBoard(), loadRoadmap()]);
+    await Promise.all([loadBoard(), loadRoadmap(), loadCapacity()]);
     state.overrides = {};
   }
 
@@ -151,6 +173,7 @@ export function createPlanningStore(config: PlanningProjectConfig) {
       if (fp !== roadmapFingerprint) {
         roadmapFingerprint = fp;
         state.roadmap = roadmap.value;
+        state.milestones = roadmap.value.milestones ?? [];
         replaced = true;
       }
       state.roadmapError = null;
@@ -173,8 +196,8 @@ export function createPlanningStore(config: PlanningProjectConfig) {
   }
 
   return {
-    state, loadAll, loadViews, saveView, removeView, applyOptimistic, setOverride, setBoard,
-    refresh, startAutoRefresh, stopAutoRefresh,
+    state, loadAll, loadViews, saveView, removeView, applyOptimistic, setOverride, setBoard, setRoadmap,
+    loadRoadmap, loadCapacity, refresh, startAutoRefresh, stopAutoRefresh,
   };
 }
 
