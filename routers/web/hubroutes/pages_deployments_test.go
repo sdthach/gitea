@@ -16,15 +16,25 @@ var deploymentsPages = []forkPage{
 			"/environments", "/environments/{id}", "/environments/paths", "/secret-scopes", "/secret-scopes/{id}",
 			"/repos/{owner}/{repo}/environments/{name}/secrets",
 		},
-		fetch:  "/environments",
-		client: "web_src/js/features/deployments/api.ts",
+		fetch:     "/environments",
+		client:    "web_src/js/features/deployments/api.ts",
+		component: "web_src/js/features/deployments/EnvironmentsPage.vue",
+		calls:     []string{"getEnvironments", "createEnvironment"},
 	},
 	{
-		dir:       "deployments",
-		template:  "matrix.tmpl",
-		endpoints: []string{"/deployments/matrix", "/deployments", "/repos/{owner}/{repo}/releases"},
+		dir:      "deployments",
+		template: "matrix.tmpl",
+		endpoints: []string{
+			"/deployments/matrix", "/deployments", "/repos/{owner}/{repo}/releases",
+			"/deployments/{id}/checks", "/reviews", "/reviews/{id}/approve", "/reviews/{id}/reject",
+		},
 		fetch:     "/deployments/matrix",
 		client:    "web_src/js/features/deployments/api.ts",
+		component: "web_src/js/features/deployments/MatrixPage.vue",
+		calls: []string{
+			"getMatrix", "getDeploymentHistory", "getDeploymentChecks", "getReleases",
+			"getReviews", "approveReview", "rejectReview",
+		},
 	},
 	{
 		dir:       "deployments",
@@ -32,6 +42,8 @@ var deploymentsPages = []forkPage{
 		endpoints: []string{"/insights", "/insights/trends", "/insights/repos", "/runs"},
 		fetch:     "/insights",
 		client:    "web_src/js/features/deployments/api.ts",
+		component: "web_src/js/features/deployments/InsightsPage.vue",
+		calls:     []string{"getInsights", "getInsightsTrends", "getInsightsRepos", "getRuns"},
 	},
 	{
 		dir:       "deployments",
@@ -39,13 +51,19 @@ var deploymentsPages = []forkPage{
 		endpoints: []string{"/deployments"},
 		fetch:     "/deployments",
 		client:    "web_src/js/features/deployments/api.ts",
+		component: "web_src/js/features/deployments/NewPage.vue",
+		calls:     []string{"planOrConfirmDeployment"},
 	},
 	{
-		dir:       "deployments",
-		template:  "reviews.tmpl",
-		endpoints: []string{"/reviews"},
+		dir:      "deployments",
+		template: "reviews.tmpl",
+		endpoints: []string{
+			"/reviews", "/reviews/{id}/approve", "/reviews/{id}/reject", "/deployments", "/deployments/{id}/checks",
+		},
 		fetch:     "/reviews",
 		client:    "web_src/js/features/deployments/api.ts",
+		component: "web_src/js/features/deployments/ReviewsPage.vue",
+		calls:     []string{"getReviews", "getWaitingDeployments", "getDeploymentChecks", "approveReview", "rejectReview"},
 	},
 }
 

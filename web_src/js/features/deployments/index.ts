@@ -31,7 +31,7 @@ registerGlobalInitFunc('initDeploymentsInsights', async (el: HTMLElement) => {
   await initDeploymentsInsights(el);
 });
 
-// initDeploymentsReleaseBadges mounts on the fragment's own <script> element, not a content div: it decorates release-list entries Gitea already rendered.
+// initDeploymentsReleaseBadges mounts on the fragment's own <div>, not a page of its own: it decorates release-list entries Gitea already rendered.
 registerGlobalInitFunc('initDeploymentsReleaseBadges', async (el: HTMLElement) => {
   const {initDeploymentsReleaseBadges} = await import('./release-badges.ts');
   await initDeploymentsReleaseBadges(el);

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -33,6 +34,14 @@ type forkPage struct {
 	// template itself, for a page whose figures are fetched by mounted Vue rather than an
 	// inline script. Path relative to the repository root.
 	client string
+	// component is the page's own mounted Vue component, when the page's real work happens
+	// there rather than in client directly. Path relative to the repository root.
+	component string
+	// calls is the api.ts export names component must call: each must appear in component as
+	// a call, and the endpoint its own definition in client fetches must be one of endpoints,
+	// so a component whose calls are removed fails here even though client still lists every
+	// operation the whole feature has.
+	calls []string
 }
 
 // repoRoot walks up to the repository root so the test reads the real template files.
@@ -153,8 +162,41 @@ func TestPageIsAClientOfItsAPI(t *testing.T) {
 				assert.True(t, quotedLiteral(checked, endpoint),
 					"the client %s must name the exact endpoint %s as a quoted literal, not merely contain it as a sibling path's prefix", page.client, endpoint)
 			}
+
+			if len(page.calls) == 0 {
+				return
+			}
+			require.NotEmpty(t, page.component, "%s declares calls but no component to find them in", page.template)
+			componentRaw, err := os.ReadFile(filepath.Join(repoRoot(t), page.component))
+			require.NoError(t, err)
+			component := string(componentRaw)
+			for _, call := range page.calls {
+				assert.Contains(t, component, call+"(",
+					"%s must actually call %s: reading the same client file the whole feature shares proves nothing about this page", page.component, call)
+				endpoint := callEndpoint(t, checked, call)
+				assert.Contains(t, page.endpoints, endpoint,
+					"%s calls %s, which fetches %s, but that endpoint is not documented for %s", page.component, call, endpoint, page.template)
+			}
 		})
 	}
+}
+
+// callEndpoint resolves the endpoint path template an api.ts export named call fetches, by
+// locating its definition and reading which paths.* entry its body passes to call/withParam/request.
+func callEndpoint(t *testing.T, client, call string) string {
+	t.Helper()
+	defRe := regexp.MustCompile(`(?s)export (?:async )?function ` + regexp.QuoteMeta(call) + `\(.*?\n\}\n`)
+	def := defRe.FindString(client)
+	require.NotEmpty(t, def, "the function %s must be defined in the client", call)
+
+	keyRe := regexp.MustCompile(`paths\.(\w+)`)
+	m := keyRe.FindStringSubmatch(def)
+	require.NotEmpty(t, m, "the function %s must reference a paths.* endpoint", call)
+
+	valueRe := regexp.MustCompile(m[1] + `:\s*'([^']+)'`)
+	v := valueRe.FindStringSubmatch(client)
+	require.NotEmpty(t, v, "paths.%s must be declared in the client", m[1])
+	return v[1]
 }
 
 // quotedLiteral reports whether endpoint appears in body as a complete quoted string literal,

@@ -139,7 +139,6 @@ async function load() {
   await loadReviews();
   try {
     rows.value = await getMatrix(props.config, 50);
-    loaded.value = true;
     if (!rows.value.length) {
       errorMessage.value = 'no release is visible to you yet';
       errorAction.value = 'Cut a release, or check your account can read the Actions unit of a repository that has one.';
@@ -158,6 +157,8 @@ async function load() {
       errorMessage.value = String(err);
       errorAction.value = `Check that you are signed in and that the deployments API is reachable at ${props.config.apiBase}.`;
     }
+  } finally {
+    loaded.value = true;
   }
 }
 

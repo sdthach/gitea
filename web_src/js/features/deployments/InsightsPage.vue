@@ -43,8 +43,7 @@ function runOf(summary: Insights['summary'], state: string): number {
 }
 
 function runLabel(run: Run): string {
-  const title = run.title ? `${run.repo_full_name} #${run.index}` : `${run.repo_full_name} #${run.index}`;
-  return `${title} · ${run.workflow_id} · ${run.status} · ${duration(run.duration_seconds)}`;
+  return `${run.repo_full_name} #${run.index} · ${run.workflow_id} · ${run.status} · ${duration(run.duration_seconds)}`;
 }
 
 function runHref(run: Run): string {

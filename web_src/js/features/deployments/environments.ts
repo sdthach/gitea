@@ -21,10 +21,10 @@ export async function initDeploymentsEnvironmentEdit(el: HTMLElement) {
 export function normalize(env: Environment): Environment {
   return {
     ...env,
-    depends_on: env.depends_on ?? [],
-    reviewer_user_ids: env.reviewer_user_ids ?? [],
-    reviewer_team_ids: env.reviewer_team_ids ?? [],
-    required_status_contexts: env.required_status_contexts ?? [],
+    depends_on: [...(env.depends_on ?? [])],
+    reviewer_user_ids: [...(env.reviewer_user_ids ?? [])],
+    reviewer_team_ids: [...(env.reviewer_team_ids ?? [])],
+    required_status_contexts: [...(env.required_status_contexts ?? [])],
   };
 }
 
@@ -113,7 +113,7 @@ export const checks: CheckDef[] = [
   },
   {
     key: 'bypass',
-    label: 'Bypass allowlist',
+    label: 'Restricted reviewers',
     present: (env) => env.restrict_reviewers,
     summary: (env) => `${env.reviewer_user_ids.length} user` +
       `${env.reviewer_user_ids.length === 1 ? '' : 's'} and ` +

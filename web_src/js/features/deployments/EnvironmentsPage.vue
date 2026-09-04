@@ -11,6 +11,7 @@ const props = defineProps<{config: EnvironmentsPageConfig}>();
 
 const environments = ref<Environment[]>([]);
 const loaded = ref(false);
+const showNewBox = ref(false);
 const errorMessage = ref('');
 const errorAction = ref('');
 const showTokenBox = ref(false);
@@ -59,6 +60,7 @@ async function load() {
     for (const env of environments.value) await scopeOf(env); // populate repoNames before scopes recomputes
     errorMessage.value = '';
     showTokenBox.value = false;
+    showNewBox.value = true; // the endpoint refuses a scope the caller cannot write
   } catch (err) {
     fail(err, `Check that you are signed in and that the deployments API is reachable at ${props.config.apiBase}.`);
   } finally {
@@ -120,7 +122,7 @@ onMounted(load);
 
 <template>
   <div>
-    <h2 class="ui header">Environments</h2>
+    <h2 class="ui header">{{ config.name ? `Environment: ${config.name}` : 'Environments' }}</h2>
     <p class="tw-text-14">
       Every figure below is fetched from <code>{{ config.apiBase }}/environments</code>. This
       page is a client of that endpoint and reads nothing the API does not serve.
@@ -140,7 +142,7 @@ onMounted(load);
       </div>
     </div>
 
-    <div id="deployments-new" class="ui segment">
+    <div id="deployments-new-environment" class="ui segment" :class="{'tw-hidden': !showNewBox}">
       <div class="ui form">
         <div class="inline fields">
           <div class="field">

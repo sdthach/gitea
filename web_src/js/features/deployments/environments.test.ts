@@ -19,6 +19,18 @@ test('normalize fills the array fields a freshly-built draft may not carry yet',
   expect(draft.reviewer_user_ids).toEqual([]);
 });
 
+// normalize must copy every array it fills, not hand back the input's own reference: a v-model
+// bound into one normalized draft's array (EnvironmentPage.vue's depends_on picker) would
+// otherwise mutate a sibling draft normalized from the same row, and the row itself.
+test('normalize copies its array fields, so mutating one draft touches neither a sibling draft nor the input', () => {
+  const source = env({depends_on: ['live']});
+  const first = normalize(source);
+  const second = normalize(source);
+  first.depends_on[0] = 'mutated';
+  expect(second.depends_on).toEqual(['live']);
+  expect(source.depends_on).toEqual(['live']);
+});
+
 // payloadOf must forward every field the endpoint accepts, including the promotion path
 // editor's own fields, or a write from the identity or checks form would silently clear them —
 // UpdateEnvironmentHandler replaces the whole row from this body.
@@ -28,6 +40,11 @@ test('payloadOf carries the promotion path fields forward unchanged', () => {
   expect(body.wait_minutes).toBe(30);
   expect(body.exclusive_lock).toBe(true);
   expect(body.required_status_contexts).toEqual(['ci/build']);
+});
+
+test('payloadOf carries depends_on forward unchanged', () => {
+  const body = payloadOf(env({depends_on: ['live']}));
+  expect(body.depends_on).toEqual(['live']);
 });
 
 test('the sequence check is present once depends_on names something', () => {

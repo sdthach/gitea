@@ -52,27 +52,34 @@ function fail(err: unknown, fallback: string) {
 }
 
 async function load() {
-  const [path, own, defaults] = await Promise.all([
-    getEnvironmentPaths(props.config, props.repoId),
-    getEnvironments(props.config, {repoId: props.repoId}),
-    props.repoId ? getEnvironments(props.config, {repoId: 0}) : Promise.resolve([]),
-  ]);
-  byName.clear();
-  for (const env of defaults) byName.set(env.name, normalize(env));
-  for (const env of own) byName.set(env.name, normalize(env)); // a repo's own row shadows the default of the same name
-  // required_status_contexts arrives null, not [], for a node that never set one — the same
-  // gap normalize() closes for an Environment row.
-  nodes.value = path.nodes.map((node) => ({
-    ...node,
-    checks: {...node.checks, required_status_contexts: node.checks.required_status_contexts ?? []},
-  }));
-  edges.value = path.edges;
+  try {
+    const [path, own, defaults] = await Promise.all([
+      getEnvironmentPaths(props.config, props.repoId),
+      getEnvironments(props.config, {repoId: props.repoId}),
+      props.repoId ? getEnvironments(props.config, {repoId: 0}) : Promise.resolve([]),
+    ]);
+    byName.clear();
+    for (const env of defaults) byName.set(env.name, normalize(env));
+    for (const env of own) byName.set(env.name, normalize(env)); // a repo's own row shadows the default of the same name
+    // required_status_contexts arrives null, not [], for a node that never set one — the same
+    // gap normalize() closes for an Environment row.
+    nodes.value = path.nodes.map((node) => ({
+      ...node,
+      checks: {...node.checks, required_status_contexts: node.checks.required_status_contexts ?? []},
+    }));
+    edges.value = path.edges;
+    errorMessage.value = '';
+  } catch (err) {
+    fail(err, 'Retry, and check the server log if it keeps failing.');
+  }
 }
 
-// canWrite is the same rule the environment editor applies: a node with no matching row (a
-// name declared nowhere the caller can resolve) is read-only, never assumed writable.
+// canWrite requires can_write and that the row belongs to this page's own scope: an inherited
+// default (byName holds it at repo_id 0) must never be written by PUT /environments/{id} on
+// the instance-wide row just because a repository view renders it alongside the repo's own.
 function canWrite(name: string): boolean {
-  return byName.get(name)?.can_write ?? false;
+  const env = byName.get(name);
+  return !!env && env.can_write && env.repo_id === props.repoId;
 }
 
 async function persist(name: string, mutate: (draft: Environment) => void, revert: () => void) {

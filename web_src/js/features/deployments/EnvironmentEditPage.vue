@@ -89,8 +89,8 @@ async function bindSecret() {
   if (!name) return;
   try {
     await createSecretScope(apiConfig.value, {repo_id: env.value.repo_id, secret_name: name, environment: env.value.name});
-    newSecretName.value = '';
     await loadSecrets();
+    newSecretName.value = freeSecretNames.value[0]?.name ?? '';
     errorMessage.value = '';
   } catch (err) {
     fail(err, 'Retry, and check the server log if it keeps failing.');
@@ -136,7 +136,10 @@ async function load() {
     orderInput.value = String(env.value.sort_order);
     if (env.value.repo_id) repo.value = await getRepository(apiConfig.value, env.value.repo_id);
     await Promise.all([loadSiblings(), loadSecrets()]);
-    if (repo.value) availableSecrets.value = await getActionsSecretNames(apiConfig.value, repo.value.full_name);
+    if (repo.value) {
+      availableSecrets.value = await getActionsSecretNames(apiConfig.value, repo.value.full_name);
+      newSecretName.value = freeSecretNames.value[0]?.name ?? '';
+    }
     errorMessage.value = '';
     showTokenBox.value = false;
   } catch (err) {
