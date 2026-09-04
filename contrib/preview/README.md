@@ -17,30 +17,30 @@ in Docker. `templates/`, `public/` and `options/` are bind-mounted from the repo
 
 ## The data
 
-`seed.py` needs `faker` (`pip install faker`) and drives the public APIs — Gitea's `/api/v1`
-and the fork's `/api/deployments/v1` and `/api/planning/v1`, environment policy included. It creates one account per
-role with its own token, an organisation with one team per role, repositories with deploy
-workflows and project boards, labelled and assigned issues, releases, then promotes each
-release up `dev → qa → uat → staging → prod` and resolves the reviews that prod holds.
+`seed.py` needs `faker` (`pip install faker`) and drives the public APIs — Gitea's `/api/v1`,
+the fork's `/api/deployments/v1` and its `/api/planning/v1`, environment policy included. It
+creates one account per role with its own token, an organisation with one team per role, and
+per repository: deploy workflows, issue types, a `points` field, sprint-shaped milestones, and
+a project board holding a full `epic → feature → {story, bug, spike} → task` hierarchy —
+assigned round-robin, scheduled, estimated, pointed, dependency-linked and time tracked through
+the planning API — before releases are cut and promoted up `dev → qa → uat → staging → prod`,
+resolving the reviews that prod holds. Each repository's board prints as
+`/planning/projects/<owner>/<repo>/<project id>`; its roadmap shows the same hierarchy at day
+or week scale, and Settings → Capacity shows the two users given an explicit row.
 
 The seven roles are site admin, org owner, repo maintainer, deployer, reviewer, reader and
-outsider — the last holding no membership of any kind. `prod` enables its bypass allowlist
-naming the reviewers team, which is what makes a read-only reviewer able to approve and a
-deployer holding write unable to. Accounts, tokens and team ids land in
-`planning/seed-users.md` (`--accounts-file`), which is gitignored.
+outsider — the last holding no membership of any kind. `prod`'s bypass allowlist names the
+reviewers team, so a read-only reviewer can approve and a deployer holding write cannot.
+Accounts, tokens and team ids land in `planning/seed-users.md` (`--accounts-file`), gitignored.
 
 Generated names carry their entity kind as a prefix — `org-`, `user-`, `repo-`, `project-`,
-`issue-`, `milestone-`, `release-`. Environments and labels do not. The environments are
-whatever `app.ini`'s `[deployments] DEFAULT_ENVIRONMENTS` names — `dev, qa, uat, staging, prod`
-here, but nothing in the fork reads those words — and each gets a `deploy-<env>.yaml`
-declaring it. Labels keep the `type:` and `epic:` prefixes the board keys its groups off.
+`issue-`, `milestone-`, `release-`. Environments are the exception: whatever `app.ini`'s
+`[deployments] DEFAULT_ENVIRONMENTS` names — `dev, qa, uat, staging, prod` here — each gets a
+`deploy-<env>.yaml`. Gating is the seeder's choice, not the fork's: each names its own
+`depends_on`, and `staging`/`prod` set `releases_only` so prereleases stop at `uat`.
 
-Gating is the seeder's choice, not the fork's: each environment names its `depends_on`, and
-`staging` and `prod` set `releases_only` so prereleases stop at `uat`.
-
-Useful flags: `--repos`, `--issues`, `--releases`, `--users` (accounts per role),
-`--failure-rate`, `--wait-approvals`, `--seed` to repeat the content, `--tag` to repeat the
-identities, `--self-test` to run the naming doctests without a server.
+Useful flags: `--repos`, `--epics`, `--releases`, `--users`, `--failure-rate`,
+`--wait-approvals`, `--seed`/`--tag` to repeat a run, `--self-test` to dry-run the request plan.
 
 ## The runner
 

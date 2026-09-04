@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """Seed a Gitea hub preview instance with fake but coherent test data.
 
-Everything goes through the public APIs — Gitea's /api/v1 and the fork's /api/deployments/v1.
+Everything goes through the public APIs — Gitea's /api/v1, the fork's /api/deployments/v1 and
+its /api/planning/v1.
 
   pip install faker
   ./seed.py --token <admin token>
-  ./seed.py --self-test            # naming doctests only, no server needed
+  ./seed.py --self-test            # doctests plus a dry run against a stub, no server needed
 
 Re-running adds a fresh generation; every name carries a run tag, so nothing collides.
 Generated names carry their entity kind as a prefix, so a preview instance reads as seed
-data at a glance. Environments and labels are the exceptions: environments are the ones
-app.ini's [deployments] DEFAULT_ENVIRONMENTS names, and each has a deploy-<env>.yaml declaring
-it; labels keep the `type:` and `epic:` prefixes the board keys its groups off.
+data at a glance. Environments are the exception: they are the ones app.ini's [deployments]
+DEFAULT_ENVIRONMENTS names, and each has a deploy-<env>.yaml declaring it. Issue type,
+hierarchy, schedule, estimates, points, dependencies, capacity and time tracking all go
+through the planning API rather than a label convention.
 """
 
 import argparse
 import base64
 import doctest
+import itertools
 import json
+import os
 import random
 import re
 import string
@@ -25,18 +29,33 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from faker import Faker
 
-# ccpm's issue types (references/issue-types.yaml), so the board's type: groups line up
-# with what the epic sync files.
-ISSUE_TYPES = ["initiative", "epic", "story", "task", "spike", "bug"]
+# The hierarchy the planning API enforces through RankAllows(parentRank, childRank) —
+# services/planning/hierarchy.go — a parent's rank number must be strictly lower than its
+# child's. icon names are octicon-* files shipped under public/assets/img/svg.
+TYPE_DEFS = [
+    # name, rank, icon, color
+    ("epic", 1, "octicon-rocket", "#8250df"),
+    ("feature", 2, "octicon-package", "#1f6feb"),
+    ("story", 3, "octicon-checklist", "#2da44e"),
+    ("bug", 3, "octicon-bug", "#d1242f"),
+    ("spike", 3, "octicon-beaker", "#bf8700"),
+    ("task", 4, "octicon-issue-opened", "#57606a"),
+]
+LEAF_TYPES = ["story", "bug", "spike"]
+LEAF_WEIGHTS = [0.5, 0.3, 0.2]
+CLOSE_PROB = {"epic": 0.05, "feature": 0.15, "story": 0.3, "bug": 0.35, "spike": 0.3, "task": 0.4}
+
 COLUMNS = ["Backlog", "Ready", "In progress", "In review", "Done"]
 ENVIRONMENTS = ["dev", "qa", "uat", "staging", "prod"]
 PASSWORD = "preview1234"
 
 V1 = "/api/v1"
 DV1 = "/api/deployments/v1"
+PV1 = "/api/planning/v1"
 
 # Each role gets one account per --users and one org team, so a preview instance can
 # demonstrate the whole permission matrix. Outsiders hold no membership of any kind: the
@@ -90,6 +109,31 @@ class Api:
         return parsed
 
 
+class StubApi:
+    """Answers every call in memory, so --self-test can run the whole request plan with no
+    server: every path and body this module ever sends is exercised for real, just against a
+    fake that always succeeds, and records each call for the self-test's own assertions.
+    """
+
+    def __init__(self):
+        self.calls = []
+        self._next_id = 1000
+
+    def __call__(self, method, path, body=None, token=None, basic=None, ok=(200, 201, 204)):
+        self.calls.append((method, path, body))
+        if method == "GET":
+            if path.startswith(f"{V1}/user"):
+                return {"is_admin": True, "login": "stub-admin", "id": 1}
+            return []
+        self._next_id += 1
+        resp = {"id": self._next_id}
+        if path.endswith("/tokens"):
+            resp["sha1"] = f"stub-token-{self._next_id}"
+        if method == "POST" and path.endswith("/issues") and "/repos/" in path:
+            resp["number"] = self._next_id
+        return resp
+
+
 def slug(text, n=3):
     words = re.findall(r"[a-z0-9]+", text.lower())[:n]
     return "-".join(words) or "item"
@@ -128,6 +172,24 @@ def release_tag(n):
     return f"release-v1.{n}.0"
 
 
+def gen_estimate():
+    """A duration the estimate endpoint's parser accepts: hours and minutes only, no day or
+    week unit, because modules/util/time_str.go's regex is (\\d+)\\s*([hms]) — "1d" or "3d"
+    does not match it and comes back bad_estimate.
+
+    >>> import re
+    >>> bool(re.fullmatch(r"\\d+h(\\d+m)?", gen_estimate()))
+    True
+    """
+    hours = random.choice([1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 32])
+    minutes = random.choice([0, 15, 30, 45])
+    return f"{hours}h{minutes}m" if minutes else f"{hours}h"
+
+
+def gen_points():
+    return random.choice([1, 2, 3, 5, 8, 13])
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -135,7 +197,9 @@ def parse_args(argv=None):
     p.add_argument("--token", help="admin access token")
     p.add_argument("--users", type=int, default=1, help="accounts per role; 7 roles are seeded")
     p.add_argument("--repos", type=int, default=3)
-    p.add_argument("--issues", type=int, default=14, help="issues per repository")
+    p.add_argument("--epics", type=int, default=2,
+                   help="epics per repository; each grows 2-4 features, each feature 2-5 "
+                        "stories/bugs/spikes, some stories gain tasks")
     p.add_argument("--releases", type=int, default=4, help="releases per repository")
     p.add_argument("--seed", type=int, default=None, help="fix the RNG so the content repeats")
     p.add_argument("--tag", default=None,
@@ -148,7 +212,8 @@ def parse_args(argv=None):
                    help="how long to wait for the runner to reach the prod gate; 0 skips")
     p.add_argument("--accounts-file", default="planning/seed-users.md",
                    help="where to write the seeded accounts, their roles and their tokens")
-    p.add_argument("--self-test", action="store_true", help="run the naming doctests and exit")
+    p.add_argument("--self-test", action="store_true",
+                   help="run the doctests and a dry run of the whole request plan, then exit")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     if not args.self_test and not args.token:
@@ -250,15 +315,36 @@ def make_groups(api, org, users):
     return teams
 
 
+def seed_capacities(api, users, totals):
+    """Two users get an explicit instance-scope capacity row; everyone else resolves to the
+    published default.
+    """
+    candidates = [u for u in users if u["role"] in ("maintainer", "deployer")] or users
+    for u in candidates[:2]:
+        api("PUT", f"{PV1}/capacity/{u['id']}", {
+            "hours_per_day": random.choice([6, 6.5, 7, 8]),
+            "utilization": round(random.uniform(0.7, 0.95), 2),
+            "workdays": 62,  # Monday through Friday
+        }, ok=(200,))
+        totals["capacities"] += 1
+
+
 def make_repo(api, fake, org, repo_name, users, failure_rate):
     full = f"{org}/{repo_name}"
-    api("POST", f"{V1}/orgs/{org}/repos", {
+    repo = api("POST", f"{V1}/orgs/{org}/repos", {
         "name": repo_name, "description": fake.catch_phrase(), "private": True,
         "auto_init": True, "default_branch": "main", "readme": "Default",
     })
-    # The deploy endpoint requires write on the Actions unit; projects back the board.
-    api("PATCH", f"{V1}/repos/{full}",
-        {"has_actions": True, "has_projects": True, "has_issues": True})
+    # The deploy endpoint requires write on the Actions unit; projects back the board;
+    # dependencies must be turned on before any issue can be linked to another.
+    api("PATCH", f"{V1}/repos/{full}", {
+        "has_actions": True, "has_projects": True, "has_issues": True,
+        "internal_tracker": {
+            "enable_time_tracker": True,
+            "allow_only_contributors_to_track_time": False,
+            "enable_issue_dependencies": True,
+        },
+    })
     # Repository administrator is a collaboration, not a team: joining a team writes no
     # access row, and a caller's access mode is raised from a team only for an owner team,
     # so a maintainer team holds admin on every unit and is still not repository admin.
@@ -266,7 +352,7 @@ def make_repo(api, fake, org, repo_name, users, failure_rate):
         if u["role"] == "maintainer":
             api("PUT", f"{V1}/repos/{full}/collaborators/{u['login']}", {"permission": "admin"})
     make_workflows(api, full, failure_rate)
-    return full
+    return full, repo["id"]
 
 
 def make_workflows(api, full, failure_rate):
@@ -305,31 +391,189 @@ def make_board(api, fake, full):
     return project, columns
 
 
-def make_issues(api, fake, full, labels, milestone, project, columns, users, count, totals):
-    epics, assignable = [], [u for u in users if u["role"] != "outsider"]
+def create_issue_types(api, full, repo_id):
+    """The types the hierarchy is built from, scoped to this repository."""
+    types = {}
+    for type_name, rank, icon, color in TYPE_DEFS:
+        created = api("POST", f"{PV1}/issue-types", {
+            "repo_id": repo_id, "name": type_name, "color": color, "icon": icon, "rank": rank,
+        }, ok=(200, 422))
+        if not isinstance(created, dict) or "id" not in created:
+            rows = api("GET", f"{PV1}/issue-types?repo_id={repo_id}&limit=100") or []
+            created = next((t for t in rows if t["name"] == type_name), None)
+        types[type_name] = created
+    return types
+
+
+def create_points_field(api, repo_id):
+    """A field keyed points must be kind int (services/planning/field.go: pointsKindError),
+    since every rollup sums it.
+    """
+    created = api("POST", f"{PV1}/fields", {
+        "repo_id": repo_id, "key": "points", "kind": "int", "label": "Points", "sort": 1,
+    }, ok=(200, 422))
+    if not isinstance(created, dict) or "id" not in created:
+        rows = api("GET", f"{PV1}/fields?repo_id={repo_id}&limit=100") or []
+        created = next((f for f in rows if f["key"] == "points"), None)
+    return created
+
+
+def create_milestones(api, fake, full, count=3):
+    """Sprint-shaped rows: each due 3-10 weeks out, started 1-3 weeks before its own due date."""
+    milestones = []
     for i in range(count):
-        itype = "epic" if i < 2 else random.choice(ISSUE_TYPES[2:])
-        issue = api("POST", f"{V1}/repos/{full}/issues", {
-            "title": title("issue", fake.sentence(nb_words=6).rstrip(".")),
-            "body": fake.paragraph(nb_sentences=4),
-            "labels": [labels[itype]],
-            "milestone": milestone["id"],
-            "assignees": [random.choice(assignable)["login"]] if random.random() < 0.7 else [],
+        due = datetime.now(timezone.utc) + timedelta(weeks=random.uniform(3, 10) + i * 2)
+        start = due - timedelta(weeks=random.uniform(1, 3))
+        m = api("POST", f"{V1}/repos/{full}/milestones", {
+            "title": title("milestone", f"Sprint {i + 1}"),
+            "description": fake.sentence(),
+            "due_on": due.strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
-        totals["issues"] += 1
-        if itype == "epic":
-            epics.append(issue)
-        elif epics and random.random() < 0.6:
-            parent = random.choice(epics)  # an epic: label is a board group key
-            api("POST", f"{V1}/repos/{full}/labels",
-                {"name": f"epic:{parent['number']}", "color": "ededed"}, ok=(201, 422))
-            api("POST", f"{V1}/repos/{full}/issues/{issue['number']}/labels",
-                {"labels": [f"epic:{parent['number']}"]}, ok=(200, 201, 422))
-        api("POST", f"{V1}/repos/{full}/projects/{project['id']}/columns/"
-                    f"{random.choice(columns)}/issues/{issue['id']}", ok=(200, 201, 204))
-        totals["cards"] += 1
-        if random.random() < 0.25:
-            api("PATCH", f"{V1}/repos/{full}/issues/{issue['number']}", {"state": "closed"})
+        api("PUT", f"{PV1}/milestones/{m['id']}/schedule",
+            {"repo": full, "start": start.date().isoformat()}, ok=(200,))
+        milestones.append(m)
+    return milestones
+
+
+def apply_schedule(api, full, issue_id, totals):
+    """60% of issues get a recorded start, 70% a deadline, the deadline always after the
+    start when both are sent — PUT .../schedule refuses a start past the issue's own deadline.
+    """
+    baseline = datetime.now(timezone.utc) - timedelta(days=random.randint(3, 45))
+    started = random.random() < 0.6
+    start_date = None
+    if started:
+        start_date = baseline + timedelta(days=random.randint(0, 5))
+        api("PUT", f"{PV1}/issues/{issue_id}/schedule",
+            {"repo": full, "start": start_date.date().isoformat()}, ok=(200,))
+        totals["starts"] += 1
+    if random.random() < 0.7:
+        deadline = (start_date or baseline) + timedelta(days=random.randint(7, 45))
+        api("POST", f"{PV1}/issues/{issue_id}/dates",
+            {"repo": full, "end": deadline.date().isoformat()}, ok=(200,))
+        totals["deadlines"] += 1
+    return started
+
+
+def apply_estimate_and_points(api, full, issue_id, type_name, totals):
+    if random.random() < 0.7:
+        api("PUT", f"{PV1}/issues/{issue_id}/estimate",
+            {"repo": full, "time_estimate": gen_estimate()}, ok=(200,))
+        totals["estimates"] += 1
+    if type_name != "epic" and random.random() < 0.75:
+        api("PUT", f"{PV1}/issues/{issue_id}/fields",
+            {"repo": full, "values": {"points": gen_points()}}, ok=(200,))
+        totals["points"] += 1
+
+
+def pick_column(closed, started):
+    if closed:
+        return "Done"
+    if not started:
+        return random.choices(["Backlog", "Ready"], weights=[0.6, 0.4])[0]
+    return random.choices(["In progress", "In review"], weights=[0.65, 0.35])[0]
+
+
+def seed_issue(api, fake, full, type_name, types, milestone_id, assignee, parent_id,
+               project_id, columns, totals):
+    """Create one issue and carry it through every planning write a card needs: type, parent,
+    schedule, estimate, points and a column matching its state.
+    """
+    issue = api("POST", f"{V1}/repos/{full}/issues", {
+        "title": title("issue", fake.sentence(nb_words=6).rstrip(".")),
+        "body": fake.paragraph(nb_sentences=4),
+        "milestone": milestone_id,
+        "assignees": [assignee] if assignee else [],
+    })
+    totals["issues"] += 1
+    api("PUT", f"{PV1}/issues/{issue['id']}/type",
+        {"repo": full, "type_id": types[type_name]["id"]}, ok=(200,))
+    if parent_id is not None:
+        api("PUT", f"{PV1}/issues/{issue['id']}/parent",
+            {"repo": full, "parent_issue_id": parent_id}, ok=(200,))
+    started = apply_schedule(api, full, issue["id"], totals)
+    apply_estimate_and_points(api, full, issue["id"], type_name, totals)
+    closed = random.random() < CLOSE_PROB[type_name]
+    if closed:
+        api("PATCH", f"{V1}/repos/{full}/issues/{issue['number']}", {"state": "closed"})
+    column = COLUMNS.index(pick_column(closed, started))
+    api("POST", f"{V1}/repos/{full}/projects/{project_id}/columns/{columns[column]}/issues/"
+                f"{issue['id']}", ok=(200, 201, 204))
+    totals["cards"] += 1
+    return {"id": issue["id"], "number": issue["number"], "type": type_name,
+            "assignee": assignee, "started": started, "closed": closed}
+
+
+def link_dependencies(api, full, records, totals):
+    """40% of sibling pairs: each later sibling blocked on the one before it."""
+    for earlier, later in zip(records, records[1:]):
+        if random.random() < 0.4:
+            try:
+                api("POST", f"{PV1}/issues/{later['id']}/dependencies",
+                    {"repo": full, "depends_on_issue_id": earlier["id"]}, ok=(200,))
+                totals["dependencies"] += 1
+            except ApiError:
+                pass  # a re-run with the same --tag can already hold this pair linked
+
+
+def seed_issue_tree(api, fake, full, types, milestones, assignee_cycle, project_id, columns,
+                     epics_count, totals):
+    """epic -> feature -> {story, bug, spike} -> task, depth 4 at its deepest, with
+    dependencies drawn across each level's own siblings.
+    """
+    all_records, epics = [], []
+    for _ in range(epics_count):
+        epic = seed_issue(api, fake, full, "epic", types, random.choice(milestones)["id"],
+                          next(assignee_cycle), None, project_id, columns, totals)
+        all_records.append(epic)
+        epics.append(epic)
+        features = []
+        for _ in range(random.randint(2, 4)):
+            feature = seed_issue(api, fake, full, "feature", types, random.choice(milestones)["id"],
+                                 next(assignee_cycle), epic["id"], project_id, columns, totals)
+            all_records.append(feature)
+            features.append(feature)
+            leaves = []
+            for _ in range(random.randint(2, 5)):
+                leaf_type = random.choices(LEAF_TYPES, weights=LEAF_WEIGHTS)[0]
+                leaf = seed_issue(api, fake, full, leaf_type, types, random.choice(milestones)["id"],
+                                  next(assignee_cycle), feature["id"], project_id, columns, totals)
+                all_records.append(leaf)
+                leaves.append(leaf)
+                if leaf_type == "story" and random.random() < 0.4:
+                    tasks = []
+                    for _ in range(random.randint(1, 3)):
+                        task = seed_issue(api, fake, full, "task", types,
+                                          random.choice(milestones)["id"], next(assignee_cycle),
+                                          leaf["id"], project_id, columns, totals)
+                        all_records.append(task)
+                        tasks.append(task)
+                    link_dependencies(api, full, tasks, totals)
+            link_dependencies(api, full, leaves, totals)
+        link_dependencies(api, full, features, totals)
+    link_dependencies(api, full, epics, totals)
+    return all_records
+
+
+def seed_time_entries(api, full, records, token_by_login, totals, stopwatch_state):
+    """50% of started issues get 1-3 tracked time entries; the very first one across the
+    whole run also gets a stopwatch left running, started as its own assignee.
+    """
+    for r in records:
+        if not r["started"] or not r["assignee"] or random.random() >= 0.5:
+            continue
+        for _ in range(random.randint(1, 3)):
+            api("POST", f"{V1}/repos/{full}/issues/{r['number']}/times",
+                {"time": random.choice([1800, 3600, 5400, 7200, 14400]), "user_name": r["assignee"]},
+                ok=(200, 201))
+        totals["time_entries"] += 1
+        if not stopwatch_state["started"]:
+            token = token_by_login.get(r["assignee"])
+            if token:
+                api("POST", f"{V1}/repos/{full}/issues/{r['number']}/stopwatch/start",
+                    token=token, ok=(200, 201, 422))
+                totals["stopwatches"] += 1
+                stopwatch_state["started"] = True
 
 
 def promote(api, fake, full, release_count, totals, verbose):
@@ -404,6 +648,8 @@ def write_accounts(path, server, org, users, teams):
         f"`{u['group']}` | {teams.get(u['group']) or '—'} |"
         for u in users)
     try:
+        if os.path.dirname(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(
                 f"# Seeded accounts — {server}\n\n"
@@ -417,19 +663,12 @@ def write_accounts(path, server, org, users, teams):
     return path
 
 
-def main():
-    args = parse_args()
-    if args.self_test:
-        sys.exit(bool(doctest.testmod().failed))
-    fake = Faker()
-    if args.seed is not None:
-        Faker.seed(args.seed)
-        random.seed(args.seed)
-    # --seed fixes the generated content, not the identities: a repeated tag would collide
-    # with the previous run's users, org and repositories.
+def run(api, fake, args):
+    """The whole seed: users, org, then per repository the board, the type/hierarchy/schedule
+    planning writes, releases and deployments. Shared by main() against a real server and by
+    the self-test's dry run against StubApi.
+    """
     tag = args.tag or "".join(random.Random().choices(string.ascii_lowercase + string.digits, k=4))
-
-    api = Api(args.server, args.token, args.verbose)
 
     whoami = api("GET", f"{V1}/user")
     if not whoami.get("is_admin"):
@@ -438,6 +677,7 @@ def main():
 
     users = make_users(api, fake, tag, args.users)
     print(f"users: {len(users)} across {len(ROLES)} roles, each with an access token")
+    token_by_login = {u["login"]: u["token"] for u in users}
 
     org = name("org", slug(fake.company(), 2), tag)
     api("POST", f"{V1}/orgs", {"username": org, "full_name": fake.company(), "visibility": "public"})
@@ -451,28 +691,36 @@ def main():
         set_environment_policy(api, [reviewer_team] if reviewer_team else [])
         print("environments: prod needs 1 approval from the reviewers group, after staging")
 
-    totals = {"repos": 0, "issues": 0, "releases": 0, "cards": 0,
-              "deployments": 0, "overridden": 0, "held": 0, "approved": 0, "rejected": 0}
+    totals = {"repos": 0, "issues": 0, "cards": 0, "types_assigned": 0, "parents_set": 0,
+              "starts": 0, "deadlines": 0, "estimates": 0, "points": 0, "dependencies": 0,
+              "capacities": 0, "time_entries": 0, "stopwatches": 0, "milestones": 0,
+              "releases": 0, "deployments": 0, "overridden": 0, "held": 0,
+              "approved": 0, "rejected": 0}
+
+    seed_capacities(api, users, totals)
+    print(f"capacity: set for {totals['capacities']} users")
+
+    assignable = [u for u in users if u["role"] != "outsider"]
+    assignee_cycle = itertools.cycle(u["login"] for u in assignable)
+    stopwatch_state = {"started": False}
+    project_urls = []
 
     for i in range(args.repos):
-        full = make_repo(api, fake, org, name("repo", slug(fake.bs(), 2), f"{tag}{i}"),
-                         users, args.failure_rate)
+        full, repo_id = make_repo(api, fake, org, name("repo", slug(fake.bs(), 2), f"{tag}{i}"),
+                                  users, args.failure_rate)
         totals["repos"] += 1
 
-        labels = {}
-        for t in ISSUE_TYPES:
-            # Unprefixed: services/planning/board.go keys its groups off "type:" and "epic:".
-            labels[t] = api("POST", f"{V1}/repos/{full}/labels", {
-                "name": f"type:{t}", "color": "%06x" % random.randrange(0x1000000),
-                "description": f"ccpm work item type {t}",
-            })["id"]
-
-        milestone = api("POST", f"{V1}/repos/{full}/milestones", {
-            "title": title("milestone", f"{fake.word().capitalize()} {fake.year()}"),
-            "description": fake.sentence(),
-        })
+        types = create_issue_types(api, full, repo_id)
+        create_points_field(api, repo_id)
+        milestones = create_milestones(api, fake, full)
+        totals["milestones"] += len(milestones)
         project, columns = make_board(api, fake, full)
-        make_issues(api, fake, full, labels, milestone, project, columns, users, args.issues, totals)
+
+        records = seed_issue_tree(api, fake, full, types, milestones, assignee_cycle,
+                                  project["id"], columns, args.epics, totals)
+        totals["types_assigned"] += len(records)
+        totals["parents_set"] += sum(1 for r in records if r["type"] != "epic")
+        seed_time_entries(api, full, records, token_by_login, totals, stopwatch_state)
 
         for n in range(args.releases):
             api("POST", f"{V1}/repos/{full}/releases", {
@@ -482,16 +730,114 @@ def main():
             totals["releases"] += 1
 
         promote(api, fake, full, args.releases, totals, args.verbose)
-        print(f"repo: {full}")
+        print(f"repo: {full} — {len(records)} issues across {len(types)} types")
+        project_urls.append(f"{args.server}/planning/projects/{full}/{project['id']}")
 
     resolve_reviews(api, fake, users, totals, args.wait_approvals, args.verbose)
 
     print("\n" + json.dumps(totals, indent=2))
-    written = write_accounts(args.accounts_file, args.server, org, users, teams)
-    if written:
-        print(f"\naccounts: {written}")
+    if args.accounts_file:
+        written = write_accounts(args.accounts_file, args.server, org, users, teams)
+        if written:
+            print(f"\naccounts: {written}")
+    for url in project_urls:
+        print(f"project: {url}")
     print(f"browse: {args.server}/deployments  |  /planning/board  |  /planning/roadmap")
     print(f"sign in as any seeded user with password {PASSWORD!r}")
+
+
+# Every planning-API call the self-test's dry run must observe at least once, so a rewrite
+# that stops sending one of these fails loudly instead of silently.
+REQUIRED_CALLS = [
+    ("POST", re.compile(r"^" + re.escape(PV1) + r"/issue-types$")),
+    ("POST", re.compile(r"^" + re.escape(PV1) + r"/fields$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/type$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/parent$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/schedule$")),
+    ("POST", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/dates$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/estimate$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/fields$")),
+    ("POST", re.compile(r"^" + re.escape(PV1) + r"/issues/\d+/dependencies$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/milestones/\d+/schedule$")),
+    ("PUT", re.compile(r"^" + re.escape(PV1) + r"/capacity/\d+$")),
+    ("POST", re.compile(r"^" + re.escape(V1) + r"/repos/[^/]+/[^/]+/issues/\d+/times$")),
+    ("POST", re.compile(r"^" + re.escape(V1) + r"/repos/[^/]+/[^/]+/issues/\d+/stopwatch/start$")),
+]
+
+# Body keys the API contract requires as JSON numbers. A str here would still be accepted by
+# some of these endpoints (capacity's own doc says so explicitly) but not all of them, and
+# sending a number is the contract regardless.
+NUMERIC_BODY_KEYS = {
+    "type_id", "parent_issue_id", "depends_on_issue_id", "milestone_id", "repo_id", "org_id",
+    "column_id", "project_id", "rank", "sort", "hours_per_day", "utilization", "workdays",
+    "time",
+}
+
+
+def missing_calls(calls):
+    hit = set()
+    for method, path, _ in calls:
+        for i, (want_method, pattern) in enumerate(REQUIRED_CALLS):
+            if method == want_method and pattern.match(path):
+                hit.add(i)
+    return [f"{m} {p.pattern}" for i, (m, p) in enumerate(REQUIRED_CALLS) if i not in hit]
+
+
+def non_numeric_values(calls):
+    bad = []
+    for method, path, body in calls:
+        if not isinstance(body, dict):
+            continue
+        for key, value in body.items():
+            if key in NUMERIC_BODY_KEYS and isinstance(value, str):
+                bad.append(f"{method} {path}: {key}={value!r} is a string, not a number")
+        values = body.get("values")
+        if isinstance(values, dict) and isinstance(values.get("points"), str):
+            bad.append(f"{method} {path}: values.points={values['points']!r} is a string, not a number")
+    return bad
+
+
+def self_test():
+    doctest_failures = doctest.testmod().failed
+    if doctest_failures:
+        return 1
+
+    # Fixed seed: the dry run must deterministically exercise every required call, not pass
+    # or fail depending on which way the dice fell this run.
+    Faker.seed(7)
+    random.seed(7)
+    fake = Faker()
+    api = StubApi()
+    args = argparse.Namespace(
+        server="http://stub.invalid", token="stub", users=1, repos=1, epics=3, releases=1,
+        seed=7, tag="selftest", skip_env_policy=False, failure_rate=0.25, wait_approvals=0,
+        accounts_file=None, verbose=False,
+    )
+    run(api, fake, args)
+
+    missing = missing_calls(api.calls)
+    bad_numbers = non_numeric_values(api.calls)
+    if missing:
+        print("self-test: never called:\n  " + "\n  ".join(missing), file=sys.stderr)
+    if bad_numbers:
+        print("self-test: numbers sent as strings:\n  " + "\n  ".join(bad_numbers), file=sys.stderr)
+    if missing or bad_numbers:
+        return 1
+    print(f"self-test: {len(api.calls)} calls dry-run, every required planning write seen, "
+          f"all numbers sent as JSON numbers")
+    return 0
+
+
+def main():
+    args = parse_args()
+    if args.self_test:
+        sys.exit(self_test())
+    fake = Faker()
+    if args.seed is not None:
+        Faker.seed(args.seed)
+        random.seed(args.seed)
+    api = Api(args.server, args.token, args.verbose)
+    run(api, fake, args)
 
 
 if __name__ == "__main__":
