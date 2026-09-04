@@ -61,6 +61,7 @@ func endpoints() []*hubapi.Endpoint {
 		getCapacityEndpoint(),
 		setCapacityEndpoint(),
 		clearCapacityEndpoint(),
+		getTimesheetEndpoint(),
 	}
 }
 

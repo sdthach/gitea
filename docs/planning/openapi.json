@@ -717,6 +717,54 @@
           "truncated"
         ],
         "type": "object"
+      },
+      "Timesheet": {
+        "properties": {
+          "from_unix": {
+            "description": "The resolved window start, UTC midnight.",
+            "type": "integer"
+          },
+          "lanes": {
+            "description": "One row per repository assignee plus anyone else who logged time in the window, even one with no entries. Each carries user_id, login, display_name, avatar_url, total_seconds and days (unix, seconds, entries), where each entry carries id, issue_id, number, title, seconds, created_unix and editable — the doer owns the entry or can write the Issues unit.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repo_id": {
+            "description": "Repository the timesheet covers.",
+            "type": "integer"
+          },
+          "running": {
+            "description": "This repository's own stopwatches currently ticking: user_id, login, issue_id, number, title and started_unix.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "to_unix": {
+            "description": "The resolved window end, UTC midnight of the last day covered.",
+            "type": "integer"
+          },
+          "totals": {
+            "description": "Sums over the same entries the lanes publish, four ways: by_issue (issue_id, number, title, seconds), by_user (user_id, login, seconds), by_milestone (milestone_id, title, seconds) and by_type (type_id, name, seconds).",
+            "type": "object"
+          },
+          "truncated": {
+            "description": "True when the window holds more than 5000 tracked-time rows, so only a prefix was folded in.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from_unix",
+          "lanes",
+          "repo_id",
+          "running",
+          "to_unix",
+          "totals",
+          "truncated"
+        ],
+        "type": "object"
       }
     }
   },
@@ -4527,6 +4575,114 @@
         "summary": "Per-user capacity heat strips and sprint load for the roadmap",
         "tags": [
           "capacity"
+        ]
+      }
+    },
+    "/timesheet": {
+      "get": {
+        "description": "repo_id is required and readable the same way GET /issue-types checks it. from and to are YYYY-MM-DD UTC dates, inclusive, defaulting to the current ISO week (Monday through Sunday) when both are omitted; the window is at most 92 days (bad_window otherwise). user_id restricts the response to that one user's own lane and running timer. lanes cover every repository assignee plus anyone else who logged time in the window, even one with no entries at all. entries come from Gitea's own time-tracking; a deleted entry never appears. running lists this repository's own stopwatches currently ticking. Totals are summed over the same entries the lanes publish. truncated marks a window with more than 5000 tracked-time rows, where only a prefix was folded in.",
+        "operationId": "getTimesheet",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on from. Bare form means the eq operator.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on to. Bare form means the eq operator.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on user_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timesheet"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The Time tab's timesheet: tracked time by user and day",
+        "tags": [
+          "timesheet"
         ]
       }
     }

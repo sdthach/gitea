@@ -51,6 +51,7 @@ Commands:
   projects                 The repositories and boards a planning page can open
   roadmap                  The roadmap: one bar per issue, with dependency arrows
   roadmap-capacity         Per-user capacity heat strips and sprint load for the roadmap
+  timesheet                The Time tab's timesheet: tracked time by user and day
 
 Every command accepts the section I query grammar as flags:
   --filter 'field[op]=value'  repeatable; sent to the server, never applied locally
@@ -1640,6 +1641,38 @@ Flags:
 gitea-planning roadmap-capacity — Per-user capacity heat strips and sprint load for the roadmap
 
   GET /roadmap/capacity
+
+Flags:
+  -cursor string
+    	opaque cursor from a previous response
+  -expand string
+    	comma-separated sub-resources, one level deep
+  -filter field[op]=value
+    	repeatable field[op]=value filter; sent to the server verbatim
+  -json
+    	emit the API response verbatim and unshaped
+  -limit int
+    	page size; the server defaults to 50 and caps at 200
+  -offset int
+    	row offset, converted to the 1-based page the API takes
+  -order string
+    	asc or desc
+  -q string
+    	free-text search
+  -server string
+    	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
+  -sort-by string
+    	sort field
+  -token string
+    	API token; resolved by the same precedence detect.sh implements
+```
+
+## gitea-planning timesheet
+
+```
+gitea-planning timesheet — The Time tab's timesheet: tracked time by user and day
+
+  GET /timesheet
 
 Flags:
   -cursor string

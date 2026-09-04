@@ -222,6 +222,10 @@ func TestEveryCommandComposesItsRequest(t *testing.T) {
 			[]string{"capacity-clear", "--repo-id", "1", "2"},
 			"/api/planning/v1/capacity/2", http.MethodDelete,
 		},
+		"timesheet": {
+			[]string{"timesheet", "--filter", "repo_id=1"},
+			"/api/planning/v1/timesheet", "",
+		},
 	}
 	require.Len(t, cases, len(client.Commands), "every command needs a test; add one when an endpoint is added")
 

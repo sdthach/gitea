@@ -179,6 +179,21 @@ var componentSchemas = map[string]any{
 		"sprints_unscheduled": hubapi.ArrayProp("object", "A milestone missing a start, a due date or both: milestone_id, title, missing."),
 		"truncated":           hubapi.Prop("boolean", "True when the repository has more than 2000 open assigned issues, so only a prefix was considered."),
 	}, "lanes", "sprints", "sprints_unscheduled", "truncated"),
+	"Timesheet": hubapi.ObjectSchema(map[string]any{
+		"repo_id":   hubapi.Prop("integer", "Repository the timesheet covers."),
+		"from_unix": hubapi.Prop("integer", "The resolved window start, UTC midnight."),
+		"to_unix":   hubapi.Prop("integer", "The resolved window end, UTC midnight of the last day covered."),
+		"lanes": hubapi.ArrayProp("object", "One row per repository assignee plus anyone else who logged time in the "+
+			"window, even one with no entries. Each carries user_id, login, display_name, avatar_url, "+
+			"total_seconds and days (unix, seconds, entries), where each entry carries id, issue_id, number, "+
+			"title, seconds, created_unix and editable — the doer owns the entry or can write the Issues unit."),
+		"running": hubapi.ArrayProp("object", "This repository's own stopwatches currently ticking: user_id, login, "+
+			"issue_id, number, title and started_unix."),
+		"totals": hubapi.Prop("object", "Sums over the same entries the lanes publish, four ways: by_issue "+
+			"(issue_id, number, title, seconds), by_user (user_id, login, seconds), by_milestone (milestone_id, "+
+			"title, seconds) and by_type (type_id, name, seconds)."),
+		"truncated": hubapi.Prop("boolean", "True when the window holds more than 5000 tracked-time rows, so only a prefix was folded in."),
+	}, "repo_id", "from_unix", "to_unix", "lanes", "running", "totals", "truncated"),
 	"Error": hubapi.ErrorSchema(),
 }
 
