@@ -4,7 +4,6 @@
 package hub
 
 import (
-	htmltemplate "html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,34 +71,23 @@ func TestForkTemplatesParse(t *testing.T) {
 	}
 }
 
-// TestEveryInlineScriptCarriesTheCspNonce is what keeps the pages alive in a deployment
-// that sends Gitea's Content Security Policy: the policy admits an inline script only with
-// the request's nonce, so a script without one is dropped and the page renders a shell that
-// never loads. Nothing server-rendered says so, which is why this is checked in source.
-func TestEveryInlineScriptCarriesTheCspNonce(t *testing.T) {
-	scripts := 0
-	for _, dir := range forkTemplateDirs(t) {
-		entries, err := os.ReadDir(dir)
-		require.NoError(t, err)
-		require.NotEmpty(t, entries)
+// TestNoForkTemplateCarriesAnInlineScript: every deployments page is a bundled Vue island now,
+// so no template under it needs the CSP nonce an inline script would require. Planning is not
+// scanned yet: board.tmpl, roadmap.tmpl and swimlanes.tmpl still carry one apiece.
+func TestNoForkTemplateCarriesAnInlineScript(t *testing.T) {
+	dir := filepath.Join(templateDir(t), "deployments")
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
 
-		for _, entry := range entries {
-			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			require.NoError(t, err)
-			for line := range strings.SplitSeq(string(raw), "\n") {
-				if !strings.Contains(line, "<script") {
-					continue
-				}
-				scripts++
-				assert.Contains(t, line, `nonce="{{ctx.CspScriptNonce}}"`,
-					"%s opens a script the policy would drop", entry.Name())
-			}
-		}
+	templates := 0
+	for _, entry := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		require.NoError(t, err)
+		templates++
+		assert.NotContains(t, string(raw), "<script", "%s carries an inline script", entry.Name())
 	}
-	// Both areas are mid-migration to bundled Vue islands, so the count only ever falls as a
-	// page's inline script is ported; the floor here just proves the scan itself is not
-	// silently finding zero files.
-	assert.Greater(t, scripts, 0, "the scan must actually have found the fork's scripts")
+	assert.Positive(t, templates, "the scan must actually have found the fork's templates")
 }
 
 // TestNavbarSpokeDelegatesToAHubTemplate: the single upstream template edit is one
@@ -119,34 +107,6 @@ func TestNavbarSpokeDelegatesToAHubTemplate(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(templateDir(t), "hub", "navbar_entry.tmpl"))
 	require.NoError(t, err, "the navbar spoke names a template the fork ships")
-}
-
-// TestEnvironmentPageEscapesItsData executes the page through html/template, the renderer
-// Gitea uses, so a value interpolated into the page's inline script is proven to arrive as a
-// quoted JavaScript string rather than as raw source. Parsing alone would not catch this:
-// contextual escaping happens at execution.
-func TestEnvironmentPageEscapesItsData(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "environment.tmpl"))
-	require.NoError(t, err)
-
-	tmpl := htmltemplate.New("root").Funcs(htmltemplate.FuncMap(templateStubs()))
-	_, err = tmpl.New("base/head").Parse("<html><body>")
-	require.NoError(t, err)
-	_, err = tmpl.New("base/footer").Parse("</body></html>")
-	require.NoError(t, err)
-	_, err = tmpl.New("environment").Parse(string(raw))
-	require.NoError(t, err)
-
-	var out strings.Builder
-	require.NoError(t, tmpl.ExecuteTemplate(&out, "environment", map[string]any{
-		"Title":           "Environment: prod",
-		"EnvironmentName": `prod";alert(1);//`,
-		"APIBase":         "/api/deployments/v1",
-	}))
-	body := out.String()
-	assert.Contains(t, body, `const base = "/api/deployments/v1";`)
-	assert.NotContains(t, body, `const wanted = "prod";alert(1);//";`, "an environment name must not be able to close the string literal")
-	assert.Contains(t, body, "alert", "the value is still rendered, just escaped")
 }
 
 // TestSetPageTokenIgnoresATokenMintedForAnotherUser: a token cached in the session must be

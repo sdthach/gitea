@@ -1,6 +1,6 @@
 import {env} from 'node:process';
 import {test, expect} from '@playwright/test';
-import type {APIRequestContext} from '@playwright/test';
+import type {APIRequestContext, Page} from '@playwright/test';
 import {login, loginUser, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
 
 // The deployments pages authenticate with a token, not the browser session, and mint one per
@@ -180,4 +180,102 @@ test('deployments environment detail offers a reader no control', async ({page})
   } finally {
     await apiDeleteUser(page.request, reader);
   }
+});
+
+// dragNode moves the mouse to from's center, presses, steps to to's center and releases — a
+// real pointer drag, not the HTML5 drag-and-drop gesture PromotionPath.vue does not use. It
+// waits for the PUT the drop fires so a caller's next read is never racing the write.
+async function dragNode(page: Page, scope: string, from: string, to: string) {
+  const fromLocator = page.locator(`${scope} [data-promotion-node="${from}"]`);
+  await fromLocator.scrollIntoViewIfNeeded(); // the accumulating list of scopes can push this one off-screen
+  const fromBox = await fromLocator.boundingBox();
+  const toBox = await page.locator(`${scope} [data-promotion-node="${to}"]`).boundingBox();
+  if (!fromBox || !toBox) throw new Error('a promotion path node has no bounding box');
+  const [response] = await Promise.all([
+    page.waitForResponse((resp) => resp.request().method() === 'PUT' && resp.url().includes('/environments/')),
+    (async () => {
+      await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {steps: 5});
+      await page.mouse.up();
+    })(),
+  ]);
+  return response;
+}
+
+test('deployments path editor connects two environments', async ({page}) => {
+  const repoName = `e2e-deployments-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  await apiCreateEnvironment(page.request, repoID, 'a');
+  await apiCreateEnvironment(page.request, repoID, 'b');
+
+  await page.goto('/deployments/environments');
+  const scope = `[data-repo-id="${repoID}"]`;
+  await expect(page.locator(`${scope} [data-promotion-node="a"]`)).toBeVisible();
+  await expect(page.locator(`${scope} [data-promotion-node="b"]`)).toBeVisible();
+
+  const response = await dragNode(page, scope, 'a', 'b');
+  expect(response.ok(), `connect a to b: ${await response.text()}`).toBe(true);
+
+  const graphResp = await page.request.get(`${baseUrl()}/api/deployments/v1/environments/paths?repo_id=${repoID}`, {headers: apiHeaders()});
+  expect(graphResp.ok()).toBe(true);
+  const graph = await graphResp.json();
+  const nodeA = graph.nodes.find((n: {name: string}) => n.name === 'a');
+  expect(nodeA.depends_on).toContain('b');
+});
+
+test('deployments path editor refuses a cycle', async ({page}) => {
+  const repoName = `e2e-deployments-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const aID = await apiCreateEnvironment(page.request, repoID, 'a');
+  await apiCreateEnvironment(page.request, repoID, 'b');
+
+  const setDependency = await page.request.put(`${baseUrl()}/api/deployments/v1/environments/${aID}`, {
+    headers: apiHeaders(),
+    data: {repo_id: repoID, name: 'a', sort_order: 10, review_policy: 'none', required_reviewers: 1, depends_on: ['b']},
+  });
+  expect(setDependency.ok(), `set a depends_on b: ${await setDependency.text()}`).toBe(true);
+
+  await page.goto('/deployments/environments');
+  const scope = `[data-repo-id="${repoID}"]`;
+  await expect(page.locator(`${scope} [data-promotion-node="a"]`)).toBeVisible();
+  await expect(page.locator(`${scope} [data-promotion-node="b"]`)).toBeVisible();
+
+  // b onto a would make b depend on a too, closing the cycle a already opened by depending on b.
+  const response = await dragNode(page, scope, 'b', 'a');
+  expect(response.ok()).toBe(false);
+
+  await expect(page.locator(`${scope} .ui.negative.message`)).toContainText('cycle');
+
+  const graphResp = await page.request.get(`${baseUrl()}/api/deployments/v1/environments/paths?repo_id=${repoID}`, {headers: apiHeaders()});
+  const graph = await graphResp.json();
+  const nodeB = graph.nodes.find((n: {name: string}) => n.name === 'b');
+  expect(nodeB.depends_on).toEqual([]);
+});
+
+test('deployments path editor screenshot', async ({page}) => {
+  const shotsDir = env.DEPLOYMENTS_SHOTS_DIR;
+  test.skip(!shotsDir, 'DEPLOYMENTS_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
+
+  const repoName = `e2e-deployments-shots-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  await apiCreateEnvironment(page.request, repoID, 'sandbox', 10);
+  await apiCreateEnvironment(page.request, repoID, 'production', 20);
+
+  await page.goto('/deployments/environments');
+  const scope = `[data-repo-id="${repoID}"]`;
+  await expect(page.locator(`${scope} [data-promotion-node="sandbox"]`)).toBeVisible();
+  await page.screenshot({path: `${shotsDir}/environments-path.png`, fullPage: true});
 });

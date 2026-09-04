@@ -126,7 +126,10 @@ func TestDeploymentsPageIsBehindSignIn(t *testing.T) {
 	req = NewRequest(t, "GET", "/deployments/environments/prod")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deploymentsv1.BasePath+"/environments", "the page fetches its rows from the documented endpoint")
+	assert.Contains(t, body, `"deploymentsEnvironments":{"apiBase":"`+deploymentsv1.BasePath+`"`,
+		"the page fetches its rows from the documented endpoint")
+	assert.Contains(t, body, `data-global-init="initDeploymentsEnvironments"`,
+		"the page mounts the bundled client that is the API's actual client")
 }
 
 // TestDeploymentsEnvironmentPagesAreClientsOfTheAPI covers the editor's two screens: the list
@@ -142,13 +145,19 @@ func TestDeploymentsEnvironmentPagesAreClientsOfTheAPI(t *testing.T) {
 
 	resp := session.MakeRequest(t, NewRequest(t, "GET", "/deployments/environments"), http.StatusOK)
 	body := resp.Body.String()
-	assert.Contains(t, body, deploymentsv1.BasePath+"/environments", "the list is a client of the documented endpoint")
-	assert.Contains(t, body, `const envID = "";`, "the list screen names no single row")
+	assert.Contains(t, body, `"deploymentsEnvironments":{"apiBase":"`+deploymentsv1.BasePath+`"`,
+		"the list is a client of the documented endpoint")
+	assert.Contains(t, body, `data-global-init="initDeploymentsEnvironments"`,
+		"the list screen mounts the bundled client that names no single row")
 
 	resp = session.MakeRequest(t, NewRequest(t, "GET", "/deployments/environments/1/edit"), http.StatusOK)
 	body = resp.Body.String()
-	assert.Contains(t, body, `const envID = "1";`, "the detail screen reads the row the path names, not one resolved by name")
-	assert.Contains(t, body, "Danger zone")
+	assert.Contains(t, body, `"deploymentsEnvironmentEdit":{"apiBase":"`+deploymentsv1.BasePath+`"`,
+		"the detail screen is a client of the documented endpoint")
+	assert.Contains(t, body, `"environmentId":"1"`,
+		"the detail screen reads the row the path names, not one resolved by name")
+	assert.Contains(t, body, `data-global-init="initDeploymentsEnvironmentEdit"`,
+		"the page mounts the bundled client that is the API's actual client")
 }
 
 // The tests below cover the repository-scoped endpoints and, with them, repoWithActions —

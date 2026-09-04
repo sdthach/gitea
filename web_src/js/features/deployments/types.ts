@@ -179,3 +179,103 @@ export type TrendPoint = {
   average_duration_seconds: number;
   deployments: number;
 };
+
+// EnvironmentsPageConfig is environment.tmpl's ctx.PageData for the list route (with or
+// without a name filter); EnvironmentEditPageConfig is the same template's other route, the
+// single environment by id.
+export type EnvironmentsPageConfig = {
+  apiBase: string;
+  appSubUrl: string;
+  token: string;
+  name: string;
+};
+
+export type EnvironmentEditPageConfig = {
+  apiBase: string;
+  appSubUrl: string;
+  token: string;
+  environmentId: string;
+};
+
+export type DeployWindow = {
+  days_mask: number;
+  from_minute: number;
+  to_minute: number;
+  timezone: string;
+};
+
+// Environment mirrors models/deployments.Environment plus the API's own can_write projection.
+export type Environment = {
+  id: number;
+  repo_id: number;
+  name: string;
+  sort_order: number;
+  review_policy: 'none' | 'any_approver' | 'others_only';
+  required_reviewers: number;
+  depends_on: string[];
+  require_prior_deployment: boolean;
+  releases_only: boolean;
+  admins_can_bypass: boolean;
+  restrict_reviewers: boolean;
+  reviewer_user_ids: number[];
+  reviewer_team_ids: number[];
+  auto_promote: boolean;
+  wait_minutes: number;
+  deploy_window: DeployWindow | null;
+  required_status_contexts: string[];
+  exclusive_lock: boolean;
+  created_unix: number;
+  updated_unix: number;
+  can_write: boolean;
+};
+
+export type SecretName = {
+  id: number;
+  name: string;
+  repo_id: number;
+  environment: string;
+  scoped: boolean;
+  exists: boolean;
+};
+
+export type GiteaRepo = {
+  id: number;
+  full_name: string;
+  owner: {login: string};
+};
+
+export type GiteaUser = {
+  id: number;
+  login: string;
+};
+
+export type GiteaTeam = {
+  id: number;
+  name: string;
+};
+
+export type PathNodeChecks = {
+  wait_minutes: number;
+  deploy_window: DeployWindow | null;
+  required_status_contexts: string[];
+  exclusive_lock: boolean;
+};
+
+// PathNode and PathEdge mirror routers/api/deployments/v1.PathNode / PathEdge exactly:
+// GET /environments/paths is what PromotionPath.vue renders.
+export type PathNode = {
+  name: string;
+  depends_on: string[];
+  auto_promote: boolean;
+  checks: PathNodeChecks;
+};
+
+export type PathEdge = {
+  from: string;
+  to: string;
+};
+
+export type PromotionPathGraph = {
+  nodes: PathNode[];
+  edges: PathEdge[];
+};

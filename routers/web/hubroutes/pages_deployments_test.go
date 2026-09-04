@@ -13,10 +13,11 @@ var deploymentsPages = []forkPage{
 		dir:      "deployments",
 		template: "environment.tmpl",
 		endpoints: []string{
-			"/environments", "/environments/{id}", "/secret-scopes", "/secret-scopes/{id}",
+			"/environments", "/environments/{id}", "/environments/paths", "/secret-scopes", "/secret-scopes/{id}",
 			"/repos/{owner}/{repo}/environments/{name}/secrets",
 		},
-		fetch: "/environments?",
+		fetch:  "/environments",
+		client: "web_src/js/features/deployments/api.ts",
 	},
 	{
 		dir:       "deployments",

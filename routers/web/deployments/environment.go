@@ -27,11 +27,15 @@ func Environment(ctx *context.Context) {
 		ctx.Data["Title"] = "Environment: " + name
 	}
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["EnvironmentName"] = name
 	ctx.Data["EnvironmentID"] = ""
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
+	token, _ := ctx.Data["PageToken"].(string)
+	ctx.PageData["deploymentsEnvironments"] = map[string]any{
+		"apiBase":   setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl": setting.AppSubURL,
+		"token":     token,
+		"name":      name,
+	}
 	ctx.HTML(http.StatusOK, tplEnvironment)
 }
 
@@ -40,11 +44,15 @@ func Environment(ctx *context.Context) {
 func EnvironmentEdit(ctx *context.Context) {
 	ctx.Data["Title"] = "Environment"
 	ctx.Data["PageIsDeployments"] = true
-	ctx.Data["EnvironmentName"] = ""
 	ctx.Data["EnvironmentID"] = ctx.PathParam("id")
-	ctx.Data["APIBase"] = setting.AppSubURL + deploymentsv1.BasePath
-	ctx.Data["AppSubURL"] = setting.AppSubURL
 	hub_web.SetPageToken(ctx)
+	token, _ := ctx.Data["PageToken"].(string)
+	ctx.PageData["deploymentsEnvironmentEdit"] = map[string]any{
+		"apiBase":       setting.AppSubURL + deploymentsv1.BasePath,
+		"appSubUrl":     setting.AppSubURL,
+		"token":         token,
+		"environmentId": ctx.PathParam("id"),
+	}
 	ctx.HTML(http.StatusOK, tplEnvironment)
 }
 

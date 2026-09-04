@@ -12,11 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// readInsightsPage reads the bundled Vue component that replaced insights.tmpl's inline
-// script: the template now carries no logic of its own, only the mount point, so the
-// behavior this file used to prove by executing the template is proven by reading its client
-// instead. Vue's own text interpolation escapes every value it renders, which is why no
-// escaping test is repeated here.
+// readInsightsPage reads the bundled Vue component that replaced insights.tmpl's inline script.
 func readInsightsPage(t *testing.T) string {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "web_src", "js", "features", "deployments", "InsightsPage.vue"))
@@ -24,8 +20,7 @@ func readInsightsPage(t *testing.T) string {
 	return string(raw)
 }
 
-// TestDeploymentsInsightsPageCarriesNoInlineScript: the handler serves the shell alone, and
-// the figures are drawn by the bundled client mounted on it.
+// TestDeploymentsInsightsPageCarriesNoInlineScript: the handler serves the shell alone.
 func TestDeploymentsInsightsPageCarriesNoInlineScript(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(templateDir(t), "deployments", "insights.tmpl"))
 	require.NoError(t, err)
@@ -34,17 +29,14 @@ func TestDeploymentsInsightsPageCarriesNoInlineScript(t *testing.T) {
 	assert.Contains(t, body, `data-global-init="initDeploymentsInsights"`)
 }
 
-// TestDeploymentsInsightsPageOffersTheServersOwnDefaultWindow keeps the page's default in step
-// with the server's: a page that opened on a different window than the API defaults to would
-// show the previous-window comparison against the wrong baseline.
+// TestDeploymentsInsightsPageOffersTheServersOwnDefaultWindow keeps the page's default in step with the server's.
 func TestDeploymentsInsightsPageOffersTheServersOwnDefaultWindow(t *testing.T) {
 	body := readInsightsPage(t)
 	assert.Contains(t, body, "ref(String(props.config.defaultWindowDays))",
 		"the selected window starts at the server's own DefaultWindowDays")
 }
 
-// TestDeploymentsInsightsPageOpensNoSecondTransport: the page re-reads its documented
-// endpoints on an interval; it opens no WebSocket and no EventSource of its own.
+// TestDeploymentsInsightsPageOpensNoSecondTransport: the page opens no WebSocket or EventSource of its own.
 func TestDeploymentsInsightsPageOpensNoSecondTransport(t *testing.T) {
 	body := readInsightsPage(t)
 	assert.NotContains(t, body, "new WebSocket", "the page must open no transport of its own")
@@ -52,16 +44,14 @@ func TestDeploymentsInsightsPageOpensNoSecondTransport(t *testing.T) {
 	assert.Contains(t, body, "setInterval(load, refreshMillis)", "the page refreshes itself over the same documented endpoints")
 }
 
-// TestDeploymentsInsightsPageLinksOutToGitea: every per-run and per-repository detail opens
-// Gitea's own page rather than a reimplementation.
+// TestDeploymentsInsightsPageLinksOutToGitea: every per-run and per-repository detail opens Gitea's own page.
 func TestDeploymentsInsightsPageLinksOutToGitea(t *testing.T) {
 	body := readInsightsPage(t)
 	assert.Contains(t, body, "run.run_url", "a run row opens the run in Gitea")
 	assert.Contains(t, body, "${config.appSubUrl}/${repo.repo_full_name}/actions", "a repository row opens its runs in Gitea")
 }
 
-// TestDeploymentsInsightsPageShowsTheComparisonWindow: the previous window of equal length
-// renders beside each tile.
+// TestDeploymentsInsightsPageShowsTheComparisonWindow: the previous window renders beside each tile.
 func TestDeploymentsInsightsPageShowsTheComparisonWindow(t *testing.T) {
 	body := readInsightsPage(t)
 	assert.Contains(t, body, "Previous window", "each tile carries its comparison column")

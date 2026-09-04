@@ -6,6 +6,16 @@ registerGlobalInitFunc('initDeploymentsMatrix', async (el: HTMLElement) => {
   await initDeploymentsMatrix(el);
 });
 
+registerGlobalInitFunc('initDeploymentsEnvironments', async (el: HTMLElement) => {
+  const {initDeploymentsEnvironments} = await import('./environments.ts');
+  await initDeploymentsEnvironments(el);
+});
+
+registerGlobalInitFunc('initDeploymentsEnvironmentEdit', async (el: HTMLElement) => {
+  const {initDeploymentsEnvironmentEdit} = await import('./environments.ts');
+  await initDeploymentsEnvironmentEdit(el);
+});
+
 registerGlobalInitFunc('initDeploymentsNew', async (el: HTMLElement) => {
   const {initDeploymentsNew} = await import('./new.ts');
   await initDeploymentsNew(el);
@@ -21,9 +31,7 @@ registerGlobalInitFunc('initDeploymentsInsights', async (el: HTMLElement) => {
   await initDeploymentsInsights(el);
 });
 
-// initDeploymentsReleaseBadges mounts on the fragment's own <script> element rather than a
-// content div: it decorates release-list entries Gitea already rendered and owns no markup
-// of its own. registerGlobalInitFunc works on any Element, a <script> included.
+// initDeploymentsReleaseBadges mounts on the fragment's own <script> element, not a content div: it decorates release-list entries Gitea already rendered.
 registerGlobalInitFunc('initDeploymentsReleaseBadges', async (el: HTMLElement) => {
   const {initDeploymentsReleaseBadges} = await import('./release-badges.ts');
   await initDeploymentsReleaseBadges(el);

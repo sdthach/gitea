@@ -1,5 +1,8 @@
 import {request} from '../../modules/fetch.ts';
-import type {Check, Deployment, Insights, MatrixRow, Promotion, Release, RepoStat, Review, Run, TrendPoint} from './types.ts';
+import type {
+  Check, Deployment, Environment, GiteaRepo, GiteaTeam, GiteaUser, Insights, MatrixRow, Promotion,
+  PromotionPathGraph, Release, RepoStat, Review, Run, SecretName, TrendPoint,
+} from './types.ts';
 
 export type DeploymentsApiConfig = {
   apiBase: string;
@@ -25,6 +28,12 @@ export const paths = {
   insightsTrends: '/insights/trends',
   insightsRepos: '/insights/repos',
   runs: '/runs',
+  environments: '/environments',
+  environment: '/environments/{id}',
+  environmentPaths: '/environments/paths',
+  secretScopes: '/secret-scopes',
+  secretScope: '/secret-scopes/{id}',
+  environmentSecrets: '/repos/{owner}/{repo}/environments/{name}/secrets',
 };
 
 function withParam(template: string, name: string, value: string | number): string {
@@ -200,4 +209,89 @@ export function getInsightsRepos(config: DeploymentsApiConfig, windowDays: numbe
 
 export function getInsightsTrends(config: DeploymentsApiConfig, windowDays: number | string): Promise<TrendPoint[]> {
   return call<TrendPoint[]>(config, `${paths.insightsTrends}?${query({window_days: windowDays})}`);
+}
+
+// giteaBase is Gitea's own API, not the deployments one: a repository, user, team or secret
+// name lookup reads Gitea's documented API, the same one the rest of the forge is a client of.
+export function giteaBase(config: DeploymentsApiConfig): string {
+  return `${config.appSubUrl}/api/v1`;
+}
+
+// probe answers null on any refusal, so a caller offers a picker only where the read works,
+// exactly as environment.tmpl's inline script did before it was ported here.
+export async function probe<T>(url: string, config: DeploymentsApiConfig): Promise<T | null> {
+  try {
+    const headers: Record<string, string> = {accept: 'application/json'};
+    const token = storedToken(config);
+    if (token) headers.authorization = `token ${token}`;
+    const resp = await request(url, {headers, credentials: 'same-origin'});
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export function getEnvironments(config: DeploymentsApiConfig, opts: {repoId?: number; name?: string; limit?: number} = {}): Promise<Environment[]> {
+  const qs = query({repo_id: opts.repoId, name: opts.name, sort_by: 'sort_order', order: 'asc', limit: opts.limit ?? 200});
+  return call<Environment[]>(config, `${paths.environments}?${qs}`);
+}
+
+export function getEnvironment(config: DeploymentsApiConfig, id: number | string): Promise<Environment> {
+  return call<Environment>(config, withParam(paths.environment, 'id', id));
+}
+
+export function createEnvironment(config: DeploymentsApiConfig, body: Record<string, unknown>): Promise<Environment> {
+  return call<Environment>(config, paths.environments, {method: 'POST', body});
+}
+
+export function updateEnvironment(config: DeploymentsApiConfig, id: number | string, body: Record<string, unknown>): Promise<Environment> {
+  return call<Environment>(config, withParam(paths.environment, 'id', id), {method: 'PUT', body});
+}
+
+export function deleteEnvironment(config: DeploymentsApiConfig, id: number | string): Promise<void> {
+  return call<void>(config, withParam(paths.environment, 'id', id), {method: 'DELETE'});
+}
+
+export function getEnvironmentPaths(config: DeploymentsApiConfig, repoId: number): Promise<PromotionPathGraph> {
+  return call<PromotionPathGraph>(config, `${paths.environmentPaths}?${query({repo_id: repoId})}`);
+}
+
+export function getRepository(config: DeploymentsApiConfig, repoId: number): Promise<GiteaRepo | null> {
+  return probe<GiteaRepo>(`${giteaBase(config)}/repositories/${repoId}`, config);
+}
+
+export function getRepoByFullName(config: DeploymentsApiConfig, fullName: string): Promise<GiteaRepo | null> {
+  const [owner, repo] = fullName.split('/');
+  return probe<GiteaRepo>(`${giteaBase(config)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, config);
+}
+
+export function findUserByLogin(config: DeploymentsApiConfig, login: string): Promise<GiteaUser | null> {
+  return probe<GiteaUser>(`${giteaBase(config)}/users/${encodeURIComponent(login)}`, config);
+}
+
+export function searchUserByUID(config: DeploymentsApiConfig, uid: number): Promise<{data: GiteaUser[]} | null> {
+  return probe<{data: GiteaUser[]}>(`${giteaBase(config)}/users/search?uid=${uid}`, config);
+}
+
+export function getOrgTeams(config: DeploymentsApiConfig, orgLogin: string): Promise<GiteaTeam[] | null> {
+  return probe<GiteaTeam[]>(`${giteaBase(config)}/orgs/${encodeURIComponent(orgLogin)}/teams?limit=100`, config);
+}
+
+export function getActionsSecretNames(config: DeploymentsApiConfig, fullName: string): Promise<Array<{name: string}> | null> {
+  return probe<Array<{name: string}>>(`${giteaBase(config)}/repos/${fullName}/actions/secrets?limit=100`, config);
+}
+
+export function getRepoEnvironmentSecrets(config: DeploymentsApiConfig, fullName: string, environmentName: string): Promise<SecretName[] | null> {
+  const [owner, repo] = fullName.split('/');
+  const path = withParam(withParam(withParam(paths.environmentSecrets, 'owner', owner), 'repo', repo), 'name', encodeURIComponent(environmentName));
+  return probe<SecretName[]>(`${config.apiBase}${path}?${query({limit: 200})}`, config);
+}
+
+export function createSecretScope(config: DeploymentsApiConfig, body: {repo_id: number; secret_name: string; environment: string}): Promise<SecretName> {
+  return call<SecretName>(config, paths.secretScopes, {method: 'POST', body});
+}
+
+export function deleteSecretScope(config: DeploymentsApiConfig, id: number): Promise<void> {
+  return call<void>(config, withParam(paths.secretScope, 'id', id), {method: 'DELETE'});
 }
