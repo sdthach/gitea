@@ -73,4 +73,5 @@ func SetPageToken(ctx *context.Context) {
 // the registration testable without standing up a router.
 type RouteRegistrar interface {
 	Get(pattern string, h ...any)
+	Post(pattern string, h ...any)
 }

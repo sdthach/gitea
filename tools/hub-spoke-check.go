@@ -58,6 +58,11 @@ var spokes = map[string]spoke{
 	// deletes the original signature line; the doc comment, var and renamed func line
 	// replace it (measured: `git diff --numstat` against the pin gives +6/-1).
 	"routers/common/middleware.go": {Budget: 6, Deleted: 1, Why: "MustInitSessioner memoized via sync.OnceValue so the API and web routers share one session manager"},
+	// addTime's caller-supplied created time was silently discarded: xorm's own "created"
+	// column magic overwrites it with now() at Insert time regardless of the field's value
+	// (measured against xorm v1.4.1, session_insert.go — the isZero guard on that path is
+	// commented out). NoAutoTime() turns that off, so CreatedUnix set beside it survives.
+	"models/issues/tracked_time.go": {Budget: 3, Deleted: 1, Why: "addTime sets CreatedUnix and inserts with NoAutoTime() so a caller-supplied created time survives xorm's own now() default"},
 }
 
 // overrides are upstream files the fork replaces wholesale rather than delegating from.

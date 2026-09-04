@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -401,4 +402,36 @@ func TestPlanningTimesheetCapTruncatesPastLoweredLimit(t *testing.T) {
 	dayPayload, ok := timesheetDayFor(lane, day.Unix())
 	require.True(t, ok)
 	assert.Len(t, dayPayload.Entries, 10, "the response holds exactly the lowered cap, not all 15 rows")
+}
+
+// TestPlanningTimesheetHonorsACallerSuppliedCreatedDate: a v1 AddTime call with created set to
+// yesterday lands on yesterday's lane, not today's — the row's own created timestamp survives
+// the write rather than being silently replaced by the insert's own now().
+func TestPlanningTimesheetHonorsACallerSuppliedCreatedDate(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	issue := timesheetIssue(t, repo1, user2, []int64{2})
+	yesterday := time.Now().UTC().Add(-24 * time.Hour)
+	yesterdayDayUnix := yesterday.Truncate(24 * time.Hour).Unix()
+
+	req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/user2/repo1/issues/%d/times", issue.Index),
+		map[string]any{"time": 120, "created": yesterday.Format(time.RFC3339)}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusOK)
+
+	from := yesterday.AddDate(0, 0, -1)
+	to := yesterday.AddDate(0, 0, 1)
+	payload, refusal, status := getTimesheet(t, token, "repo_id=1&from="+from.Format(time.DateOnly)+"&to="+to.Format(time.DateOnly))
+	require.Equal(t, http.StatusOK, status, "%+v", refusal)
+
+	lane, ok := timesheetLaneFor(payload, 2)
+	require.True(t, ok)
+	dayPayload, ok := timesheetDayFor(lane, yesterdayDayUnix)
+	require.True(t, ok, "the entry lands on yesterday's day bucket, not today's")
+	require.Len(t, dayPayload.Entries, 1)
+	assert.EqualValues(t, 120, dayPayload.Entries[0].Seconds)
+	assert.Equal(t, issue.ID, dayPayload.Entries[0].IssueID)
 }

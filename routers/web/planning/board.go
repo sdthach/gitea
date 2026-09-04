@@ -25,6 +25,7 @@ const (
 // RouteRegistrar is the slice of *web.Router this package needs.
 type RouteRegistrar interface {
 	Get(pattern string, h ...any)
+	Post(pattern string, h ...any)
 }
 
 // RegisterRoutes mounts the planning pages. routers/web/hubroutes calls this from its own
@@ -34,6 +35,12 @@ func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/planning/projects/{owner}/{repo}/{project_id}", reqSignIn, hub_web.PlanningPagesEnabled, Project)
 	m.Get("/planning/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
 	m.Get("/planning/roadmap", reqSignIn, hub_web.PlanningPagesEnabled, Roadmap)
+	m.Post("/planning/issues/{id}/schedule", reqSignIn, hub_web.PlanningPagesEnabled, ScheduleIssue)
+	m.Post("/planning/issues/{id}/type", reqSignIn, hub_web.PlanningPagesEnabled, TypeIssue)
+	m.Post("/planning/issues/{id}/parent", reqSignIn, hub_web.PlanningPagesEnabled, ParentIssue)
+	m.Post("/planning/issues/{id}/fields", reqSignIn, hub_web.PlanningPagesEnabled, FieldsIssue)
+	m.Post("/planning/issues/{id}/estimate", reqSignIn, hub_web.PlanningPagesEnabled, EstimateIssue)
+	m.Post("/planning/milestones/{id}/schedule", reqSignIn, hub_web.PlanningPagesEnabled, ScheduleMilestone)
 }
 
 // Board renders /planning/board: Gitea's project columns vertically, with horizontal groups

@@ -14,6 +14,7 @@ import (
 // RouteRegistrar is the slice of *web.Router this package needs.
 type RouteRegistrar interface {
 	Get(pattern string, h ...any)
+	Post(pattern string, h ...any)
 }
 
 // RegisterRoutes mounts the deployments pages. routers/web/hubroutes calls this from its own

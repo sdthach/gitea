@@ -243,6 +243,12 @@ var gateFor = map[string]func(*context.Context){
 	"/planning/roadmap":                              hub_web.PlanningPagesEnabled,
 	"/planning/projects":                             hub_web.PlanningPagesEnabled,
 	"/planning/projects/{owner}/{repo}/{project_id}": hub_web.PlanningPagesEnabled,
+	"/planning/issues/{id}/schedule":                 hub_web.PlanningPagesEnabled,
+	"/planning/issues/{id}/type":                     hub_web.PlanningPagesEnabled,
+	"/planning/issues/{id}/parent":                   hub_web.PlanningPagesEnabled,
+	"/planning/issues/{id}/fields":                   hub_web.PlanningPagesEnabled,
+	"/planning/issues/{id}/estimate":                 hub_web.PlanningPagesEnabled,
+	"/planning/milestones/{id}/schedule":             hub_web.PlanningPagesEnabled,
 }
 
 // redirectPatterns is every pattern registerRedirects mounts. Each is a plain 303 to its
@@ -270,6 +276,8 @@ func TestRoutesAreRegisteredBehindTheGate(t *testing.T) {
 		"/deployments/reviews", "/deployments/environments/{name}/reviews",
 		"/planning/projects", "/planning/projects/{owner}/{repo}/{project_id}",
 		"/planning/board", "/planning/roadmap",
+		"/planning/issues/{id}/schedule", "/planning/issues/{id}/type", "/planning/issues/{id}/parent",
+		"/planning/issues/{id}/fields", "/planning/issues/{id}/estimate", "/planning/milestones/{id}/schedule",
 	}, pagePatterns)
 	assert.Equal(t, redirectPatterns, r.patterns[len(r.patterns)-len(redirectPatterns):],
 		"the old /delivery/* URLs are mounted last, so they never shadow a current page")
@@ -367,6 +375,11 @@ type recordingRouter struct {
 }
 
 func (r *recordingRouter) Get(pattern string, h ...any) {
+	r.patterns = append(r.patterns, pattern)
+	r.handlers = append(r.handlers, h)
+}
+
+func (r *recordingRouter) Post(pattern string, h ...any) {
 	r.patterns = append(r.patterns, pattern)
 	r.handlers = append(r.handlers, h)
 }
