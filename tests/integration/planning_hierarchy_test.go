@@ -24,8 +24,11 @@ import (
 // hierarchyFacetsPayload is the shape GET/PUT/DELETE .../parent answer with, reduced to the
 // hierarchy fields.
 type hierarchyFacetsPayload struct {
-	IssueID int64 `json:"issue_id"`
-	Parent  *struct {
+	IssueID  int64 `json:"issue_id"`
+	Schedule struct {
+		StartUnix int64 `json:"start_unix"`
+	} `json:"schedule"`
+	Parent *struct {
 		IssueID int64  `json:"issue_id"`
 		Number  int64  `json:"number"`
 		Title   string `json:"title"`

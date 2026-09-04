@@ -154,8 +154,10 @@ func createIssueEndpoint() *hubapi.Endpoint {
 				"type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is " +
 				"refused untyped_issue, naming the new issue. group_by and group place the new issue into a " +
 				"grouping cell exactly as a board card add does: resolved and validated before the issue is " +
-				"created, applied after — the same codes a group move answers. " +
-				"Authorized by Gitea's own write check on the Issues unit.",
+				"created, applied after — the same codes a group move answers. start and end are validated before " +
+				"creation too — start_after_end when both are given and start falls after end — then written the " +
+				"way PUT /issues/{issue_id}/schedule and POST /issues/{issue_id}/dates write them, once the issue " +
+				"exists. Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "roadmap",
 			Body: append(append([]hubapi.Param{}, repoParam...),
 				hubapi.Param{Name: "title", In: "body", Type: "string", Required: true, Description: "Issue title."},
@@ -170,7 +172,9 @@ func createIssueEndpoint() *hubapi.Endpoint {
 				hubapi.Param{
 					Name: "group", In: "body", Type: "string",
 					Description: "The group's key, resolved exactly as a board card add's own group: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id.",
-				}),
+				},
+				hubapi.Param{Name: "start", In: "body", Type: "string", Description: "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date."},
+				hubapi.Param{Name: "end", In: "body", Type: "string", Description: "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date."}),
 			CLINames: []string{"issue-create"},
 			Response: "Roadmap", ResponseIs: "object",
 		},
@@ -325,6 +329,20 @@ func CreateIssue(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
+	start, ok := parseDate(ctx, "start", body.Start)
+	if !ok {
+		return
+	}
+	end, ok := parseDate(ctx, "end", body.End)
+	if !ok {
+		return
+	}
+	if start != 0 && end != 0 && start > end {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "start_after_end",
+			"start is after end",
+			"Choose a start on or before end, or move end out.")
+		return
+	}
 
 	issue := &issues_model.Issue{
 		RepoID: repo.ID, Repo: repo, Title: title, Content: body.Description,
@@ -333,6 +351,18 @@ func CreateIssue(ctx *context.APIContext) {
 	if err := issue_service.NewIssue(ctx, repo, issue, nil, nil, nil, nil); err != nil {
 		ctx.APIErrorInternal(err)
 		return
+	}
+	if end != 0 {
+		if err := issues_model.UpdateIssueDeadline(ctx, issue, timeutil.TimeStamp(end), ctx.Doer); err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+	}
+	if start != 0 {
+		if err := planning_service.SetIssueStart(ctx, issue, time.Unix(start, 0).UTC()); err != nil {
+			hubapi.RenderHubError(ctx, http.StatusUnprocessableEntity, err)
+			return
+		}
 	}
 	if body.TypeID != 0 {
 		if err := planning_service.SetIssueType(ctx, issue, body.TypeID); err != nil {

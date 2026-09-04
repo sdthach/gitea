@@ -620,6 +620,8 @@ Flags:
     	opaque cursor from a previous response
   -description string
     	Issue body.
+  -end string
+    	Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -expand string
     	comma-separated sub-resources, one level deep
   -filter field[op]=value
@@ -648,6 +650,8 @@ Flags:
     	Gitea base URL; defaults to $GITEA_PLANNING_SERVER or $GITEA_SERVER or $FORGE_HOST
   -sort-by string
     	sort field
+  -start string
+    	Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.
   -title string
     	required. Issue title.
   -token string

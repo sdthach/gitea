@@ -587,10 +587,8 @@ func resolveAssigneeGroup(ctx *context.APIContext, repo *repo_model.Repository, 
 }
 
 // addCardGroup performs the group write once the card exists. Any failure here answers 500:
-// for type and assignee groups resolveAddCardGroup already excluded every refusal that means
-// anything to the caller, so reaching one is a race between validation and write; a parent
-// group's SetIssueParent call can still refuse on rank or depth, which resolveParentPreCreate
-// does not check ahead of creation.
+// resolveAddCardGroup, through validateNewIssueHierarchy, already excluded every refusal that
+// means anything to the caller, so reaching one here is a race between validation and write.
 func addCardGroup(ctx *context.APIContext, issue *issues_model.Issue, write planning_service.GroupWrite) error {
 	if write.Kind == "" {
 		return nil
@@ -620,7 +618,7 @@ func addCardGroup(ctx *context.APIContext, issue *issues_model.Issue, write plan
 		if err != nil {
 			return err
 		}
-		return planning_service.SetIssueParent(ctx, issue, parent) // resolveParentPreCreate already confirmed the parent and that the card carries a type
+		return planning_service.SetIssueParent(ctx, issue, parent) // validateNewIssueHierarchy already confirmed the parent and that the card carries a type
 	case planning_service.GroupWriteAssignee:
 		if write.Assignee == "" {
 			return nil // a new card starts with no assignees

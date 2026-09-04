@@ -73,7 +73,7 @@
             "type": "array"
           },
           "types": {
-            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, milestone_id, parent_issue_id, root_issue_id, depth and has_children.",
+            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, milestone_id, parent_issue_id, root_issue_id, depth, has_children, time_estimate and tracked_seconds.",
             "items": {
               "type": "object"
             },
@@ -481,7 +481,7 @@
             "type": "array"
           },
           "bars": {
-            "description": "One bar per managed issue, empty at a rolled-up zoom. Each carries issue_id, number, title, url, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth and has_children. type comes from the issue's own assignment, not a label. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
+            "description": "One bar per managed issue, empty at a rolled-up zoom. Each carries issue_id, number, title, url, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth, has_children, time_estimate and tracked_seconds. type comes from the issue's own assignment, not a label. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
             "items": {
               "type": "object"
             },
@@ -563,7 +563,7 @@
             "type": "array"
           },
           "unmanaged": {
-            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each also carries labels, assignees, type, type_id, milestone_id and is_closed, the same fields a bar would have.",
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each also carries labels, assignees, type, type_id, milestone_id, is_closed, time_estimate and tracked_seconds, the same fields a bar would have.",
             "items": {
               "type": "object"
             },
@@ -1953,7 +1953,7 @@
     },
     "/issues": {
       "post": {
-        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. group_by and group place the new issue into a grouping cell exactly as a board card add does: resolved and validated before the issue is created, applied after — the same codes a group move answers. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. group_by and group place the new issue into a grouping cell exactly as a board card add does: resolved and validated before the issue is created, applied after — the same codes a group move answers. start and end are validated before creation too — start_after_end when both are given and start falls after end — then written the way PUT /issues/{issue_id}/schedule and POST /issues/{issue_id}/dates write them, once the issue exists. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "createIssue",
         "parameters": [],
         "requestBody": {
@@ -1963,6 +1963,10 @@
                 "properties": {
                   "description": {
                     "description": "Issue body.",
+                    "type": "string"
+                  },
+                  "end": {
+                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
                     "type": "string"
                   },
                   "group": {
@@ -1989,6 +1993,10 @@
                   },
                   "repo": {
                     "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
                     "type": "string"
                   },
                   "title": {

@@ -58,16 +58,18 @@ func dependencyTarget(ctx *context.APIContext) (*dependencyBody, *repo_model.Rep
 			"The path takes the issue's global id, not its per-repository number; "+BasePath+"/roadmap publishes issue_id on every bar.")
 		return nil, nil, nil, false
 	}
-	if !repo.IsDependenciesEnabled(ctx) {
-		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "dependencies_disabled",
-			"dependencies are turned off for the Issues unit of "+repo.FullName(),
-			"Turn on dependencies in the repository's issue settings first.")
-		return nil, nil, nil, false
-	}
+	// The write check runs before dependencies_disabled: a refusal must not reveal whether a
+	// unit is turned on to a caller who could not write it anyway.
 	if !perm.CanWriteIssuesOrPulls(issue.IsPull) {
 		hubapi.APIError(ctx, http.StatusForbidden, "forbidden",
 			"your account has no write access to the Issues unit of "+repo.FullName(),
 			"Ask a repository administrator for write permission on Issues.")
+		return nil, nil, nil, false
+	}
+	if !repo.IsDependenciesEnabled(ctx) {
+		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "dependencies_disabled",
+			"dependencies are turned off for the Issues unit of "+repo.FullName(),
+			"Turn on dependencies in the repository's issue settings first.")
 		return nil, nil, nil, false
 	}
 	return body, repo, issue, true
@@ -199,6 +201,22 @@ func RemoveIssueDependency(ctx *context.APIContext) {
 			"no dependency with that id is recorded on this issue",
 			"Read the chart's arrows from "+BasePath+"/roadmap and use one of their to_issue_id values.")
 		return
+	}
+	if dep.RepoID != repo.ID {
+		depRepo, err := repo_model.GetRepositoryByID(ctx, dep.RepoID)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		// Readability is checked before removing anything, exactly as the add path checks it,
+		// so a dependency in a repository outside the caller's reach is never distinguished
+		// from one that does not exist.
+		if !access.CheckRepoUnitUser(ctx, depRepo, ctx.Doer, dependencyUnit(dep.IsPull)) {
+			hubapi.APIError(ctx, http.StatusNotFound, "dependency_not_found",
+				"no dependency with that id is recorded on this issue",
+				"Read the chart's arrows from "+BasePath+"/roadmap and use one of their to_issue_id values.")
+			return
+		}
 	}
 	if err := issues_model.RemoveIssueDependency(ctx, ctx.Doer, issue, dep, issues_model.DependencyTypeBlockedBy); err != nil {
 		if issues_model.IsErrDependencyNotExists(err) {

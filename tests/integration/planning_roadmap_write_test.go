@@ -186,6 +186,45 @@ func TestPlanningRoadmapCreatesARowAndAnIssue(t *testing.T) {
 	assert.Equal(t, "missing_title", refusal.Code)
 }
 
+// TestPlanningRoadmapCreateWiresStartAndEnd covers POST /issues' own start and end: both are
+// validated before the issue is created and written the way the dedicated schedule and dates
+// endpoints write them once it exists, so a freshly created issue can carry a bar with no
+// separate follow-up write.
+func TestPlanningRoadmapCreateWiresStartAndEnd(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	after := roadmapWrite(t, token, "/issues", map[string]any{
+		"repo": "user2/repo1", "title": "Scheduled from creation",
+		"start": "2026-03-01", "end": "2026-03-11T00:00:00Z",
+	})
+	created := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{RepoID: 1, Title: "Scheduled from creation"})
+
+	_, startUnix, endUnix, startSource, endSource := roadmapBar(t, after, created.ID)
+	assert.Equal(t, "schedule", startSource)
+	assert.EqualValues(t, 1772323200, startUnix, "2026-03-01T00:00:00Z")
+	assert.Equal(t, "deadline", endSource)
+	assert.EqualValues(t, 1773187200, endUnix, "2026-03-11T00:00:00Z")
+
+	facets := getIssueFacets(t, token, created.ID)
+	assert.EqualValues(t, 1772323200, facets.Schedule.StartUnix, "the new issue's own facets show the start")
+
+	// A start after end is refused before anything is created.
+	before, err := unittest.GetXORMEngine().Where("repo_id = ?", 1).Count(new(issues_model.Issue))
+	require.NoError(t, err)
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/issues", map[string]any{
+		"repo": "user2/repo1", "title": "should not exist", "start": "2026-03-20", "end": "2026-03-01",
+	}).AddTokenAuth(token)
+	var refusal hubRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusUnprocessableEntity), &refusal)
+	assert.Equal(t, "start_after_end", refusal.Code)
+	assert.NotEmpty(t, refusal.SuggestedAction)
+	after2, err := unittest.GetXORMEngine().Where("repo_id = ?", 1).Count(new(issues_model.Issue))
+	require.NoError(t, err)
+	assert.Equal(t, before, after2, "the refused create made no issue")
+	unittest.AssertNotExistsBean(t, &issues_model.Issue{RepoID: 1, Title: "should not exist"})
+}
+
 // TestPlanningRoadmapCreatesAnIssueWithATypeAndAParent covers CreateIssue's own type_id and
 // parent_issue_id: both are validated before anything is created, so a refused parent leaves
 // no issue behind, and an accepted one shows on the new issue's own facets immediately.

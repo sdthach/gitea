@@ -162,6 +162,52 @@ func TestPlanningDependencyRefusesBadRequests(t *testing.T) {
 	assert.EqualValues(t, 1, count, "no case above recorded a second dependency")
 }
 
+// TestPlanningDependencyRefusesForbiddenBeforeDisabled pins the refusal order: a reader with no
+// Issues write is answered forbidden, never dependencies_disabled, so a caller with no write
+// access is never told how the unit is configured. repo1's fixtures leave dependencies off, so
+// this also proves the write check runs first.
+func TestPlanningDependencyRefusesForbiddenBeforeDisabled(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	manageIssue(t, 1)
+	manageIssue(t, 5)
+	outsiderToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
+
+	req := NewRequestWithJSON(t, "POST", planningv1.BasePath+"/issues/1/dependencies",
+		map[string]any{"repo": "user2/repo1", "depends_on_issue_id": 5}).AddTokenAuth(outsiderToken)
+	var refusal hubRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusForbidden), &refusal)
+	assert.Equal(t, "forbidden", refusal.Code)
+
+	unittest.AssertNotExistsBean(t, &issues_model.IssueDependency{IssueID: 1, DependencyID: 5})
+}
+
+// TestPlanningDependencyRemoveRefusesCrossRepoUnreadable covers the remove path's own
+// never-reveal rule: a dependency planted directly (by the admin, as CreateIssueDependency
+// itself does not check readability) into a repository user2 cannot read is answered
+// dependency_not_found rather than confirming the row exists, and nothing is written or
+// commented as a result of the refused request.
+func TestPlanningDependencyRemoveRefusesCrossRepoUnreadable(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+	enableDependencies(t, token, "user2/repo1")
+
+	unreadable := unreadableIssue(t)
+	issue1 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
+	dep := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: unreadable})
+	admin := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	require.NoError(t, issues_model.CreateIssueDependency(t.Context(), admin, issue1, dep))
+
+	req := NewRequestWithJSON(t, "DELETE",
+		planningv1.BasePath+"/issues/1/dependencies/"+strconv.FormatInt(unreadable, 10),
+		map[string]any{"repo": "user2/repo1"}).AddTokenAuth(token)
+	var refusal hubRefusal
+	DecodeJSON(t, MakeRequest(t, req, http.StatusNotFound), &refusal)
+	assert.Equal(t, "dependency_not_found", refusal.Code)
+
+	unittest.AssertExistsAndLoadBean(t, &issues_model.IssueDependency{IssueID: 1, DependencyID: unreadable})
+	unittest.AssertCount(t, &issues_model.Comment{IssueID: unreadable, Type: issues_model.CommentTypeRemoveDependency}, 0)
+}
+
 // TestPlanningDependencyRemoveMissingAnswers404: issue1 and issue5 carry no dependency between
 // them, so removing one answers not-found rather than silently doing nothing.
 func TestPlanningDependencyRemoveMissingAnswers404(t *testing.T) {

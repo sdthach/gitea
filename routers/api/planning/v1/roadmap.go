@@ -772,6 +772,10 @@ func barInputFor(issue *issues_model.Issue, startedUnix int64, assigned planning
 		Depth:         hier.depths[issue.ID],
 		HasChildren:   hier.hasChildren[issue.ID],
 		Fields:        valuesOrEmpty(values),
+		// Loaded in one batched query per projection by issues.LoadAttributes (TotalTrackedTime)
+		// and as a plain issue column (TimeEstimate) — no per-issue facets call needed.
+		TimeEstimate:   issue.TimeEstimate,
+		TrackedSeconds: issue.TotalTrackedTime,
 	}
 	for _, label := range issue.Labels {
 		in.Labels = append(in.Labels, label.Name)

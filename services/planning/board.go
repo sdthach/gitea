@@ -102,6 +102,11 @@ type Card struct {
 	// unset — the value every group and rollup total sums.
 	Fields map[string]any `json:"fields"`
 	Points int            `json:"points"`
+	// TimeEstimate is Gitea's own estimate, in seconds; TrackedSeconds sums every user's
+	// logged time on the issue. Carried on the card so the table needs no per-row facets
+	// call to show them.
+	TimeEstimate   int64 `json:"time_estimate"`
+	TrackedSeconds int64 `json:"tracked_seconds"`
 }
 
 // TreeEdge is one parent edge, published beside the cards or bars so a client can draw the
@@ -344,6 +349,7 @@ func RoadmapGroups(bars []Bar, grouping Grouping) []Group {
 			ParentIssueID: bar.ParentIssueID, RootIssueID: bar.RootIssueID,
 			Depth: bar.Depth, HasChildren: bar.HasChildren,
 			Fields: bar.Fields, Points: bar.Points,
+			TimeEstimate: bar.TimeEstimate, TrackedSeconds: bar.TrackedSeconds,
 		})
 	}
 	return BuildGroups([]BoardColumn{{Title: roadmapGroupColumn}}, cards, grouping)

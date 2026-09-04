@@ -31,7 +31,7 @@ var componentSchemas = map[string]any{
 			"so a client can draw the hierarchy without re-deriving it from each card's own parent_issue_id."),
 		"types": hubapi.ArrayProp("object", "The types visible from this repository, nearest scope shadowing by name — what a card's "+
 			"type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, "+
-			"milestone_id, parent_issue_id, root_issue_id, depth and has_children."),
+			"milestone_id, parent_issue_id, root_issue_id, depth, has_children, time_estimate and tracked_seconds."),
 		"labels":         hubapi.ArrayProp("object", "The repository's own labels plus its owning organization's: id, name and color."),
 		"can_write":      hubapi.Prop("boolean", "Whether the caller may move a card between columns, by the same check that endpoint enforces."),
 		"can_edit_issue": hubapi.Prop("boolean", "Whether the caller may move a card between groups, which edits the issue's own label, assignee, assigned type or recorded parent."),
@@ -44,7 +44,7 @@ var componentSchemas = map[string]any{
 		"repo_full_name": hubapi.Prop("string", "owner/name."),
 		"bars": hubapi.ArrayProp("object", "One bar per managed issue, empty at a rolled-up zoom. Each carries issue_id, number, "+
 			"title, url, type, type_id, type_color, type_icon, labels, assignees, milestone, start_unix, end_unix, "+
-			"start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth and has_children. "+
+			"start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth, has_children, time_estimate and tracked_seconds. "+
 			"type comes from the issue's own assignment, not a label. start_source is one of "+
 			strings.Join(planning_service.StartSources, ", ")+" and end_source one of "+
 			strings.Join(planning_service.EndSources, ", ")+"; end_inferred marks a bar whose end is an estimate rather than a record."),
@@ -63,7 +63,7 @@ var componentSchemas = map[string]any{
 			"publishes progress 0, because a fraction of an unknown denominator is not a measurement."),
 		"unmanaged": hubapi.ArrayProp("object", "Issues with no bar, each with the reason and a suggested action. An issue with no "+
 			"type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each "+
-			"also carries labels, assignees, type, type_id, milestone_id and is_closed, the same fields a bar would have."),
+			"also carries labels, assignees, type, type_id, milestone_id, is_closed, time_estimate and tracked_seconds, the same fields a bar would have."),
 		"group_by": hubapi.EnumProp("The active grouping, reusing the board's own. A view setting, never stored.", planning_service.Groupings),
 		"zoom":     hubapi.EnumProp("The depth the chart is read at. At parent or milestone only rollup rows are listed and no bar is drawn.", planning_service.Zooms),
 		"groups": hubapi.ArrayProp("object", "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, "+

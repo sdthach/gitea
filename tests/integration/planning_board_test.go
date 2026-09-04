@@ -44,10 +44,12 @@ type boardPayload struct {
 			ColumnID int64 `json:"column_id"`
 			Title    string
 			Cards    []struct {
-				IssueID     int64 `json:"issue_id"`
-				Number      int64 `json:"number"`
-				ColumnID    int64 `json:"column_id"`
-				MilestoneID int64 `json:"milestone_id"`
+				IssueID        int64 `json:"issue_id"`
+				Number         int64 `json:"number"`
+				ColumnID       int64 `json:"column_id"`
+				MilestoneID    int64 `json:"milestone_id"`
+				TimeEstimate   int64 `json:"time_estimate"`
+				TrackedSeconds int64 `json:"tracked_seconds"`
 			} `json:"cards"`
 		} `json:"columns"`
 	} `json:"groups"`
@@ -116,6 +118,17 @@ func columnOf(t *testing.T, board boardPayload, issueID int64) int64 {
 	return 0
 }
 
+// enableTimetracker turns on the Issues unit's own time tracker: repo1's fixture config
+// carries no enable_time_tracker key at all, which unmarshals to off.
+func enableTimetracker(t *testing.T, token, repo string) {
+	t.Helper()
+	req := NewRequestWithJSON(t, "PATCH", "/api/v1/repos/"+repo, map[string]any{
+		"has_issues":       true,
+		"internal_tracker": map[string]any{"enable_time_tracker": true},
+	}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusOK)
+}
+
 func getBoard(t *testing.T, token, query string) boardPayload {
 	t.Helper()
 	req := NewRequest(t, "GET", planningv1.BasePath+"/board?"+query).AddTokenAuth(token)
@@ -132,6 +145,10 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 
 	session := loginUser(t, "user2")
 	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeAll)
+	enableTimetracker(t, token, "user2/repo1")
+	issue2 := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 2})
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	require.NoError(t, issues_model.ChangeIssueTimeEstimate(t.Context(), issue2, doer, 3600))
 
 	board := getBoard(t, token, "repo_id=1&project_id=1&group_by=none")
 	assert.Equal(t, int64(1), board.ProjectID)
@@ -156,6 +173,8 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 			for _, card := range column.Cards {
 				if card.IssueID == 2 {
 					assert.Equal(t, int64(1), card.MilestoneID, "issue2's fixture milestone carries onto its card")
+					assert.EqualValues(t, 3600, card.TimeEstimate, "the estimate carries onto the card with no per-row facets call")
+					assert.EqualValues(t, 3682, card.TrackedSeconds, "tracked_time.yml's own three non-deleted rows on issue2, summed over both users")
 				}
 			}
 		}
@@ -408,16 +427,18 @@ func TestPlanningBoardAndRoadmapPagesAreClientsOfTheAPI(t *testing.T) {
 // roadmapPayload is the shape GET /roadmap answers with.
 type roadmapPayload struct {
 	Bars []struct {
-		IssueID     int64  `json:"issue_id"`
-		MilestoneID int64  `json:"milestone_id"`
-		Number      int64  `json:"number"`
-		StartUnix   int64  `json:"start_unix"`
-		EndUnix     int64  `json:"end_unix"`
-		StartSource string `json:"start_source"`
-		EndSource   string `json:"end_source"`
-		EndInferred bool   `json:"end_inferred"`
-		TypeID      int64  `json:"type_id"`
-		Type        string `json:"type"`
+		IssueID        int64  `json:"issue_id"`
+		MilestoneID    int64  `json:"milestone_id"`
+		Number         int64  `json:"number"`
+		StartUnix      int64  `json:"start_unix"`
+		EndUnix        int64  `json:"end_unix"`
+		StartSource    string `json:"start_source"`
+		EndSource      string `json:"end_source"`
+		EndInferred    bool   `json:"end_inferred"`
+		TypeID         int64  `json:"type_id"`
+		Type           string `json:"type"`
+		TimeEstimate   int64  `json:"time_estimate"`
+		TrackedSeconds int64  `json:"tracked_seconds"`
 	} `json:"bars"`
 	Arrows []struct {
 		FromIssueID int64  `json:"from_issue_id"`

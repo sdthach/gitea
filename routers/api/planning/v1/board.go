@@ -353,6 +353,11 @@ func readBoard(ctx *context.APIContext, repo *repo_model.Repository, perm access
 			ParentIssueID: parents[issue.ID], RootIssueID: planning_service.RootOf(parents, issue.ID),
 			Depth: depths[issue.ID], HasChildren: hasChildren[issue.ID],
 			Fields: valuesOrEmpty(values[issue.ID]), Points: planning_service.PointsOf(values[issue.ID]),
+			// Loaded in one batched query per projection by issues.LoadAttributes
+			// (TotalTrackedTime) and as a plain issue column (TimeEstimate) — no per-row
+			// facets call needed.
+			TimeEstimate:   issue.TimeEstimate,
+			TrackedSeconds: issue.TotalTrackedTime,
 		}
 		if at, ok := assigned[issue.ID]; ok {
 			card.Type, card.TypeID, card.TypeColor, card.TypeIcon = at.Name, at.TypeID, at.Color, at.Icon

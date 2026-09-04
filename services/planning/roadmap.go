@@ -148,6 +148,10 @@ type BarInput struct {
 	HasChildren   bool
 	// Fields is the issue's custom field values, keyed by field key and typed by kind.
 	Fields map[string]any
+	// TimeEstimate is Gitea's own estimate, in seconds; TrackedSeconds sums every user's
+	// logged time on the issue.
+	TimeEstimate   int64
+	TrackedSeconds int64
 }
 
 // Bar is one row of the chart.
@@ -186,6 +190,11 @@ type Bar struct {
 	// Points reads the nearest-scope field keyed points, always int, out of Fields, 0 when unset.
 	Fields map[string]any `json:"fields"`
 	Points int            `json:"points"`
+	// TimeEstimate is Gitea's own estimate, in seconds; TrackedSeconds sums every user's
+	// logged time on the issue. Carried on the bar so the table needs no per-row facets call
+	// to show them.
+	TimeEstimate   int64 `json:"time_estimate"`
+	TrackedSeconds int64 `json:"tracked_seconds"`
 }
 
 // Unmanaged is an issue with no bar, listed beside the chart with the reason.
@@ -209,6 +218,9 @@ type Unmanaged struct {
 	// Fields and Points are the same custom field values a bar would have carried.
 	Fields map[string]any `json:"fields"`
 	Points int            `json:"points"`
+	// TimeEstimate and TrackedSeconds are the same fields a bar would have carried.
+	TimeEstimate   int64 `json:"time_estimate"`
+	TrackedSeconds int64 `json:"tracked_seconds"`
 }
 
 // Managed reports whether an issue is managed enough to draw a bar for it: it carries an
@@ -235,6 +247,7 @@ func ResolveBar(in BarInput) (Bar, bool) {
 		ParentIssueID: in.ParentIssueID, RootIssueID: in.RootIssueID,
 		Depth: in.Depth, HasChildren: in.HasChildren,
 		Fields: in.Fields, Points: PointsOf(in.Fields),
+		TimeEstimate: in.TimeEstimate, TrackedSeconds: in.TrackedSeconds,
 	}
 
 	switch {
@@ -277,6 +290,7 @@ func UnmanagedFor(in BarInput) Unmanaged {
 		Labels:          in.Labels, Assignees: in.Assignees,
 		Type: in.TypeName, TypeID: in.TypeID, MilestoneID: in.MilestoneID, IsClosed: in.IsClosed,
 		Fields: in.Fields, Points: PointsOf(in.Fields),
+		TimeEstimate: in.TimeEstimate, TrackedSeconds: in.TrackedSeconds,
 	}
 }
 
