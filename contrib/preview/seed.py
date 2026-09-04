@@ -742,7 +742,7 @@ def run(api, fake, args):
             print(f"\naccounts: {written}")
     for url in project_urls:
         print(f"project: {url}")
-    print(f"browse: {args.server}/deployments  |  /planning/board  |  /planning/roadmap")
+    print(f"browse: {args.server}/deployments  and  {args.server}/planning/projects")
     print(f"sign in as any seeded user with password {PASSWORD!r}")
 
 

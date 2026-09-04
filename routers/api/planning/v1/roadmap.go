@@ -132,7 +132,7 @@ func getRoadmapEndpoint() *hubapi.Endpoint {
 				"ruler carries the time axis, whose unit follows the span: day, week, month or quarter. " +
 				"tree carries every recorded parent edge. " +
 				"Scoped by Gitea's own permission check on the Issues unit. " +
-				"The /planning/roadmap page is a client of this endpoint.",
+				"The project page's roadmap view is a client of this endpoint.",
 			Tag: "roadmap", Query: &roadmapSpec, Response: "Roadmap", ResponseIs: "object",
 		},
 		Handler: GetRoadmap,
