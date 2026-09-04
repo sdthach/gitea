@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"gitea.dev/modules/cache"
 	"gitea.dev/modules/gtprof"
@@ -132,7 +133,11 @@ func ForwardedHeadersHandler(limit int, trustedProxies []string) func(h http.Han
 	return proxy.ForwardedHeaders(opt)
 }
 
-func MustInitSessioner() func(next http.Handler) http.Handler {
+// MustInitSessioner builds the session middleware once and shares it across every caller
+// (web, API, install), so a session started by one router is visible to the others.
+var MustInitSessioner = sync.OnceValue(mustInitSessioner)
+
+func mustInitSessioner() func(next http.Handler) http.Handler {
 	// TODO: CHI-SESSION-GOB-REGISTER: chi-session has a design problem: it calls gob.Register for "Set"
 	// But if the server restarts, then the first "Get" will fail to decode the previously stored session data because the structs are not registered yet.
 	// So each package should make sure their structs are registered correctly during startup for session storage.

@@ -1,0 +1,51 @@
+# One instance-wide environment set (repo_id 0), standing in for whatever an operator names
+# in [deployments] DEFAULT_ENVIRONMENTS. Nothing in the fork reads these names; staging and
+# prod carry releases_only so the offer rule has a subject. Seeding itself is covered by
+# the unit test in models/deployments.
+-
+  id: 1
+  repo_id: 0
+  name: dev
+  sort_order: 10
+  review_policy: none
+  required_reviewers: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 2
+  repo_id: 0
+  name: qa
+  sort_order: 20
+  review_policy: none
+  required_reviewers: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 3
+  repo_id: 0
+  name: uat
+  sort_order: 30
+  review_policy: none
+  required_reviewers: 1
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 4
+  repo_id: 0
+  name: staging
+  sort_order: 40
+  review_policy: none
+  required_reviewers: 1
+  releases_only: true
+  created_unix: 1788220800
+  updated_unix: 1788220800
+-
+  id: 5
+  repo_id: 0
+  name: prod
+  sort_order: 50
+  review_policy: none
+  required_reviewers: 1
+  releases_only: true
+  created_unix: 1788220800
+  updated_unix: 1788220800

@@ -1,0 +1,4695 @@
+{
+  "components": {
+    "schemas": {
+      "Board": {
+        "properties": {
+          "can_edit_issue": {
+            "description": "Whether the caller may move a card between groups, which edits the issue's own label, assignee, assigned type or recorded parent.",
+            "type": "boolean"
+          },
+          "can_write": {
+            "description": "Whether the caller may move a card between columns, by the same check that endpoint enforces.",
+            "type": "boolean"
+          },
+          "columns": {
+            "description": "Gitea's own project columns, in its own order. Each carries column_id, title, color and default.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "description": "The custom fields visible from this repository, nearest scope shadowing by key — what a card's field editor offers. Cards carry the values themselves: fields (key to typed value) and points. Groups carry points_total and points_closed, summed over their own cards.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "group_by": {
+            "description": "The active grouping. A view setting, never stored on the project.",
+            "enum": [
+              "type",
+              "assignee",
+              "parent",
+              "none"
+            ],
+            "type": "string"
+          },
+          "groups": {
+            "description": "The horizontal groups Gitea does not model. Each carries key, label, is_empty_value, cards, root_issue_id (under parent grouping) and one entry per column, so the result is a rectangle. The group whose is_empty_value is true holds the issues with no value for the active grouping — under parent grouping, every root with no children of its own.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "description": "The repository's own labels plus its owning organization's: id, name and color.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "project_id": {
+            "description": "Gitea's own project id. An epic sync records it as .board.number in the epic's sync-manifest.json.",
+            "type": "integer"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the board belongs to.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The board's title.",
+            "type": "string"
+          },
+          "tree": {
+            "description": "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id, so a client can draw the hierarchy without re-deriving it from each card's own parent_issue_id.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "types": {
+            "description": "The types visible from this repository, nearest scope shadowing by name — what a card's type picker offers. Cards carry the assignment itself: type, type_id, type_color, type_icon, milestone, milestone_id, parent_issue_id, root_issue_id, depth, has_children, time_estimate, tracked_seconds and assignee_avatars (login, avatar_url — one per entry in assignees, in the same order, resolved through the user's own avatar link so gravatar and local avatar settings are honoured).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "can_edit_issue",
+          "can_write",
+          "columns",
+          "fields",
+          "group_by",
+          "groups",
+          "labels",
+          "project_id",
+          "repo_full_name",
+          "repo_id",
+          "tree",
+          "types"
+        ],
+        "type": "object"
+      },
+      "Capacity": {
+        "properties": {
+          "hours_per_day": {
+            "description": "Hours in a working day, in (0, 24].",
+            "type": "number"
+          },
+          "source": {
+            "description": "Which scope resolved the row: the nearer of repo, org and instance, or default when none is recorded.",
+            "enum": [
+              "repo",
+              "org",
+              "instance",
+              "default"
+            ],
+            "type": "string"
+          },
+          "utilization": {
+            "description": "Fraction of a working day actually available, in (0, 1].",
+            "type": "number"
+          },
+          "workdays": {
+            "description": "A bit mask over the week, Sunday as bit 0. 62 is Monday through Friday.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hours_per_day",
+          "source",
+          "utilization",
+          "workdays"
+        ],
+        "type": "object"
+      },
+      "CapacityRow": {
+        "properties": {
+          "avatar_url": {
+            "description": "The user's avatar.",
+            "type": "string"
+          },
+          "display_name": {
+            "description": "The user's display name.",
+            "type": "string"
+          },
+          "hours_per_day": {
+            "description": "Resolved hours in a working day.",
+            "type": "number"
+          },
+          "login": {
+            "description": "The user's login.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Which scope resolved the row.",
+            "enum": [
+              "repo",
+              "org",
+              "instance",
+              "default"
+            ],
+            "type": "string"
+          },
+          "user_id": {
+            "description": "The user's id.",
+            "type": "integer"
+          },
+          "utilization": {
+            "description": "Resolved fraction of a working day actually available.",
+            "type": "number"
+          },
+          "workdays": {
+            "description": "Resolved bit mask over the week, Sunday as bit 0.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hours_per_day",
+          "login",
+          "source",
+          "user_id",
+          "utilization",
+          "workdays"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "accepted": {
+            "description": "What the endpoint would have accepted instead.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "code": {
+            "description": "Machine-readable rejection code.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What went wrong.",
+            "type": "string"
+          },
+          "parameter": {
+            "description": "The offending parameter, when the rejection names one.",
+            "type": "string"
+          },
+          "suggested_action": {
+            "description": "What to do about it. Every error carries one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "suggested_action"
+        ],
+        "type": "object"
+      },
+      "Field": {
+        "properties": {
+          "id": {
+            "description": "The field's id.",
+            "type": "integer"
+          },
+          "key": {
+            "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Fixed once the field is created.",
+            "enum": [
+              "int",
+              "text",
+              "date",
+              "select"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "description": "1-100 characters.",
+            "type": "string"
+          },
+          "options": {
+            "description": "select only: the field's declared options.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "required": {
+            "description": "Whether an issue's value may be cleared once set.",
+            "type": "boolean"
+          },
+          "scope": {
+            "description": "Where the field lives.",
+            "enum": [
+              "instance",
+              "org",
+              "repo"
+            ],
+            "type": "string"
+          },
+          "scope_id": {
+            "description": "The repository or organization id; 0 for the instance scope.",
+            "type": "integer"
+          },
+          "sort": {
+            "description": "Tie-breaker for display order among a scope's own fields.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "kind",
+          "label",
+          "required",
+          "scope",
+          "scope_id",
+          "sort"
+        ],
+        "type": "object"
+      },
+      "FieldDeleteResult": {
+        "properties": {
+          "deleted_values": {
+            "description": "How many recorded values were cascaded away with the field.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_values"
+        ],
+        "type": "object"
+      },
+      "IssueFacets": {
+        "properties": {
+          "can_write": {
+            "description": "Whether the caller may write the schedule and estimate endpoints below.",
+            "type": "boolean"
+          },
+          "children": {
+            "description": "Every issue recorded under this one: issue_id, number, title and is_closed.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "description": "The custom fields visible from this issue's repository, what a field editor offers.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "issue_id": {
+            "description": "The issue's global id.",
+            "type": "integer"
+          },
+          "milestone": {
+            "description": "The milestone the issue is filed under, or null. Carries id, title, start_unix and due_unix (0 when unset).",
+            "type": "object"
+          },
+          "number": {
+            "description": "The issue's per-repository number.",
+            "type": "integer"
+          },
+          "parent": {
+            "description": "The issue's own recorded parent — issue_id, number and title — or null.",
+            "type": "object"
+          },
+          "progress": {
+            "description": "The children rolled up to a count: total and closed.",
+            "type": "object"
+          },
+          "repo_id": {
+            "description": "Repository the issue belongs to.",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "start_unix and start_source, one of schedule, issue_created, none.",
+            "type": "object"
+          },
+          "time_estimate": {
+            "description": "Seconds, from Gitea's own time-tracking.",
+            "type": "integer"
+          },
+          "tracked_seconds": {
+            "description": "Seconds actually logged, from Gitea's own time-tracking.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "The issue's assigned type — type_id, name, color and icon — or null.",
+            "type": "object"
+          },
+          "types": {
+            "description": "The types visible from this issue's repository, what a type picker offers.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "values": {
+            "description": "This issue's own recorded values, keyed by field key and typed by kind.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "can_write",
+          "children",
+          "fields",
+          "issue_id",
+          "milestone",
+          "number",
+          "parent",
+          "progress",
+          "repo_id",
+          "schedule",
+          "time_estimate",
+          "tracked_seconds",
+          "type",
+          "types",
+          "values"
+        ],
+        "type": "object"
+      },
+      "IssueFields": {
+        "properties": {
+          "fields": {
+            "description": "The fields visible from this issue's repository, nearest scope shadowing by key.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "values": {
+            "description": "This issue's own recorded values, keyed by field key and typed by kind.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "fields",
+          "values"
+        ],
+        "type": "object"
+      },
+      "IssueType": {
+        "properties": {
+          "color": {
+            "description": "The type's colour.",
+            "type": "string"
+          },
+          "icon": {
+            "description": "An octicon-* name shipped under public/assets/img/svg.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The type's id.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Lower-cased, 1-50 characters.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "1 (highest) to 9 (lowest).",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Where the type lives.",
+            "enum": [
+              "instance",
+              "org",
+              "repo"
+            ],
+            "type": "string"
+          },
+          "scope_id": {
+            "description": "The repository or organization id; 0 for the instance scope.",
+            "type": "integer"
+          },
+          "sort": {
+            "description": "Tie-breaker within the same rank.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "color",
+          "icon",
+          "id",
+          "name",
+          "rank",
+          "scope",
+          "scope_id",
+          "sort"
+        ],
+        "type": "object"
+      },
+      "IssueTypeAssignment": {
+        "properties": {
+          "color": {
+            "description": "The assigned type's colour.",
+            "type": "string"
+          },
+          "icon": {
+            "description": "The assigned type's icon name.",
+            "type": "string"
+          },
+          "icon_svg": {
+            "description": "The icon rendered as svg markup, so a client needs no icon registry of its own.",
+            "type": "string"
+          },
+          "issue_id": {
+            "description": "The issue's global id.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "The assigned type's name.",
+            "type": "string"
+          },
+          "type_id": {
+            "description": "The assigned type's id.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "color",
+          "icon",
+          "icon_svg",
+          "issue_id",
+          "name",
+          "type_id"
+        ],
+        "type": "object"
+      },
+      "MilestoneSchedule": {
+        "properties": {
+          "due_unix": {
+            "description": "The milestone's own deadline, 0 when unset.",
+            "type": "integer"
+          },
+          "milestone_id": {
+            "description": "The milestone's id.",
+            "type": "integer"
+          },
+          "start_unix": {
+            "description": "The recorded start, 0 when unset.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The milestone's title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "due_unix",
+          "milestone_id",
+          "start_unix",
+          "title"
+        ],
+        "type": "object"
+      },
+      "ProjectViewList": {
+        "properties": {
+          "views": {
+            "description": "The project's saved views: id, project_id, name, query, created_by and created_unix.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "views"
+        ],
+        "type": "object"
+      },
+      "ProjectsPage": {
+        "properties": {
+          "projects": {
+            "description": "Empty without repo_id. With it, the repository's own boards plus, when its owner is an organization, that organization's own: id, title, repo_id, owner_id, type, is_closed and columns.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repos": {
+            "description": "Without repo_id, every repository the caller can read the Issues unit of: id, full_name, owner, name, private and projects_enabled. With repo_id, that one repository.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects",
+          "repos"
+        ],
+        "type": "object"
+      },
+      "Roadmap": {
+        "properties": {
+          "arrows": {
+            "description": "Dependency edges: from_issue_id, to_issue_id, kind and enforced. kind is one of depends_on, predecessor — a hard gate the forge acts on, or a sequencing hint it does not. At a rolled-up zoom an edge between two children is re-keyed onto the brackets holding them: from_rollup and to_rollup carry the rollup keys as kind:key (parent:<issue id> or milestone:<id>), while from_issue_id and to_issue_id keep naming the child issues, and an edge with both ends in one bracket is dropped because it says nothing about the order of the brackets. Both rollup fields are absent at issue zoom, where an edge already joins two drawn bars.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "bars": {
+            "description": "One bar per managed issue, empty at a rolled-up zoom. Each carries issue_id, number, title, url, type, type_id, type_color, type_icon, labels, assignees, assignee_avatars, milestone, start_unix, end_unix, start_source, end_source, end_inferred, is_closed, parent_issue_id, root_issue_id, depth, has_children, time_estimate and tracked_seconds. assignee_avatars pairs each entry of assignees, in the same order, with the avatar url resolved through that user's own avatar link, so gravatar and local avatar settings are honoured. type comes from the issue's own assignment, not a label. start_source is one of schedule, issue_created, none and end_source one of closed, deadline, effort_estimate; end_inferred marks a bar whose end is an estimate rather than a record.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "description": "The custom fields visible from this repository, nearest scope shadowing by key. Bars carry the values themselves: fields (key to typed value) and points. A parent or milestone rollup, and a group, carries points_total and points_closed, summed over its own children — closed issues only for the second.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "group_by": {
+            "description": "The active grouping, reusing the board's own. A view setting, never stored.",
+            "enum": [
+              "type",
+              "assignee",
+              "parent",
+              "none"
+            ],
+            "type": "string"
+          },
+          "groups": {
+            "description": "The PUBLISHED bars grouped by the board's own group definition. Empty when grouping is off, and empty at a rolled-up zoom, which publishes no bars to group. Each group carries key, label, is_empty_value, cards and one column holding its bars.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "labels": {
+            "description": "The repository's own labels plus its owning organization's: id, name and color.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "milestones": {
+            "description": "The repository's milestones, which are the rows an issue can be filed under. Each carries milestone_id, title, is_closed, start_unix (the recorded schedule, 0 when unset) and end_unix (the milestone's own deadline, 0 when unset).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repo_full_name": {
+            "description": "owner/name.",
+            "type": "string"
+          },
+          "repo_id": {
+            "description": "Repository the chart covers.",
+            "type": "integer"
+          },
+          "rollups": {
+            "description": "Parent and milestone rows rolling up earliest start to latest end of their children, with the same task-close percentage every other view uses as progress. They are computed from their own fetch of every child rather than from the bars that got drawn, so a parent is checked against its children even where none is drawn. A parent row also carries issue_id, type (its own assigned type), declared_start_unix and declared_end_unix — the parent issue's OWN bar — and contains_children, warning and suggested_action when the declared window does not contain the derived one. partial marks a row whose fetch hit its cap; such a row publishes progress 0, because a fraction of an unknown denominator is not a measurement.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "ruler": {
+            "description": "The time axis: unit, start_unix, end_unix and ticks, each with unix and label. The unit follows the range drawn — day up to a fortnight, week up to ten weeks, month up to eighteen months, quarter beyond — while the write granularity stays a day at every unit.",
+            "type": "object"
+          },
+          "tree": {
+            "description": "Every recorded parent edge among this repository's issues: issue_id and parent_issue_id.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when the issue set hit the page limit, so the chart is a prefix. A silently capped chart would be a wrong picture that does not say so.",
+            "type": "boolean"
+          },
+          "types": {
+            "description": "The types visible from this repository, nearest scope shadowing by name — what a bar's type picker offers.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "unmanaged": {
+            "description": "Issues with no bar, each with the reason and a suggested action. An issue with no type, no parent and no start date has no start to draw and is listed rather than given a fabricated bar. Each also carries labels, assignees, assignee_avatars, type, type_id, milestone_id, is_closed, time_estimate and tracked_seconds, the same fields a bar would have.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "zoom": {
+            "description": "The depth the chart is read at. At parent or milestone only rollup rows are listed and no bar is drawn.",
+            "enum": [
+              "issue",
+              "parent",
+              "milestone"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "arrows",
+          "bars",
+          "fields",
+          "group_by",
+          "groups",
+          "labels",
+          "repo_full_name",
+          "repo_id",
+          "rollups",
+          "ruler",
+          "tree",
+          "truncated",
+          "types",
+          "unmanaged",
+          "zoom"
+        ],
+        "type": "object"
+      },
+      "RoadmapCapacity": {
+        "properties": {
+          "lanes": {
+            "description": "One heat-strip lane per repository assignee, even one with no load. Each carries user_id, login, display_name, avatar_url, hours_per_day, utilization, workdays, total_load_hours, total_available_hours, over, days (unix, load_hours, available_hours, over) and unestimated (issue_id, number, title).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sprints": {
+            "description": "One row per milestone carrying both a recorded start and a due date: milestone_id, title, start_unix, end_unix, working_days and lanes (user_id, login, load_hours, available_hours, over, points).",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sprints_unscheduled": {
+            "description": "A milestone missing a start, a due date or both: milestone_id, title, missing.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when the repository has more than 2000 open assigned issues, so only a prefix was considered.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lanes",
+          "sprints",
+          "sprints_unscheduled",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "Timesheet": {
+        "properties": {
+          "from_unix": {
+            "description": "The resolved window start, UTC midnight.",
+            "type": "integer"
+          },
+          "lanes": {
+            "description": "One row per repository assignee plus anyone else who logged time in the window, even one with no entries. Each carries user_id, login, display_name, avatar_url, total_seconds and days (unix, seconds, entries), where each entry carries id, issue_id, number, title, seconds, created_unix and editable — the doer owns the entry or can write the Issues unit.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "repo_id": {
+            "description": "Repository the timesheet covers.",
+            "type": "integer"
+          },
+          "running": {
+            "description": "This repository's own stopwatches currently ticking: user_id, login, issue_id, number, title and started_unix.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "to_unix": {
+            "description": "The resolved window end, UTC midnight of the last day covered.",
+            "type": "integer"
+          },
+          "totals": {
+            "description": "Sums over the same entries the lanes publish, four ways: by_issue (issue_id, number, title, seconds), by_user (user_id, login, seconds), by_milestone (milestone_id, title, seconds) and by_type (type_id, name, seconds).",
+            "type": "object"
+          },
+          "truncated": {
+            "description": "True when the window holds more than 5000 tracked-time rows, so only a prefix was folded in.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from_unix",
+          "lanes",
+          "repo_id",
+          "running",
+          "to_unix",
+          "totals",
+          "truncated"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The fork's own planning namespace: board, roadmap and their writes. Gitea's swagger group at /api/v1 is untouched.",
+    "title": "Gitea planning API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/board": {
+      "get": {
+        "description": "Gitea's project columns rendered vertically, with horizontal groups it does not model at all: project.Column carries title, sorting, colour and project and no group or row field, so groups are a rendering over rows the Projects API already returns — no schema change and no fork change. group_by selects the group dimension at view time and is never stored on the project, so two people may group the same board differently. An issue with no value for the active grouping falls into an explicit empty-value group; nothing disappears from a board because a field is unset. Board support is probed at runtime: a repository whose Projects unit is disabled, or an instance that disables it globally, is answered with the reason and what to do about it rather than an empty board. The project page's board view is a client of this endpoint.",
+        "operationId": "getBoard",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on project_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on group_by. Bare form means the eq operator.",
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "A project board with horizontal groups",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/cards": {
+      "post": {
+        "description": "GitHub Projects' own board adds an item straight into a column and a group; this is the same write over Gitea's own project card. The group is resolved before the issue is created — the same codes a group move answers, for the dimensions a brand new issue can carry (type, assignee, parent) — so a refused group leaves nothing behind. A non-empty parent group needs type_id, checked visible before creation, because a new card otherwise has no type yet for hierarchy to rank; type_id itself is assigned right after the issue is created, before its group is written. Creating the issue, assigning its type, placing it in its column and writing its group are separate calls: if any but the first fails, the issue already exists incomplete, and the response is a 500 that says so, because pre-creation validation has already excluded every refusal that means something to the caller. Authorized by Gitea's own write check on both the Issues and Projects units.",
+        "operationId": "addBoardCard",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "column_id": {
+                    "description": "The column the new card lands in.",
+                    "type": "integer"
+                  },
+                  "group": {
+                    "description": "The group's key, resolved exactly as a group move resolves one: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id, since a new card otherwise starts with no type for hierarchy to rank.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The grouping group is read under, and the board is answered at. Omit for no group.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "description": "The board to add the card to.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "The new issue's title, 1-255 characters.",
+                    "type": "string"
+                  },
+                  "type_id": {
+                    "description": "The new card's type, assigned right after it is created. Must be visible from repo, or the request answers type_not_visible. Required when group_by is parent and group is non-empty.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "column_id",
+                  "project_id",
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an issue directly onto the board",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/cards/{issue_id}/column": {
+      "post": {
+        "description": "The first of the board's exactly two writes. It is the same operation ccpm's board-issue-move verb performs over Gitea's own Projects API, reached here as the calling user. Authorized by Gitea's own write check on the Projects unit.",
+        "operationId": "moveBoardCardColumn",
+        "parameters": [
+          {
+            "description": "The issue's GLOBAL id, which is what Gitea's own project endpoints address a card by — not its per-repository number.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "column_id": {
+                    "description": "The column to move the card into.",
+                    "type": "integer"
+                  },
+                  "project_id": {
+                    "description": "The board the card is on.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "sorting": {
+                    "description": "Position within the column. Omit to append.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "column_id",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a card between the board's columns",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/cards/{issue_id}/group": {
+      "post": {
+        "description": "The second and last of the board's writes. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, its recorded parent, or the assignee. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveBoardCardGroup",
+        "parameters": [
+          {
+            "description": "The issue's GLOBAL id, which is what Gitea's own project endpoints address a card by — not its per-repository number.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group": {
+                    "description": "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the card into the empty-value group, clearing the field.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The active grouping. A group move is refused when this is none, because there is nothing to write.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "description": "The board the card is on.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "group_by",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a card between the board's groups",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/columns/{column_id}/order": {
+      "post": {
+        "description": "GitHub Projects' own board reorders a whole column in one drag; this is the same write, sorting issue_ids 0..n-1 in the order given through Gitea's own MoveIssuesOnProjectColumn. issue_ids must send every card in the column, in order — one already in the column but missing from the list answers incomplete_column, naming the ids left out. Every id must already be a card of this repository and this project — one that is not answers issue_not_in_repo or issue_not_in_project. Nothing is written on any refusal. Authorized by Gitea's own write check on the Projects unit.",
+        "operationId": "orderBoardColumn",
+        "parameters": [
+          {
+            "description": "The column being reordered.",
+            "in": "path",
+            "name": "column_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group_by": {
+                    "description": "The grouping to answer the board at. Omit for none.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "issue_ids": {
+                    "description": "Every card in the column, in order, up to 500: a comma-separated list or a JSON array of issue ids, every id already a card of this repository and this project. A card in the column missing from this list answers incomplete_column and writes nothing — send the whole column, never a subset.",
+                    "type": "array"
+                  },
+                  "project_id": {
+                    "description": "The board the column belongs to.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_ids",
+                  "project_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Reorder every card in one column",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/capacity": {
+      "get": {
+        "description": "repo_id reads every assignee GET /repos/{owner}/{repo} would list, org_id every member. Each row's capacity is resolved nearest scope first — repo, then org, then instance, then the published default — and source names which one answered. Readable the same way GET /issue-types checks its scope.",
+        "operationId": "getCapacity",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on org_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "org_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CapacityRow"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Resolved capacity for a scope's own users",
+        "tags": [
+          "capacity"
+        ]
+      }
+    },
+    "/capacity/{user_id}": {
+      "delete": {
+        "description": "Same self-or-administrator check as setting one. Replies with what the scope now resolves to.",
+        "operationId": "clearCapacity",
+        "parameters": [
+          {
+            "description": "The user's id.",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "org_id": {
+                    "description": "Scope to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capacity"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Clear a user's own row in a scope",
+        "tags": [
+          "capacity"
+        ]
+      },
+      "put": {
+        "description": "The doer may always set their own row; setting another user's needs the scope's own administrator — a repository administrator, an organization owner, or, for the instance scope, a site administrator. Refused bad_scope, forbidden, not_found (no such user), bad_hours, bad_utilization or bad_workdays. Replies with the row this scope now resolves to.",
+        "operationId": "setCapacity",
+        "parameters": [
+          {
+            "description": "The user's id.",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "hours_per_day": {
+                    "description": "A number in (0, 24], such as 8 or 6.5. Accepted as either a JSON number or a numeric string.",
+                    "type": "number"
+                  },
+                  "org_id": {
+                    "description": "Scope to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  },
+                  "utilization": {
+                    "description": "A fraction in (0, 1], such as 0.8 for 80%. Accepted as either a JSON number or a numeric string.",
+                    "type": "number"
+                  },
+                  "workdays": {
+                    "description": "A bit mask from 1 to 127: a bit per day of the week, Sunday as bit 0. 62 is Monday through Friday.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "hours_per_day",
+                  "utilization",
+                  "workdays"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capacity"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a user's capacity in a scope",
+        "tags": [
+          "capacity"
+        ]
+      }
+    },
+    "/fields": {
+      "get": {
+        "description": "repo_id reads a repository's own fields, its organization's when it has one, and the instance's, nearest scope shadowing by key. org_id reads an organization's own fields and the instance's. Neither reads the instance scope alone. Readable by anyone who can read the named repository's Issues unit, or to whom the named organization is visible.",
+        "operationId": "getFields",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on org_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "org_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Field"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The custom fields visible from a repository or an organization",
+        "tags": [
+          "fields"
+        ]
+      },
+      "post": {
+        "description": "Scope admin: a repository administrator for repo_id, an organization owner for org_id, a site administrator for the instance scope (neither given). Refused bad_scope, bad_key, bad_label, bad_kind, options_required or field_exists.",
+        "operationId": "createField",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "key": {
+                    "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "One of int, text, date or select. Fixed once the field is created.",
+                    "enum": [
+                      "int",
+                      "text",
+                      "date",
+                      "select"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "1-100 characters.",
+                    "type": "string"
+                  },
+                  "options": {
+                    "description": "select only: 1-50 distinct options, each at most 100 characters.",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "description": "Scope the field to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  },
+                  "required": {
+                    "description": "Whether an issue's value may be cleared once set.",
+                    "type": "boolean"
+                  },
+                  "sort": {
+                    "description": "Tie-breaker for display order among a scope's own fields.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "kind",
+                  "label"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a custom field",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
+    "/fields/{id}": {
+      "delete": {
+        "description": "Cascades every recorded value naming the field; the reply says how many were removed.",
+        "operationId": "deleteField",
+        "parameters": [
+          {
+            "description": "The field's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldDeleteResult"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete a custom field",
+        "tags": [
+          "fields"
+        ]
+      },
+      "put": {
+        "description": "Same scope admin check as creating one. Scope and kind are both fixed at creation: changing kind is refused kind_immutable, since values may already exist under it.",
+        "operationId": "updateField",
+        "parameters": [
+          {
+            "description": "The field's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "key": {
+                    "description": "A lower-case slug: a letter, then up to 39 letters, digits or underscores.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "One of int, text, date or select. Fixed once the field is created.",
+                    "enum": [
+                      "int",
+                      "text",
+                      "date",
+                      "select"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "1-100 characters.",
+                    "type": "string"
+                  },
+                  "options": {
+                    "description": "select only: 1-50 distinct options, each at most 100 characters.",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "description": "Scope the field to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the field to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  },
+                  "required": {
+                    "description": "Whether an issue's value may be cleared once set.",
+                    "type": "boolean"
+                  },
+                  "sort": {
+                    "description": "Tie-breaker for display order among a scope's own fields.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "kind",
+                  "label"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Update a custom field",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
+    "/issue-type-assignments": {
+      "get": {
+        "description": "repo_id is required, and readable the same way GET /issue-types checks it; issue_ids outside that repository are silently dropped rather than erroring. issue_ids is a comma-separated list of global issue ids, at most 200 — more is refused too_many_ids. icon_svg is the rendered svg, so a client needs no icon registry of its own.",
+        "operationId": "getIssueTypeAssignments",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on issue_ids. Bare form means the eq operator.",
+            "in": "query",
+            "name": "issue_ids",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IssueTypeAssignment"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Batch-read issues' assigned types",
+        "tags": [
+          "issue-types"
+        ]
+      }
+    },
+    "/issue-types": {
+      "get": {
+        "description": "repo_id reads a repository's own types, its organization's when it has one, and the instance's, nearest scope shadowing by name. org_id reads an organization's own types and the instance's. Neither reads the instance scope alone. Readable by anyone who can read the named repository's Issues unit, or to whom the named organization is visible.",
+        "operationId": "getIssueTypes",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on org_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "org_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IssueType"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The types visible from a repository or an organization",
+        "tags": [
+          "issue-types"
+        ]
+      },
+      "post": {
+        "description": "Scope admin: a repository administrator for repo_id, an organization owner for org_id, a site administrator for the instance scope (neither given). Refused bad_scope, bad_type_name, bad_icon, bad_rank or type_exists.",
+        "operationId": "createIssueType",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "color": {
+                    "description": "The type's colour.",
+                    "type": "string"
+                  },
+                  "icon": {
+                    "description": "An octicon-* name shipped under public/assets/img/svg, such as octicon-issue-opened.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "1-50 characters, lower-cased on write; letters, digits, spaces, underscores and hyphens.",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "description": "Scope the type to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "rank": {
+                    "description": "1 (highest) to 9 (lowest).",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the type to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "color",
+                  "icon",
+                  "name",
+                  "rank"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueType"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a type",
+        "tags": [
+          "issue-types"
+        ]
+      }
+    },
+    "/issue-types/{id}": {
+      "delete": {
+        "description": "Refused type_in_use, carrying the assignment count, unless force is true — which deletes the type and clears every assignment naming it. Answers with the row as it stood just before deletion.",
+        "operationId": "deleteIssueType",
+        "parameters": [
+          {
+            "description": "The type's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "force": {
+                    "description": "Delete a type still in use, clearing its assignments.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueType"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete a type",
+        "tags": [
+          "issue-types"
+        ]
+      },
+      "put": {
+        "description": "Same scope admin check as creating one. Scope itself is fixed at creation and cannot be changed here.",
+        "operationId": "updateIssueType",
+        "parameters": [
+          {
+            "description": "The type's id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "color": {
+                    "description": "The type's colour.",
+                    "type": "string"
+                  },
+                  "icon": {
+                    "description": "An octicon-* name shipped under public/assets/img/svg, such as octicon-issue-opened.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "1-50 characters, lower-cased on write; letters, digits, spaces, underscores and hyphens.",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "description": "Scope the type to this organization. Mutually exclusive with repo_id.",
+                    "type": "integer"
+                  },
+                  "rank": {
+                    "description": "1 (highest) to 9 (lowest).",
+                    "type": "integer"
+                  },
+                  "repo_id": {
+                    "description": "Scope the type to this repository. Mutually exclusive with org_id; both zero is the instance scope.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "color",
+                  "icon",
+                  "name",
+                  "rank"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueType"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Update a type",
+        "tags": [
+          "issue-types"
+        ]
+      }
+    },
+    "/issues": {
+      "post": {
+        "description": "Creates the issue and files it under the milestone row. type_id and parent_issue_id are both optional and both validated before anything is created: the type must be visible from the repository (type_not_visible), and a parent must exist in the same repository, be readable, carry a type, and satisfy RankAllows against type_id (rank_mismatch); a parent given without type_id is refused untyped_issue, naming the new issue. group_by and group place the new issue into a grouping cell exactly as a board card add does: resolved and validated before the issue is created, applied after — the same codes a group move answers. start and end are validated before creation too — start_after_end when both are given and start falls after end — then written the way PUT /issues/{issue_id}/schedule and POST /issues/{issue_id}/dates write them, once the issue exists. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "createIssue",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Issue body.",
+                    "type": "string"
+                  },
+                  "end": {
+                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "group": {
+                    "description": "The group's key, resolved exactly as a board card add's own group: a type name, an assignee login, or a root issue id under parent grouping. A non-empty parent group needs type_id.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The grouping group is read under. Omit for no group.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "milestone_id": {
+                    "description": "Milestone row to file it under.",
+                    "type": "integer"
+                  },
+                  "parent_issue_id": {
+                    "description": "A parent in the same repository; needs type_id, and the parent's own type must outrank it.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Issue title.",
+                    "type": "string"
+                  },
+                  "type_id": {
+                    "description": "A type visible from the repository, assigned to the new issue.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create an issue on a row",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}": {
+      "get": {
+        "description": "Scoped by Gitea's own permission check on the Issues or Pull Requests unit, whichever the issue belongs to; a caller who cannot read it gets 404 rather than 403, so the refusal never confirms the issue exists. can_write says whether the write endpoints below will accept an edit from this caller.",
+        "operationId": "issue",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The fields the roadmap's side panel edits: schedule, milestone, estimate and tracked time",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dates": {
+      "post": {
+        "description": "The end is Issue.DeadlineUnix, written through Gitea's own update, which records a deadline comment. The start is a recorded plan_issue_schedule row rather than a Gitea field — see PUT /issues/{issue_id}/schedule for the endpoint dedicated to it. Send either field empty to leave it as it stands. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueDates",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "end": {
+                    "description": "Bar end as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Bar start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a bar's start and end",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dependencies": {
+      "post": {
+        "description": "Records that issue_id is blocked by depends_on_issue_id through Gitea's own CreateIssueDependency, which leaves the same comment Gitea's own dependency panel leaves. Refused dependencies_disabled when the repository's Issues unit has dependencies turned off, same_issue for an issue naming itself, cross_repo when the two issues do not share a repository, dependency_exists for a pair already linked, and circular_dependency for a pair that would block each other. depends_on_issue_id missing or unreadable to the caller answers dependency_not_found rather than cross_repo, never revealing an issue outside the caller's reach. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "addIssueDependency",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "depends_on_issue_id": {
+                    "description": "The issue this one is blocked by.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "depends_on_issue_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Block an issue on another, drawn as the roadmap's arrow",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/dependencies/{dependency_id}": {
+      "delete": {
+        "description": "Removes the dependency_id edge through Gitea's own RemoveIssueDependency, which leaves the same comment Gitea's own dependency panel leaves. A pair not linked answers dependency_not_found. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "removeIssueDependency",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The depends-on issue's global id.",
+            "in": "path",
+            "name": "dependency_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Remove a blocking dependency",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/estimate": {
+      "put": {
+        "description": "time_estimate is a duration like \"8h\" or \"4h30m\" (hours, minutes and seconds; Gitea parses no day unit), parsed and written through Gitea's own time-tracking. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueEstimate",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "time_estimate": {
+                    "description": "Duration such as \"8h\" or \"4h30m\"; hours, minutes and seconds only.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "time_estimate"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's time estimate",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/issues/{issue_id}/fields": {
+      "get": {
+        "description": "Scoped by Gitea's own permission check on the Issues or Pull Requests unit, exactly as GET /issues/{issue_id}.",
+        "operationId": "getIssueFields",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFields"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "An issue's visible fields and its own recorded values",
+        "tags": [
+          "fields"
+        ]
+      },
+      "put": {
+        "description": "A partial update, applied in one transaction: every key must be a visible field (unknown_field, listing the unknown keys), and every value must parse for its field's kind (bad_value naming the key and kind, bad_option listing the declared options); a null or empty string clears the value, refused required_field when the field cannot be cleared. A refusal on any key leaves every value, cleared or set, exactly as it stood. values may be sent as a JSON object or as a JSON string holding one, since the CLI sends every body value as a string. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueFields",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "values": {
+                    "description": "A JSON object (or a JSON string holding one) mapping field key to value; null or \"\" clears it.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "values"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's custom field values",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
+    "/issues/{issue_id}/group": {
+      "post": {
+        "description": "The chart's vertical drag. A group IS the grouping value, so moving between groups edits the field itself: the issue's assigned type, its recorded parent, or the assignee. It goes through the same PlanGroupMove the board's group move goes through, so a vertical drag on the chart and a group move on the board are one operation with one definition rather than two that can drift. Dragging vertically writes the grouping field and dragging horizontally writes dates; the two are independent. It is REFUSED when grouping is off, because there is then nothing to write, and the refusal says so. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveIssueGroup",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "group": {
+                    "description": "The group's key: the type name, the assignee login, or — under parent grouping — the root issue's id as a string. Empty moves the bar into the empty-value group, clearing the field.",
+                    "type": "string"
+                  },
+                  "group_by": {
+                    "description": "The active grouping. A group move is refused when this is none, because there is nothing to write.",
+                    "enum": [
+                      "type",
+                      "assignee",
+                      "parent",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "group_by",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move a bar between the chart's groups",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/milestone": {
+      "post": {
+        "description": "Assigns the issue's milestone through Gitea's own ChangeMilestoneAssign, which records the change as a milestone comment on the issue. Send milestone_id 0 to take the issue off every row. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "moveIssueMilestone",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "milestone_id": {
+                    "description": "Target milestone; 0 removes the issue from its row.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Move an issue between the chart's milestone rows",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/issues/{issue_id}/parent": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearIssueParent",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Remove an issue's parent",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the parent in plan_issue_parent, replacing the retired label convention. Refused same_issue, cross_repo, pull_request (either side), untyped_issue (either side, naming which), rank_mismatch (naming both type names and ranks), cycle (the parent sits in the child's own subtree) or too_deep (past 8 levels). Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueParent",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "parent_issue_id": {
+                    "description": "The parent to link.",
+                    "type": "integer"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "parent_issue_id",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's parent",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/issues/{issue_id}/schedule": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearIssueSchedule",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Clear an issue's start date",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the start in plan_issue_schedule; refused for a pull request, a start at or before the Unix epoch, or a start after the issue's own deadline when one is set. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueSchedule",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "start"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set an issue's start date",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/issues/{issue_id}/type": {
+      "delete": {
+        "description": "Same authorization as assigning one.",
+        "operationId": "clearIssueType",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Remove an issue's type",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Refused type_not_visible when type_id names a type not visible from the issue's own repository. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setIssueType",
+        "parameters": [
+          {
+            "description": "The issue's global id, as the roadmap's bars publish it.",
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "type_id": {
+                    "description": "The type to assign.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "type_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFacets"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Assign an issue's type",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/milestones": {
+      "post": {
+        "description": "Creates the milestone the chart draws as a row. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "createMilestone",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "description": "Milestone description.",
+                    "type": "string"
+                  },
+                  "end": {
+                    "description": "Milestone deadline as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "Milestone title.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Create a milestone row",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/milestones/{milestone_id}/schedule": {
+      "delete": {
+        "description": "Same authorization as setting it.",
+        "operationId": "clearMilestoneSchedule",
+        "parameters": [
+          {
+            "description": "The milestone's id.",
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneSchedule"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Clear a milestone's start date",
+        "tags": [
+          "issues"
+        ]
+      },
+      "put": {
+        "description": "Records the start in plan_milestone_schedule; refused for a milestone that does not belong to repo, a start at or before the Unix epoch, or a start after the milestone's own due date when one is set. Authorized by Gitea's own write check on the Issues unit.",
+        "operationId": "setMilestoneSchedule",
+        "parameters": [
+          {
+            "description": "The milestone's id.",
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "Start as an RFC 3339 timestamp or a YYYY-MM-DD date.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo",
+                  "start"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneSchedule"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Set a milestone's start date",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/projects": {
+      "get": {
+        "description": "Without repo_id every repository the caller can read the Issues unit of, and no project: a picker lists repositories before a board is chosen. With repo_id, that one repository — 404 when it is not readable, never naming it — and the boards filed under it: its own repository projects, plus, when its owner is an organization, that organization's own projects. A repository whose Projects unit is unusable, instance-wide or on the repository itself, answers projects_unavailable exactly as /api/planning/v1/board does.",
+        "operationId": "listProjects",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on is_closed. Bare form means the eq operator.",
+            "in": "query",
+            "name": "is_closed",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsPage"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The repositories and boards a planning page can open",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/projects/{project_id}/views": {
+      "get": {
+        "description": "Needs Projects unit read on the named repository. The project must belong to that repository, or to its owning organization, else project_not_in_repo.",
+        "operationId": "getProjectViews",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+            "in": "query",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "A project's saved views",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Needs Projects unit write on the named repository. Refused with view_exists when the project already carries a view of that name.",
+        "operationId": "createProjectView",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "name": {
+                    "description": "The view's name, 1-100 characters, unique on the project.",
+                    "type": "string"
+                  },
+                  "query": {
+                    "description": "The saved query string, at most 4KiB.",
+                    "type": "string"
+                  },
+                  "repo": {
+                    "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Save a view on a project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/projects/{project_id}/views/{view_id}": {
+      "delete": {
+        "description": "Needs Projects unit write on the named repository. view_not_found when the view belongs to a different project than project_id names.",
+        "operationId": "deleteProjectView",
+        "parameters": [
+          {
+            "description": "The project the view is saved on.",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The view to delete.",
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "repo": {
+                    "description": "Repository as owner/name; the project must belong to it, or to its owning organization.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repo"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectViewList"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Delete a saved view",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/roadmap": {
+      "get": {
+        "description": "Needs no Projects API, so it renders on a build the board cannot. Gitea stores no start date — Issue.DeadlineUnix is a single endpoint — so a bar's start comes from the recorded schedule this API's own PUT /issues/{issue_id}/schedule writes, falling back to the issue's creation time. Its end is the close time when closed, the deadline when set, and otherwise the effort estimate applied to the start. EVERY bar names the source of its start and of its end, and an inferred end is flagged, because presenting an estimate as a measurement is this view's characteristic failure. Arrows distinguish depends_on, which Gitea's issue_dependency enforces, from predecessor, which is a sequencing hint enforced by nothing. An issue with no type, no parent and no start date has no start to draw: it is listed with that reason rather than given a fabricated bar. Parent and milestone rows span earliest start to latest end of their children, and their progress is the same task-close percentage every other view uses; no second definition is introduced. Those rows are computed from their own fetch of every child, not from the bars that got drawn, so a parent whose declared window ends before the work filed under it is still flagged at zoom=parent where no child is drawn; a rollup whose fetch hit its cap is marked partial and publishes no progress percentage. zoom selects the depth the chart is read at and group_by the group dimension, reusing the board's own groups. A rolled-up zoom pages over its own rows rather than over issues — parent over every issue that is itself a recorded parent, milestone over the repository's milestones — so a page of N holds N rollups and truncated means more of THOSE than the page holds. parent_issue_id narrows the chart to one issue's subtree. ruler carries the time axis, whose unit follows the span: day, week, month or quarter. tree carries every recorded parent edge. Scoped by Gitea's own permission check on the Issues unit. The project page's roadmap view is a client of this endpoint.",
+        "operationId": "getRoadmap",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on parent_issue_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "parent_issue_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on milestone_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "milestone_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on state. Bare form means the eq operator.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on group_by. Bare form means the eq operator.",
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on zoom. Bare form means the eq operator.",
+            "in": "query",
+            "name": "zoom",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roadmap"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The roadmap: one bar per issue, with dependency arrows",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/roadmap/capacity": {
+      "get": {
+        "description": "One lane per user GET /repos/{owner}/{repo} would list as an assignee, even one carrying no load, over assigned open issues only. Each issue's remaining work — max(estimate - tracked, 0), read from Gitea's own time-tracking — is split evenly across its own assignees and spread over its working days by that user's own resolved workdays mask; a day is over when its load exceeds hours-per-day times utilization. from and to are YYYY-MM-DD dates, at most 366 days apart (bad_window otherwise); omitted, they default to the window this repository's own bars cover. sprints folds the same remaining work, whole per issue rather than day by day, into every milestone that carries both a recorded start and a due date; one still missing either is listed in sprints_unscheduled instead. truncated marks a repository with more than 2000 open assigned issues, where only a prefix was considered. Scoped by Gitea's own permission check on the Issues unit.",
+        "operationId": "getRoadmapCapacity",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on from. Bare form means the eq operator.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on to. Bare form means the eq operator.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapCapacity"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "Per-user capacity heat strips and sprint load for the roadmap",
+        "tags": [
+          "capacity"
+        ]
+      }
+    },
+    "/timesheet": {
+      "get": {
+        "description": "repo_id is required and readable the same way GET /issue-types checks it. from and to are YYYY-MM-DD UTC dates, inclusive, defaulting to the current ISO week (Monday through Sunday) when both are omitted; the window is at most 92 days (bad_window otherwise). user_id restricts the response to that one user's own lane and running timer; a doer who is neither a site administrator nor an Issues writer on the repository is limited to their own lane regardless of user_id, and naming another user answers not_allowed_to_query_user. lanes cover every repository assignee plus anyone else who logged time in the window, even one with no entries at all, except a lane the caller has no access to query, which is omitted rather than shown empty. entries come from Gitea's own time-tracking; a deleted entry never appears. running lists this repository's own stopwatches currently ticking. Totals are summed over the same entries the lanes publish. truncated marks a window with more than 5000 tracked-time rows, where only a prefix was folded in.",
+        "operationId": "getTimesheet",
+        "parameters": [
+          {
+            "description": "Filter on repo_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "repo_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter on from. Bare form means the eq operator.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on to. Bare form means the eq operator.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter on user_id. Bare form means the eq operator.",
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size. Defaults to 50, caps at 200.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "1-based page. Responses carry X-Total-Count and an RFC 5988 Link header.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timesheet"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request was refused, naming the offender and what is accepted."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The calling user is not permitted, by Gitea's own permission check."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          }
+        },
+        "summary": "The Time tab's timesheet: tracked time by user and day",
+        "tags": [
+          "timesheet"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/planning/v1"
+    }
+  ]
+}

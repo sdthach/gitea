@@ -1,0 +1,425 @@
+// Copyright 2026 The Gitea Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package integration
+
+import (
+	"net/http"
+	"testing"
+
+	actions_model "gitea.dev/models/actions"
+	auth_model "gitea.dev/models/auth"
+	"gitea.dev/models/db"
+	deployments_model "gitea.dev/models/deployments"
+	git_model "gitea.dev/models/git"
+	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unittest"
+	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
+	"gitea.dev/modules/git"
+	"gitea.dev/modules/timeutil"
+	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
+	hubapi "gitea.dev/routers/api/hub"
+	deployments_service "gitea.dev/services/deployments"
+	"gitea.dev/services/notify"
+	"gitea.dev/tests"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// deployThroughTheNotifier drives one deploy the way a real one arrives: through Gitea's
+// own notifier, which is the fork's single capture point. Nothing here writes the
+// tables directly, so a hook that stopped firing would fail these tests.
+func deployThroughTheNotifier(t *testing.T, repo *repo_model.Repository, sender *user_model.User, environment, tag string, runID, at int64) {
+	t.Helper()
+	// Every registered notifier sees the event, and Gitea's own webhook notifier
+	// dereferences repo.Owner, so the caller has to have loaded it — the same contract
+	// services/actions/notify.go meets in production.
+	require.NoError(t, repo.LoadOwner(t.Context()))
+
+	run := &actions_model.ActionRun{
+		ID: runID, RepoID: repo.ID, WorkflowID: "deploy-" + environment + ".yaml",
+		Ref: "refs/tags/" + tag, CommitSHA: "65f1bf27bc3bf70f64657658635e66094edbcb4d",
+		Status: actions_model.StatusWaiting, Updated: timeutil.TimeStamp(at),
+	}
+	notify.WorkflowRunStatusUpdate(t.Context(), repo, sender, run)
+
+	run.Status = actions_model.StatusSuccess
+	run.Updated = timeutil.TimeStamp(at + 10)
+	notify.WorkflowRunStatusUpdate(t.Context(), repo, sender, run)
+}
+
+// TestAPIDeploymentsMatrixProjectsRepeatDeploys, over the wire: v1.0 to qa, v1.1 to qa,
+// v1.0 to qa again leaves v1.0 at `✔ ×2 now`, v1.1 at `✔`, and three rows in the table.
+// An implementation that upserted per (release, environment) would fail every assertion.
+func TestAPIDeploymentsMatrixProjectsRepeatDeploys(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	deployThroughTheNotifier(t, repo, sender, "qa", "v1.0", 9001, 1000)
+	deployThroughTheNotifier(t, repo, sender, "qa", "v1.1", 9002, 2000)
+	deployThroughTheNotifier(t, repo, sender, "qa", "v1.0", 9003, 3000)
+
+	session := loginUser(t, "user2")
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id=1").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+
+	var rows []struct {
+		RepoFullName string `json:"repo_full_name"`
+		ReleaseTag   string `json:"release_tag"`
+		Cells        []struct {
+			Environment string `json:"environment"`
+			SortOrder   int64  `json:"sort_order"`
+			State       string `json:"state"`
+			Symbol      string `json:"symbol"`
+			Successes   int    `json:"successes"`
+			RunID       int64  `json:"run_id"`
+		} `json:"cells"`
+	}
+	DecodeJSON(t, resp, &rows)
+	require.NotEmpty(t, rows)
+
+	byTag := map[string]map[string]string{}
+	successes := map[string]int{}
+	for _, row := range rows {
+		assert.Equal(t, "user2/repo1", row.RepoFullName)
+		require.NotEmpty(t, row.Cells, "every row carries one cell per environment, in configured order")
+		byTag[row.ReleaseTag] = map[string]string{}
+		columns := make([]string, 0, len(row.Cells))
+		orders := make([]int64, 0, len(row.Cells))
+		for _, cell := range row.Cells {
+			columns = append(columns, cell.Environment)
+			orders = append(orders, cell.SortOrder)
+			byTag[row.ReleaseTag][cell.Environment] = cell.Symbol
+			if cell.Environment == "qa" {
+				successes[row.ReleaseTag] = cell.Successes
+			}
+		}
+		assert.Equal(t, []string{"dev", "qa", "uat", "staging", "prod"}, columns,
+			"environment sequence is configuration; nothing in Gitea expresses it")
+		assert.Equal(t, []int64{10, 20, 30, 40, 50}, orders,
+			"each cell carries its environment's configured order, which is what orders a grid spanning repositories")
+	}
+
+	require.Contains(t, byTag, "v1.0")
+	require.Contains(t, byTag, "v1.1")
+	assert.Equal(t, "✔ ×2 now", byTag["v1.0"]["qa"], "v1.0 reached qa twice and is what qa is holding")
+	assert.Equal(t, 2, successes["v1.0"])
+	assert.Equal(t, "✔", byTag["v1.1"]["qa"], "v1.1 reached qa but no longer holds it")
+	assert.Equal(t, 1, successes["v1.1"])
+	assert.Equal(t, "·", byTag["v1.0"]["prod"], "nothing has reached prod")
+
+	// The deployments endpoint returns the rows the notifier wrote — three of them,
+	// not one per (release, environment).
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments?environment=qa&sort_by=id&order=asc").AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusOK)
+	var deployments []*deployments_model.Deployment
+	DecodeJSON(t, resp, &deployments)
+	require.Len(t, deployments, 3, "three deploys leave three rows")
+	assert.Equal(t, []string{"v1.0", "v1.1", "v1.0"},
+		[]string{deployments[0].ReleaseTag, deployments[1].ReleaseTag, deployments[2].ReleaseTag})
+	assert.Equal(t, []int64{9001, 9002, 9003},
+		[]int64{deployments[0].RunID, deployments[1].RunID, deployments[2].RunID})
+	assert.Empty(t, resp.Header().Get("X-Total-Count"),
+		"a cursor-paged resource carries no total: counting a table receiving concurrent inserts answers a stale question")
+}
+
+// matrixCellFor decodes GET /deployments/matrix and returns the named environment's cell for
+// releaseTag.
+func matrixCellFor(t *testing.T, token, releaseTag, environment string) (state, symbol string, found bool) {
+	t.Helper()
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id=1").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+	var rows []struct {
+		ReleaseTag string `json:"release_tag"`
+		Cells      []struct {
+			Environment string `json:"environment"`
+			State       string `json:"state"`
+			Symbol      string `json:"symbol"`
+		} `json:"cells"`
+	}
+	DecodeJSON(t, resp, &rows)
+	for _, row := range rows {
+		if row.ReleaseTag != releaseTag {
+			continue
+		}
+		for _, cell := range row.Cells {
+			if cell.Environment == environment {
+				return cell.State, cell.Symbol, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// TestAPIDeploymentsMatrixShowsWaitingAndFailedCells: a deploy held on a pre-deployment check
+// renders as its own waiting cell, distinct from held (a review gate) and in progress (a run
+// actually under way); one whose checks turn up a failure on re-evaluation renders failed.
+func TestAPIDeploymentsMatrixShowsWaitingAndFailedCells(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "matrix-wait", SortOrder: 60, WaitMinutes: 10})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "matrix-fail", SortOrder: 61, RequiredStatusContexts: []string{"ci/build"},
+	})
+	token := hubWriteToken(t, "user2")
+	readToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeReadRepository)
+
+	// A wait timer holds the deploy without a real dispatch: its cell is CellWaiting, not
+	// CellInProgress — nothing has dispatched yet.
+	status, _ := promoteChecks(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "matrix-wait", "release_tag": promotionFullRelease, "confirm": true,
+	})
+	require.Equal(t, http.StatusCreated, status)
+	state, symbol, found := matrixCellFor(t, readToken, promotionFullRelease, "matrix-wait")
+	require.True(t, found)
+	assert.Equal(t, "waiting", state)
+	assert.Equal(t, "⏳", symbol)
+
+	// A missing required status context also waits at first — but once it reports failure,
+	// ReevaluateWaiting discovers it and the cell renders failed.
+	status, _ = promoteChecks(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "matrix-fail", "release_tag": promotionFullRelease, "confirm": true,
+	})
+	require.Equal(t, http.StatusCreated, status)
+	state, _, found = matrixCellFor(t, readToken, promotionFullRelease, "matrix-fail")
+	require.True(t, found)
+	assert.Equal(t, "waiting", state, "no report yet: still waiting, not refused")
+
+	sha, err := git.NewIDFromString("65f1bf27bc3bf70f64657658635e66094edbcb4d")
+	require.NoError(t, err)
+	require.NoError(t, git_model.NewCommitStatus(t.Context(), git_model.NewCommitStatusOptions{
+		Repo: repo, Creator: user2, SHA: sha,
+		CommitStatus: &git_model.CommitStatus{State: commitstatus.CommitStatusFailure, Context: "ci/build"},
+	}))
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), timeutil.TimeStampNow().AsTime().Unix()))
+	state, symbol, found = matrixCellFor(t, readToken, promotionFullRelease, "matrix-fail")
+	require.True(t, found)
+	assert.Equal(t, "failed", state)
+	assert.Equal(t, "✗", symbol)
+}
+
+// TestAPIDeploymentsAuditIsReadOnlyOverTheAPI: the audit resource publishes
+// no write verb, so PATCH and DELETE are refused at the route as well as at the table.
+func TestAPIDeploymentsAuditIsReadOnlyOverTheAPI(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	deployThroughTheNotifier(t, repo, sender, "prod", "v1.1", 9101, 5000)
+
+	session := loginUser(t, "user2")
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?sort_by=id&order=asc").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+	var events []*deployments_model.AuditEvent
+	DecodeJSON(t, resp, &events)
+	require.Len(t, events, 2, "each deploy writes requested and a terminal event")
+	require.NotZero(t, events[0].ID)
+
+	for _, method := range []string{"PATCH", "DELETE", "POST", "PUT"} {
+		req = NewRequest(t, method, deploymentsv1.BasePath+"/audit").AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusMethodNotAllowed)
+	}
+
+	// The table refuses it too, so the guarantee does not depend on the router alone.
+	err := deployments_model.AppendAuditEvent(t.Context(), events[0])
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "append-only")
+}
+
+// TestAPIDeploymentsAuditOutlivesTheUserItNames: deleting the deploying user from
+// Gitea leaves the audit still naming them, because actor_login is denormalized and the row
+// resolves no foreign key.
+func TestAPIDeploymentsAuditOutlivesTheUserItNames(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	deployer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	deployThroughTheNotifier(t, repo, deployer, "uat", "v1.1", 9201, 6000)
+
+	// Removing the user row is the whole test: if the audit resolved the login through a
+	// join, every row would go anonymous here.
+	_, err := db.GetEngine(t.Context()).ID(deployer.ID).Delete(new(user_model.User))
+	require.NoError(t, err)
+
+	session := loginUser(t, "user2")
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?environment=uat").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+
+	var events []*deployments_model.AuditEvent
+	DecodeJSON(t, resp, &events)
+	require.NotEmpty(t, events)
+	for _, e := range events {
+		assert.Equal(t, "user4", e.ActorLogin, "the audit still names who deployed")
+		assert.Equal(t, int64(4), e.ActorID)
+	}
+}
+
+// TestAPIDeploymentsCursorPagingVisitsEveryRowOnce covers cursor paging for the first two resources that
+// use it. An offset traversal over an append-only table repeats and skips rows; a cursor
+// traversal does not.
+func TestAPIDeploymentsCursorPagingVisitsEveryRowOnce(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	for i := range int64(3) {
+		deployThroughTheNotifier(t, repo, sender, "dev", "v1.1", 9300+i, 7000+i*100)
+	}
+
+	session := loginUser(t, "user2")
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+
+	seen := map[int64]int{}
+	cursor := ""
+	for range 10 {
+		url := deploymentsv1.BasePath + "/audit?limit=2&sort_by=id&order=asc"
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+		req := NewRequest(t, "GET", url).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusOK)
+		var page []*deployments_model.AuditEvent
+		DecodeJSON(t, resp, &page)
+		for _, e := range page {
+			seen[e.ID]++
+		}
+		cursor = resp.Header().Get(hubapi.NextCursorHeader)
+		if cursor == "" {
+			break
+		}
+	}
+	require.Len(t, seen, 6, "three deploys write two events each, and the traversal reached all six")
+	for id, times := range seen {
+		assert.Equal(t, 1, times, "row %d was returned exactly once", id)
+	}
+
+	// Deployments page by cursor too, under both the resource's natural sort and an
+	// explicit one, so the cursor's position value is read from the column the traversal is
+	// actually sorted on.
+	for _, sort := range []string{"", "&sort_by=id&order=asc"} {
+		t.Run("deployments cursor"+sort, func(t *testing.T) {
+			seenRuns := map[int64]int{}
+			cursor := ""
+			for range 10 {
+				url := deploymentsv1.BasePath + "/deployments?limit=2" + sort
+				if cursor != "" {
+					url += "&cursor=" + cursor
+				}
+				req := NewRequest(t, "GET", url).AddTokenAuth(token)
+				resp := MakeRequest(t, req, http.StatusOK)
+				var page []*deployments_model.Deployment
+				DecodeJSON(t, resp, &page)
+				for _, d := range page {
+					seenRuns[d.RunID]++
+				}
+				cursor = resp.Header().Get(hubapi.NextCursorHeader)
+				if cursor == "" {
+					break
+				}
+			}
+			assert.Equal(t, map[int64]int{9300: 1, 9301: 1, 9302: 1}, seenRuns,
+				"each deployment is returned exactly once across the traversal")
+		})
+	}
+
+	// A cursor issued under one sort is refused under another rather than silently
+	// skipping and repeating rows.
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?limit=2&sort_by=id&order=asc").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+	issued := resp.Header().Get(hubapi.NextCursorHeader)
+	require.NotEmpty(t, issued)
+
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?limit=2&sort_by=occurred_unix&order=desc&cursor="+issued).AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusBadRequest)
+	var refusal struct {
+		Code            string `json:"code"`
+		SuggestedAction string `json:"suggested_action"`
+	}
+	DecodeJSON(t, resp, &refusal)
+	assert.Equal(t, "cursor_sort_mismatch", refusal.Code)
+	assert.NotEmpty(t, refusal.SuggestedAction, "every error carries a suggested next action")
+
+	// Cursor and page are the only two forms, and a resource accepts exactly one.
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/audit?page=2").AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusBadRequest)
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/releases?cursor=x").AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusNotFound)
+}
+
+// TestAPIDeploymentsReleasesExpandDeployments covers expansion over the two new resources:
+// releases are read from Gitea's own model at render time.
+func TestAPIDeploymentsReleasesExpandDeployments(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	deployThroughTheNotifier(t, repo, sender, "staging", "v1.1", 9401, 8000)
+
+	session := loginUser(t, "user2")
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/releases?expand=deployments").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+
+	var releases []*deploymentsv1.Release
+	DecodeJSON(t, resp, &releases)
+	require.NotEmpty(t, releases)
+	assert.NotEmpty(t, resp.Header().Get("X-Total-Count"), "releases are finite and stable, so they page by page")
+
+	found := false
+	for _, r := range releases {
+		assert.NotEqual(t, "draft-release", r.TagName, "a draft is not a row of the grid")
+		if r.TagName == "v1.1" {
+			found = true
+			require.Len(t, r.Deployments, 1)
+			assert.Equal(t, "staging", r.Deployments[0].Environment)
+			assert.NotEmpty(t, r.Target, "the release's own commitish, which the deploy status is posted against")
+		}
+	}
+	assert.True(t, found, "v1.1 is a release of user2/repo1")
+
+	// Deeper or unwhitelisted expansion is refused, naming what is accepted.
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/repos/user2/repo1/releases?expand=audit").AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusBadRequest)
+
+	// deployments expands release and audit.
+	req = NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments?expand=release,audit").AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusOK)
+	var deployments []*deploymentsv1.Deployment
+	DecodeJSON(t, resp, &deployments)
+	require.Len(t, deployments, 1)
+	require.NotNil(t, deployments[0].Release)
+	assert.Equal(t, "v1.1", deployments[0].Release.TagName)
+	assert.Len(t, deployments[0].Audit, 2, "the run's own requested and terminal events")
+}
+
+// TestDeploymentsMatrixPageIsAClientOfTheAPI covers the new page: the handler serves the
+// shell and every figure arrives over the documented endpoint.
+func TestDeploymentsMatrixPageIsAClientOfTheAPI(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/deployments")
+	MakeRequest(t, req, http.StatusSeeOther)
+
+	session := loginUser(t, "user2")
+	req = NewRequest(t, "GET", "/deployments")
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	body := resp.Body.String()
+	// The page carries no script of its own: it mounts the bundled client and hands it the
+	// namespace's own base through window.config.pageData. api.ts is what names
+	// /deployments/matrix, proven in routers/web/hubroutes.
+	assert.Contains(t, body, `"deploymentsMatrix":{"apiBase":"`+deploymentsv1.BasePath+`"`,
+		"the page fetches its rows from the documented endpoint")
+	assert.Contains(t, body, `data-global-init="initDeploymentsMatrix"`,
+		"the page mounts the bundled client that is the API's actual client")
+}

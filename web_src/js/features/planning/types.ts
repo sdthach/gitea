@@ -1,0 +1,480 @@
+// Types mirror docs/planning/openapi.json field-for-field: JSON keys stay snake_case here
+// rather than being renamed to camelCase, so a field name is one grep away from its schema.
+
+export type PlanningProjectConfig = {
+  apiBase: string;
+  token: string;
+  repoId: number;
+  repoFullName: string;
+  projectId: number;
+  canWrite: boolean;
+  canEditIssues: boolean;
+};
+
+export type PlanningSettingsConfig = {
+  apiBase: string;
+  token: string;
+  repoId: number;
+  orgId: number;
+  ownerName: string;
+  repoFullName: string;
+  canWrite: boolean;
+};
+
+export type IssueType = {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  rank: number;
+  sort: number;
+  scope: string;
+  scope_id: number;
+};
+
+export type Field = {
+  id: number;
+  key: string;
+  label: string;
+  kind: string;
+  options?: string[];
+  required: boolean;
+  sort: number;
+  scope: string;
+  scope_id: number;
+};
+
+export type LabelRef = {
+  id: number;
+  name: string;
+  color: string;
+};
+
+// AssigneeAvatar pairs a card's or bar's assignee login with the avatar url the server already
+// resolved through the user's own avatar link, so a client never re-derives it from the login.
+export type AssigneeAvatar = {
+  login: string;
+  avatar_url: string;
+};
+
+export type TreeEdge = {
+  issue_id: number;
+  parent_issue_id: number;
+};
+
+export type FieldValues = Record<string, unknown>;
+
+export type Card = {
+  issue_id: number;
+  number: number;
+  title: string;
+  url: string;
+  column_id: number;
+  sorting: number;
+  type?: string;
+  type_id?: number;
+  type_color?: string;
+  type_icon?: string;
+  labels: string[];
+  assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
+  milestone?: string;
+  milestone_id?: number;
+  is_closed: boolean;
+  is_pull: boolean;
+  parent_issue_id?: number;
+  root_issue_id?: number;
+  depth?: number;
+  has_children?: boolean;
+  fields: FieldValues;
+  points: number;
+  time_estimate: number;
+  tracked_seconds: number;
+};
+
+export type Column = {
+  column_id: number;
+  title: string;
+  color?: string;
+  default: boolean;
+};
+
+export type GroupColumn = {
+  column_id: number;
+  title: string;
+  cards: Card[];
+};
+
+export type Group = {
+  key: string;
+  label: string;
+  is_empty_value: boolean;
+  columns: GroupColumn[];
+  cards: number;
+  root_issue_id?: number;
+  points_total: number;
+  points_closed: number;
+};
+
+export type Board = {
+  repo_id: number;
+  repo_full_name: string;
+  project_id: number;
+  title?: string;
+  group_by: string;
+  columns: Column[];
+  groups: Group[];
+  tree: TreeEdge[];
+  types: IssueType[];
+  fields: Field[];
+  labels: LabelRef[];
+  can_write: boolean;
+  can_edit_issue: boolean;
+};
+
+export type StartSource = 'schedule' | 'issue_created' | 'none';
+export type EndSource = 'closed' | 'deadline' | 'effort_estimate';
+
+export type Bar = {
+  issue_id: number;
+  number: number;
+  title: string;
+  url: string;
+  type?: string;
+  type_id?: number;
+  type_color?: string;
+  type_icon?: string;
+  milestone?: string;
+  milestone_id?: number;
+  start_unix: number;
+  end_unix: number;
+  labels: string[];
+  assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
+  start_source: StartSource;
+  end_source: EndSource;
+  end_inferred: boolean;
+  is_closed: boolean;
+  parent_issue_id?: number;
+  root_issue_id?: number;
+  depth?: number;
+  has_children?: boolean;
+  fields: FieldValues;
+  points: number;
+  time_estimate: number;
+  tracked_seconds: number;
+};
+
+export type Unmanaged = {
+  issue_id: number;
+  number: number;
+  title: string;
+  url: string;
+  reason: string;
+  suggested_action: string;
+  labels: string[];
+  assignees: string[];
+  assignee_avatars: AssigneeAvatar[];
+  type?: string;
+  type_id?: number;
+  milestone_id?: number;
+  is_closed: boolean;
+  fields: FieldValues;
+  points: number;
+  time_estimate: number;
+  tracked_seconds: number;
+};
+
+export type ArrowKind = 'depends_on' | 'predecessor';
+
+export type Arrow = {
+  from_issue_id: number;
+  to_issue_id: number;
+  kind: ArrowKind;
+  enforced: boolean;
+  from_rollup?: string;
+  to_rollup?: string;
+};
+
+export type RollupRow = {
+  kind: string;
+  key: string;
+  label: string;
+  type?: string;
+  start_unix: number;
+  end_unix: number;
+  children: number;
+  closed: number;
+  progress: number;
+  end_inferred: boolean;
+  partial: boolean;
+  issue_id?: number;
+  declared_start_unix?: number;
+  declared_end_unix?: number;
+  contains_children: boolean;
+  warning?: string;
+  suggested_action?: string;
+  points_total: number;
+  points_closed: number;
+};
+
+export type RoadmapMilestone = {
+  milestone_id: number;
+  title: string;
+  is_closed: boolean;
+  start_unix: number;
+  end_unix: number;
+};
+
+export type RoadmapRulerTick = {
+  unix: number;
+  label: string;
+};
+
+export type RoadmapRuler = {
+  unit: string;
+  start_unix: number;
+  end_unix: number;
+  ticks: RoadmapRulerTick[];
+};
+
+export type Roadmap = {
+  repo_id: number;
+  repo_full_name: string;
+  bars: Bar[];
+  arrows: Arrow[];
+  rollups: RollupRow[];
+  unmanaged: Unmanaged[];
+  group_by: string;
+  zoom: string;
+  groups: Group[];
+  ruler: RoadmapRuler;
+  milestones?: RoadmapMilestone[];
+  tree: TreeEdge[];
+  types: IssueType[];
+  fields: Field[];
+  labels: LabelRef[];
+  can_write?: boolean;
+  truncated: boolean;
+};
+
+export type CapacityDay = {
+  unix: number;
+  load_hours: number;
+  available_hours: number;
+  over: boolean;
+};
+
+export type CapacityUnestimated = {
+  issue_id: number;
+  number: number;
+  title: string;
+};
+
+export type CapacityLane = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  hours_per_day: number;
+  utilization: number;
+  workdays: number;
+  total_load_hours: number;
+  total_available_hours: number;
+  over: boolean;
+  days: CapacityDay[];
+  unestimated: CapacityUnestimated[];
+};
+
+export type CapacitySprintLane = {
+  user_id: number;
+  login: string;
+  load_hours: number;
+  available_hours: number;
+  over: boolean;
+  points: number;
+};
+
+export type CapacitySprint = {
+  milestone_id: number;
+  title: string;
+  start_unix: number;
+  end_unix: number;
+  working_days: number;
+  lanes: CapacitySprintLane[];
+};
+
+export type CapacitySprintUnscheduled = {
+  milestone_id: number;
+  title: string;
+  missing: string;
+};
+
+// RoadmapBarModel is the display shape RoadmapBar.vue renders: a Bar narrowed to what one bar
+// draws, plus the row key it currently sits in under whichever row mode is active.
+export type RoadmapBarModel = {
+  issueId: number;
+  number: number;
+  title: string;
+  url: string;
+  startUnix: number;
+  endUnix: number;
+  endInferred: boolean;
+  typeColor?: string;
+  typeIcon?: string;
+  rowKey: string;
+};
+
+export type CapacityRow = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  hours_per_day: number;
+  utilization: number;
+  workdays: number;
+  source: string;
+};
+
+export type MilestoneSchedule = {
+  milestone_id: number;
+  title: string;
+  start_unix: number;
+  due_unix: number;
+};
+
+export type RoadmapCapacity = {
+  lanes: CapacityLane[];
+  sprints: CapacitySprint[];
+  sprints_unscheduled: CapacitySprintUnscheduled[];
+  truncated: boolean;
+};
+
+export type TimesheetEntry = {
+  id: number;
+  issue_id: number;
+  number: number;
+  title: string;
+  seconds: number;
+  created_unix: number;
+  editable: boolean;
+};
+
+export type TimesheetDay = {
+  unix: number;
+  seconds: number;
+  entries: TimesheetEntry[];
+};
+
+export type TimesheetLane = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  days: TimesheetDay[];
+  total_seconds: number;
+};
+
+export type TimesheetRow = {
+  user_id: number;
+  login: string;
+  issue_id: number;
+  number: number;
+  title: string;
+  started_unix: number;
+};
+
+export type TimesheetIssueTotal = {issue_id: number; number: number; title: string; seconds: number};
+export type TimesheetUserTotal = {user_id: number; login: string; seconds: number};
+export type TimesheetMilestoneTotal = {milestone_id: number; title: string; seconds: number};
+export type TimesheetTypeTotal = {type_id: number; name: string; seconds: number};
+
+export type TimesheetTotals = {
+  by_issue: TimesheetIssueTotal[];
+  by_user: TimesheetUserTotal[];
+  by_milestone: TimesheetMilestoneTotal[];
+  by_type: TimesheetTypeTotal[];
+};
+
+export type Timesheet = {
+  repo_id: number;
+  from_unix: number;
+  to_unix: number;
+  lanes: TimesheetLane[];
+  running: TimesheetRow[];
+  totals: TimesheetTotals;
+  truncated: boolean;
+};
+
+export type ProjectView = {
+  id: number;
+  project_id: number;
+  name: string;
+  query: string;
+  created_by: number;
+  created_unix: number;
+};
+
+export type ProjectViewList = {
+  views: ProjectView[];
+};
+
+export type ProjectsPickerRepo = {
+  id: number;
+  full_name: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  projects_enabled: boolean;
+};
+
+export type ProjectsPickerProject = {
+  id: number;
+  title: string;
+  repo_id: number;
+  owner_id: number;
+  type: number;
+  is_closed: boolean;
+  columns: number;
+};
+
+export type ProjectsPage = {
+  repos: ProjectsPickerRepo[];
+  projects: ProjectsPickerProject[];
+};
+
+export type IssueMilestoneRef = {id: number; title: string; start_unix: number; due_unix: number} | null;
+export type IssueParentRef = {issue_id: number; number: number; title: string} | null;
+export type IssueTypeRef = {type_id: number; name: string; color: string; icon: string} | null;
+export type IssueChildRef = {issue_id: number; number: number; title: string; is_closed: boolean};
+export type IssueSchedule = {start_unix: number; start_source: StartSource};
+export type IssueProgress = {total: number; closed: number};
+
+export type IssueFacets = {
+  issue_id: number;
+  repo_id: number;
+  number: number;
+  can_write: boolean;
+  children: IssueChildRef[];
+  fields: Field[];
+  milestone: IssueMilestoneRef;
+  parent: IssueParentRef;
+  progress: IssueProgress;
+  schedule: IssueSchedule;
+  time_estimate: number;
+  tracked_seconds: number;
+  type: IssueTypeRef;
+  types: IssueType[];
+  values: FieldValues;
+};
+
+// IssueTypeAssignment is one row GET /issue-type-assignments answers with: icon_svg is
+// pre-rendered, so a batch caller needs no client-side icon registry of its own.
+export type IssueTypeAssignment = {
+  issue_id: number;
+  type_id: number;
+  name: string;
+  color: string;
+  icon: string;
+  icon_svg: string;
+};

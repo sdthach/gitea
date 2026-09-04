@@ -204,7 +204,9 @@ func addTime(ctx context.Context, user *user_model.User, issue *Issue, amount in
 		Time:    amount,
 		Created: created,
 	}
-	return tt, db.Insert(ctx, tt)
+	tt.CreatedUnix = created.Unix() // Created must survive xorm's own now() default for this column
+	_, err := db.GetEngine(ctx).NoAutoTime().Insert(tt)
+	return tt, err
 }
 
 // TotalTimesForEachUser returns the spent time in seconds for each user by an issue

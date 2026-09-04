@@ -1,0 +1,53 @@
+APP_NAME = Gitea Hub Preview
+RUN_MODE = prod
+RUN_USER = git
+WORK_PATH = /data/gitea
+
+[server]
+PROTOCOL = http
+DOMAIN = localhost
+ROOT_URL = http://localhost:3001/
+HTTP_ADDR = 0.0.0.0
+HTTP_PORT = 3000
+DISABLE_SSH = true
+STATIC_ROOT_PATH = /app/gitea
+APP_DATA_PATH = /data/gitea
+LFS_START_SERVER = false
+OFFLINE_MODE = true
+
+[database]
+DB_TYPE = postgres
+HOST = db:5432
+NAME = gitea
+USER = gitea
+PASSWD = preview
+SSL_MODE = disable
+
+[repository]
+ROOT = /data/git/repositories
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = ${SECRET_KEY}
+INTERNAL_TOKEN = ${INTERNAL_TOKEN}
+
+[service]
+DISABLE_REGISTRATION = false
+REQUIRE_SIGNIN_VIEW = false
+
+[actions]
+ENABLED = true
+
+[planning]
+ENABLE_PAGES = true
+
+[deployments]
+ENABLE_PAGES = true
+DEFAULT_ENVIRONMENTS = dev, qa, uat, staging, prod
+
+[log]
+MODE = console
+LEVEL = info
+
+[indexer]
+ISSUE_INDEXER_PATH = /data/gitea/indexers/issues.bleve

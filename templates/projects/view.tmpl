@@ -77,7 +77,7 @@
 		<div class="divider"></div>
 	</div>
 
-	{{template "delivery/swimlanes" .}}{{/* delivery fork spoke */}}
+	{{template "planning/swimlanes" .}}{{/* hub fork spoke */}}
 
 	<div id="project-board" class="board {{if $canWriteProject}}sortable{{end}}" data-project-board-writable="{{$canWriteProject}}" {{if $canWriteProject}}data-url="{{$.Link}}/move"{{end}}>
 		{{range .Columns}}

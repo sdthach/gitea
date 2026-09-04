@@ -1,0 +1,11 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard deployments">
+	<div class="ui container">
+		{{if .EnvironmentID}}
+			<div id="deployments-environment" data-global-init="initDeploymentsEnvironmentEdit"></div>
+		{{else}}
+			<div id="deployments-environments" data-global-init="initDeploymentsEnvironments"></div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

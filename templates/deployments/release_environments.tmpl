@@ -1,0 +1,3 @@
+{{if and .IsSigned .Repository}}
+<div data-global-init="initDeploymentsReleaseBadges" data-repo-id="{{.Repository.ID}}" data-api-base="{{AppSubUrl}}/api/deployments/v1"></div>
+{{end}}

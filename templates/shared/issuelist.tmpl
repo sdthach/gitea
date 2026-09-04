@@ -10,6 +10,7 @@
 						<input type="checkbox" autocomplete="off" class="issue-checkbox tw-mr-[14px]" data-issue-id="{{.ID}}" aria-label="{{ctx.Locale.Tr "repo.issues.action_check"}}: {{.Title}}">
 					{{end}}
 					{{template "shared/issueicon" .}}
+					{{template "planning/issue_type_icon" .}}
 				</div>
 			</div>
 

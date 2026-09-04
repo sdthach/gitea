@@ -1,0 +1,150 @@
+// Copyright 2026 The Gitea Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package hub
+
+import (
+	"errors"
+	"net/http"
+	"net/url"
+
+	hub_model "gitea.dev/models/hub"
+	"gitea.dev/services/context"
+	"gitea.dev/services/hub/query"
+)
+
+// APIError renders a rejection. Every rejection carries a suggested next action.
+func APIError(ctx *context.APIContext, status int, code, message, suggestion string) {
+	ctx.JSON(status, &query.Error{
+		Status:          status,
+		Code:            code,
+		Message:         message,
+		SuggestedAction: suggestion,
+	})
+}
+
+// RenderQueryError renders a grammar rejection verbatim: it already names the offender and
+// lists what is accepted.
+func RenderQueryError(ctx *context.APIContext, err *query.Error) {
+	ctx.JSON(err.Status, err)
+}
+
+// RenderHubError renders a hub error, which always carries its suggested action. Code
+// defaults to "hub_error" and Status to the status argument; either is used verbatim when the
+// error sets it.
+func RenderHubError(ctx *context.APIContext, status int, err error) {
+	hubErr, ok := errors.AsType[*hub_model.Error](err)
+	if !ok {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	code := "hub_error"
+	if hubErr.Code != "" {
+		code = hubErr.Code
+	}
+	if hubErr.Status != 0 {
+		status = hubErr.Status
+	}
+	ctx.JSON(status, &query.Error{
+		Status:          status,
+		Code:            code,
+		Message:         hubErr.Message,
+		SuggestedAction: hubErr.SuggestedAction,
+	})
+}
+
+// ParseQuery reads the grammar for an operation's resource, rendering the rejection itself
+// when the request is refused.
+func ParseQuery(ctx *context.APIContext, spec query.Spec) (*query.Query, bool) {
+	values, err := url.ParseQuery(ctx.Req.URL.RawQuery)
+	if err != nil {
+		APIError(ctx, http.StatusBadRequest, "malformed_query",
+			"the query string could not be parsed", "Percent-encode any literal & or = inside a filter value.")
+		return nil, false
+	}
+	q, qErr := query.Parse(values, spec)
+	if qErr != nil {
+		RenderQueryError(ctx, qErr)
+		return nil, false
+	}
+	return q, true
+}
+
+// ParseCursorQuery reads the grammar for a cursor-paged resource and refuses a cursor that
+// was issued under a different sort. Following one would skip and repeat rows, which is the
+// exact failure cursor paging exists to prevent.
+func ParseCursorQuery(ctx *context.APIContext, spec query.Spec) (*query.Query, bool) {
+	q, ok := ParseQuery(ctx, spec)
+	if !ok {
+		return nil, false
+	}
+	if !q.Cursor.Matches(q.Sort) {
+		APIError(ctx, http.StatusBadRequest, "cursor_sort_mismatch",
+			"the cursor was issued under a different sort than this request asks for",
+			"Repeat the request with the sort_by and order the cursor was issued under, or drop the cursor to start the traversal again.")
+		return nil, false
+	}
+	return q, true
+}
+
+// RenderPage writes an offset-paged response with Gitea's own headers.
+func RenderPage(ctx *context.APIContext, q *query.Query, total int64, payload any) {
+	ctx.SetTotalCountHeader(total)
+	ctx.SetLinkHeader(total, q.Limit)
+	ctx.JSON(http.StatusOK, payload)
+}
+
+// NextCursorHeader carries the opaque token that continues a cursor traversal. It is a
+// header rather than an envelope around the rows so a cursor-paged resource and an
+// offset-paged one return the same JSON shape and one client renders both.
+const NextCursorHeader = "X-Next-Cursor"
+
+// RenderCursorPage writes a cursor-paged response. It carries NO total: counting a table
+// that is receiving concurrent inserts answers a question that was already stale when it
+// was asked.
+//
+// sortValue and lastID are the last row's sort value and primary key, which is what makes
+// the traversal return each row exactly once while rows are being appended.
+func RenderCursorPage(ctx *context.APIContext, q *query.Query, rowCount int, sortValue any, lastID int64, payload any) {
+	if rowCount > 0 && rowCount == q.Limit {
+		next := query.NewCursor(q.Sort, sortValue, lastID).Encode()
+		if next != "" {
+			ctx.Resp.Header().Set(NextCursorHeader, next)
+			values := ctx.Req.URL.Query()
+			values.Set("cursor", next)
+			ctx.Resp.Header().Set("Link", "<"+ctx.Req.URL.Path+"?"+values.Encode()+`>; rel="next"`)
+		}
+	}
+	ctx.JSON(http.StatusOK, payload)
+}
+
+// EqualityFilter reads a bare `field=value` out of a parsed query. The grid is a projection
+// rather than a table, so its filters select what to project instead of rendering into a
+// SQL condition; they still go through the one grammar, so an unknown field is rejected by
+// the same parser every other resource uses.
+func EqualityFilter(q *query.Query, name string) (any, bool) {
+	for _, f := range q.Filters {
+		if f.Field.Name == name && f.Op == query.OpEq && len(f.Values) == 1 {
+			return f.Values[0], true
+		}
+	}
+	return nil, false
+}
+
+func EqualityFilterString(q *query.Query, name string) string {
+	if v, ok := EqualityFilter(q, name); ok {
+		if s, isString := v.(string); isString {
+			return s
+		}
+	}
+	return ""
+}
+
+func EqualityFilterInt(q *query.Query, name string) int64 {
+	if v, ok := EqualityFilter(q, name); ok {
+		if n, isInt := v.(int64); isInt {
+			return n
+		}
+	}
+	return 0
+}

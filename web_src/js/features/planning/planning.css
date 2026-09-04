@@ -1,0 +1,40 @@
+#planning-project {
+  min-height: 20rem;
+}
+
+.planning-table table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.planning-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-body);
+}
+
+.planning-table .planning-table-group td {
+  background: var(--color-secondary-bg);
+}
+
+.planning-type-icon svg {
+  vertical-align: text-bottom;
+}
+
+.planning-sidebar-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-secondary-bg);
+  overflow: hidden;
+}
+
+.planning-sidebar-progress-bar {
+  height: 100%;
+  background: currentcolor;
+}
+
+.planning-sidebar-children {
+  margin: 0;
+  padding-left: 1.2em;
+}
