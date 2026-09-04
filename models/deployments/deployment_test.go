@@ -63,12 +63,14 @@ func TestDeploymentsDeploymentsAreAppendOnly(t *testing.T) {
 	assert.Equal(t, []string{"v1", "v2", "v1"}, []string{rows[0].ReleaseTag, rows[1].ReleaseTag, rows[2].ReleaseTag})
 
 	// A run reporting several status changes still leaves one row for that run, so the
-	// count above measures deploys rather than notifications.
+	// count above measures deploys rather than notifications — but that one row's Status is
+	// refreshed to the latest report, or exclusiveLockCheck would read a finished run as
+	// forever busy.
 	require.NoError(t, AppendDeployment(ctx, &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 103, Status: "failure"}))
 	rows, err = FindDeployments(ctx, builderEq("repo_id", int64(1)), "id ASC", 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3, "re-observing a run appends nothing")
-	assert.Equal(t, "success", rows[2].Status, "the recorded status is written once and never updated")
+	assert.Equal(t, "failure", rows[2].Status, "the row's Status tracks the run's latest reported state")
 
 	// Re-saving an existing row is what an update looks like through the model, and it is
 	// refused rather than silently applied.

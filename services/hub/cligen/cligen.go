@@ -122,6 +122,7 @@ var Commands = []hubcli.Command{
 		fmt.Fprintf(&b, "\t\tIntBody:     %s,\n", stringSlice(intBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tFloatBody:   %s,\n", stringSlice(floatBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tArrayBody:   %s,\n", stringSlice(arrayBodyNames(op)))
+		fmt.Fprintf(&b, "\t\tObjectBody:  %s,\n", stringSlice(objectBodyNames(op)))
 		fmt.Fprintf(&b, "\t\tBodyHelp:    %s,\n", stringMap(bodyHelp(op)))
 		fmt.Fprintf(&b, "\t\tColumns:     %s,\n", stringSlice(columnsFor(op, schemas)))
 		fmt.Fprintf(&b, "\t\tIsList:      %t,\n", op.ResponseIs == "array")
@@ -211,6 +212,19 @@ func arrayBodyNames(op *hubapi.Operation) []string {
 	names := make([]string, 0, len(op.Body))
 	for _, p := range op.Body {
 		if p.Type == "array" {
+			names = append(names, p.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// objectBodyNames lists the members that marshal as a JSON object rather than a string; the
+// flag for one takes a JSON object, or "null" to clear a field it represents.
+func objectBodyNames(op *hubapi.Operation) []string {
+	names := make([]string, 0, len(op.Body))
+	for _, p := range op.Body {
+		if p.Type == "object" {
 			names = append(names, p.Name)
 		}
 	}

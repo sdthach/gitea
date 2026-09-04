@@ -88,22 +88,22 @@ func autoPromoteOne(ctx context.Context, repo *repo_model.Repository, doer *user
 	promotion, promoteErr := Promote(reqCtx, PromotionRequest{
 		Repo: repo, Doer: doer, IsRepoAdmin: true, Environment: env.Name, ReleaseTag: releaseTag, Confirm: true,
 	})
-	runID := int64(0)
-	if promotion != nil {
-		runID = promotion.RunID
+	if promoteErr != nil {
+		return promoteErr
 	}
-	auditErr := deployments_model.AppendAuditEvent(ctx, &deployments_model.AuditEvent{
+	if promotion.RunID == 0 {
+		// Refused (a prerelease into a releases_only environment) or checks_failed: Promote
+		// created nothing, so there is nothing for auto_promote to be credited with.
+		return nil
+	}
+	// auto_promoted records that the deployment above was created by the auto_promote column
+	// rather than a person, so it is written only once Promote has actually created one —
+	// never on a failed, refused or checks-failed attempt, which left nothing to attribute.
+	return deployments_model.AppendAuditEvent(ctx, &deployments_model.AuditEvent{
 		Event: deployments_model.AuditAutoPromoted, RepoID: repo.ID, Environment: env.Name, ReleaseTag: releaseTag,
-		RunID: runID, ActorID: doer.ID, ActorLogin: doer.Name, Source: deployments_model.SourceNotifier,
+		RunID: promotion.RunID, ActorID: doer.ID, ActorLogin: doer.Name, Source: deployments_model.SourceNotifier,
 		Reason: fmt.Sprintf("auto-promoted from %s because every environment %s depends on held %s live",
 			fromEnvironment, env.Name, releaseTag),
 		OccurredUnix: timeutil.TimeStampNow(),
 	})
-	if promoteErr != nil {
-		if auditErr != nil {
-			return fmt.Errorf("dispatch: %w (and recording auto_promoted also failed: %v)", promoteErr, auditErr)
-		}
-		return promoteErr
-	}
-	return auditErr
 }

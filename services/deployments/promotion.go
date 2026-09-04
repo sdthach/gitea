@@ -355,16 +355,6 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 		return out, nil
 	}
 
-	// The bypass is recorded BEFORE the dispatch. Someone with the right to override used it
-	// at this moment for this reason, and that is true whether or not the dispatch then
-	// succeeded; recording it afterwards would lose the record exactly when a failed deploy
-	// makes it most worth having.
-	if out.Outcome == OutcomeOverride {
-		if err := appendPromotionEvent(ctx, req, out, deployments_model.AuditOverridden, out.OverrideReason); err != nil {
-			return nil, err
-		}
-	}
-
 	switch AggregateCheckState(out.Checks) {
 	case CheckFail:
 		out.State = StateChecksFailed
@@ -375,6 +365,18 @@ func Promote(ctx reqctx.RequestContext, req PromotionRequest) (*Promotion, error
 		}
 		out.State = StateWaiting
 		return out, nil
+	}
+
+	// The bypass is recorded once the checks verdict has actually let the deploy through,
+	// whether or not the dispatch attempted below then succeeds: someone with the right to
+	// override used it at this moment for this reason, and losing that record to an
+	// unrelated dispatch failure would lose it exactly when it is most worth having. A
+	// checks_failed or refused request never reaches here, so it is never credited with an
+	// override nothing came of.
+	if out.Outcome == OutcomeOverride {
+		if err := appendPromotionEvent(ctx, req, out, deployments_model.AuditOverridden, out.OverrideReason); err != nil {
+			return nil, err
+		}
 	}
 
 	runID, runURL, err := dispatchDeployWorkflow(ctx, req.Doer, req.Repo, out.WorkflowID, out.Ref)

@@ -31,6 +31,11 @@ const (
 	CellFailed     CellState = "failed"      // ✗
 	CellInProgress CellState = "in_progress" // ⟳
 	CellHeld       CellState = "held"        // ⏸
+	// CellWaiting is a promotion whose pre-deployment checks have not all passed yet — a
+	// checks_pending event with no later event on top of it. It is its own state, distinct
+	// from CellHeld (a review gate) and CellInProgress (an actual run under way): nothing has
+	// dispatched yet, so there is no run to be "in progress".
+	CellWaiting CellState = "waiting" // ⏳
 )
 
 // Cell is one matrix cell.
@@ -82,6 +87,8 @@ func cellSymbol(state CellState, successes int) string {
 		return "⟳"
 	case CellHeld:
 		return "⏸"
+	case CellWaiting:
+		return "⏳"
 	}
 	symbol := "✔"
 	if successes > 1 {
@@ -136,7 +143,12 @@ func ProjectCells(environments, releases []string, events []Event, policies map[
 			groups[k] = agg
 		}
 		agg.hasEvents = true
-		agg.last = e
+		if e.Event != deployments_model.AuditAutoPromoted {
+			// auto_promoted records WHY a deploy was created, not its current disposition —
+			// the checks_pending or requested event alongside it already carries that, and
+			// this one must never override it into looking like a run is under way by itself.
+			agg.last = e
+		}
 		if e.Event == deployments_model.AuditSucceeded {
 			agg.successes++
 			agg.hasSucceeded = true
@@ -192,9 +204,13 @@ func projectOne(environment, release string, agg *aggregate, liveRelease, policy
 		if liveRelease == release {
 			cell.State = CellLive
 		}
-	case deployments_model.AuditFailed, deployments_model.AuditCancelled, deployments_model.AuditRejected:
+	case deployments_model.AuditFailed, deployments_model.AuditCancelled, deployments_model.AuditRejected, deployments_model.AuditChecksFailed:
 		// "last attempt failed" is what the cell reports, whatever came before it.
 		cell.State = CellFailed
+	case deployments_model.AuditChecksPending:
+		// Pre-deployment checks are holding this promotion: a placeholder row exists but
+		// nothing has dispatched, so it is neither a run in progress nor a review hold.
+		cell.State = CellWaiting
 	case deployments_model.AuditRequested:
 		// A requested deploy into a gated environment is held, not queued. The distinction
 		// comes from the environment record; run status cannot express it.
@@ -203,7 +219,7 @@ func projectOne(environment, release string, agg *aggregate, liveRelease, policy
 			cell.State = CellHeld
 		}
 	default:
-		// started, approved: the run is on its way.
+		// started, approved, checks_passed, overridden: the run is on its way, or about to be.
 		cell.State = CellInProgress
 	}
 	cell.Symbol = cellSymbol(cell.State, cell.Successes)

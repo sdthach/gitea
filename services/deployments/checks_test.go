@@ -144,20 +144,31 @@ func TestRequiredContextsCheck(t *testing.T) {
 	statuses := []*git_model.CommitStatus{
 		{Context: "ci/build", State: commitstatus.CommitStatusSuccess},
 		{Context: "ci/lint", State: commitstatus.CommitStatusFailure},
+		{Context: "ci/test", State: commitstatus.CommitStatusPending},
+		{Context: "ci/scan", State: commitstatus.CommitStatusError},
 	}
 
-	assert.Equal(t, CheckPass, requiredContextsCheck(nil, statuses).State, "no required contexts always passes")
+	assert.Equal(t, CheckPass, requiredContextsCheck(nil, statuses, 1000).State, "no required contexts always passes")
 
-	c := requiredContextsCheck([]string{"ci/build"}, statuses)
+	c := requiredContextsCheck([]string{"ci/build"}, statuses, 1000)
 	assert.Equal(t, CheckPass, c.State)
 
-	c = requiredContextsCheck([]string{"ci/build", "ci/lint"}, statuses)
+	c = requiredContextsCheck([]string{"ci/build", "ci/lint"}, statuses, 1000)
 	assert.Equal(t, CheckFail, c.State, "a failing context fails the check, it never waits for one that already reported")
 	assert.Contains(t, c.Reason, "ci/lint")
 
-	c = requiredContextsCheck([]string{"ci/missing"}, statuses)
-	assert.Equal(t, CheckFail, c.State, "a context that has not reported at all fails, the same as one that failed")
+	c = requiredContextsCheck([]string{"ci/scan"}, statuses, 1000)
+	assert.Equal(t, CheckFail, c.State, "an error report fails the check the same as a failure")
+
+	c = requiredContextsCheck([]string{"ci/missing"}, statuses, 1000)
+	assert.Equal(t, CheckWait, c.State, "a context that has not reported at all may still turn green, so it waits rather than fails")
 	assert.Contains(t, c.Reason, "ci/missing")
+	assert.Equal(t, int64(1060), c.RetryAt)
+
+	c = requiredContextsCheck([]string{"ci/test"}, statuses, 1000)
+	assert.Equal(t, CheckWait, c.State, "a pending report waits, the same as one that has not reported yet")
+	assert.Contains(t, c.Reason, "ci/test")
+	assert.Equal(t, int64(1060), c.RetryAt)
 }
 
 func TestAggregateCheckState(t *testing.T) {
@@ -211,24 +222,92 @@ func TestPriorDeploymentCheck(t *testing.T) {
 }
 
 // TestExclusiveLockCheck: a placeholder deployment sitting in the waiting state holds the
-// lock exactly as a running one would.
+// lock exactly as a running one would, but never against itself.
 func TestExclusiveLockCheck(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
 	env := &deployments_model.Environment{Name: "excl-lock-prod", ExclusiveLock: true}
-	c, err := exclusiveLockCheck(ctx, 1, env)
+	c, err := exclusiveLockCheck(ctx, 1, env, 0)
 	require.NoError(t, err)
 	assert.Equal(t, CheckPass, c.State, "nothing is running yet")
 
 	placeholder := &deployments_model.Deployment{RepoID: 1, Environment: "excl-lock-prod", ReleaseTag: "v1.0"}
 	require.NoError(t, deployments_model.AppendPlaceholderDeployment(ctx, placeholder))
 
-	c, err = exclusiveLockCheck(ctx, 1, env)
+	c, err = exclusiveLockCheck(ctx, 1, env, 0)
 	require.NoError(t, err)
 	assert.Equal(t, CheckWait, c.State, "a waiting placeholder holds the lock the same as a running deployment would")
 
-	c, err = exclusiveLockCheck(ctx, 1, &deployments_model.Environment{Name: "excl-lock-prod"})
+	c, err = exclusiveLockCheck(ctx, 1, env, placeholder.ID)
+	require.NoError(t, err)
+	assert.Equal(t, CheckPass, c.State, "excluding the placeholder's own row leaves nothing else holding the lock")
+
+	c, err = exclusiveLockCheck(ctx, 1, &deployments_model.Environment{Name: "excl-lock-prod"}, 0)
 	require.NoError(t, err)
 	assert.Equal(t, CheckPass, c.State, "exclusive_lock off never holds, whatever else is running")
+}
+
+// TestReviewersCheck: a run held on a pending review waits; with no review at all, or once the
+// hold clears, it passes.
+func TestReviewersCheck(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	env := &deployments_model.Environment{
+		Name: "reviewers-prod", ReviewPolicy: deployments_model.PolicyAnyApprover, RequiredReviewers: 1,
+	}
+
+	c, err := reviewersCheck(ctx, 1, env, "v1.0")
+	require.NoError(t, err)
+	assert.Equal(t, CheckPass, c.State, "nothing has ever been dispatched here, so nothing is held")
+
+	require.NoError(t, deployments_model.AppendDeployment(ctx, &deployments_model.Deployment{
+		RepoID: 1, Environment: "reviewers-prod", ReleaseTag: "v1.0", RunID: 8001, Status: "waiting",
+	}))
+	require.NoError(t, deployments_model.AppendReview(ctx, &deployments_model.Review{
+		RepoID: 1, Environment: "reviewers-prod", RunID: 8001, JobID: 1,
+	}))
+
+	c, err = reviewersCheck(ctx, 1, env, "v1.0")
+	require.NoError(t, err)
+	assert.Equal(t, CheckWait, c.State, "the run's review hold has no approving vote yet")
+
+	require.NoError(t, deployments_model.AppendAuditEvent(ctx, &deployments_model.AuditEvent{
+		Event: deployments_model.AuditApproved, RepoID: 1, Environment: "reviewers-prod", RunID: 8001, ActorID: 99,
+		Source: deployments_model.SourceUI,
+	}))
+
+	c, err = reviewersCheck(ctx, 1, env, "v1.0")
+	require.NoError(t, err)
+	assert.Equal(t, CheckPass, c.State, "the required approval landed")
+}
+
+// TestWindowOpenOvernight covers a window whose from_minute is after its to_minute: it wraps
+// past midnight rather than being refused.
+func TestWindowOpenOvernight(t *testing.T) {
+	window := &deployments_model.DeployWindow{
+		DaysMask: weekdayMask(time.Friday), FromMinute: 22 * 60, ToMinute: 6 * 60, Timezone: "UTC",
+	}
+	loc, err := time.LoadLocation("UTC")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name string
+		now  int64
+		want bool
+	}{
+		{"Friday evening, inside the start leg", unixIn(loc, 2026, time.January, 2, 23, 0), true},
+		{"Saturday early morning, carried over from Friday", unixIn(loc, 2026, time.January, 3, 3, 0), true},
+		{"Saturday morning, past the close", unixIn(loc, 2026, time.January, 3, 7, 0), false},
+		{"Friday before the window opens", unixIn(loc, 2026, time.January, 2, 21, 0), false},
+		{"Sunday early morning, no Saturday leg to carry over", unixIn(loc, 2026, time.January, 4, 3, 0), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			open, err := windowOpen(c.now, window)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, open)
+		})
+	}
 }

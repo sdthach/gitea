@@ -74,6 +74,11 @@ type CheckContext struct {
 	SHA           string
 	RequestedUnix int64
 	Overridden    bool
+	// ExcludeDeploymentID is the deployment row under evaluation, when one already exists —
+	// set by ReevaluateWaiting for the waiting placeholder it is re-checking, and by the
+	// GET /deployments/{id}/checks endpoint. exclusiveLockCheck must not count that row
+	// against itself, or a deploy holding exclusive_lock could never clear its own lock.
+	ExcludeDeploymentID int64
 }
 
 // EvaluateChecks runs every pre-deployment check for env against release/sha, in the order
@@ -97,13 +102,13 @@ func EvaluateChecks(ctx context.Context, cc CheckContext, now int64) ([]Check, e
 	checks = append(checks, waitTimerCheck(env, cc.RequestedUnix, now))
 	checks = append(checks, deploymentWindowCheck(env, now))
 
-	contexts, err := requiredStatusContextsCheck(ctx, cc.RepoID, env, cc.SHA)
+	contexts, err := requiredStatusContextsCheck(ctx, cc.RepoID, env, cc.SHA, now)
 	if err != nil {
 		return nil, err
 	}
 	checks = append(checks, contexts)
 
-	lock, err := exclusiveLockCheck(ctx, cc.RepoID, env)
+	lock, err := exclusiveLockCheck(ctx, cc.RepoID, env, cc.ExcludeDeploymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +217,10 @@ func waitTimerCheck(env *deployments_model.Environment, requestedUnix, now int64
 
 // windowOpen reports whether now falls inside window, evaluated in window's own timezone. A
 // nil window, or one with DaysMask zero, is always open.
+//
+// FromMinute > ToMinute is an overnight window: it opens at FromMinute on a masked day and
+// stays open past midnight until ToMinute the following calendar day, whichever day that is —
+// the mask names the day the window STARTS, not every day it is open on.
 func windowOpen(now int64, window *deployments_model.DeployWindow) (bool, error) {
 	if window == nil || window.DaysMask == 0 {
 		return true, nil
@@ -221,11 +230,20 @@ func windowOpen(now int64, window *deployments_model.DeployWindow) (bool, error)
 		return false, err
 	}
 	t := time.Unix(now, 0).In(loc)
-	if window.DaysMask&(1<<uint(t.Weekday())) == 0 {
-		return false, nil
-	}
 	minute := t.Hour()*60 + t.Minute()
-	return minute >= window.FromMinute && minute < window.ToMinute, nil
+	if window.FromMinute <= window.ToMinute {
+		if window.DaysMask&(1<<uint(t.Weekday())) == 0 {
+			return false, nil
+		}
+		return minute >= window.FromMinute && minute < window.ToMinute, nil
+	}
+	// Overnight: open either in today's evening leg (today started the window) or in this
+	// morning's leg carried over from a window yesterday started.
+	if window.DaysMask&(1<<uint(t.Weekday())) != 0 && minute >= window.FromMinute {
+		return true, nil
+	}
+	yesterday := t.AddDate(0, 0, -1).Weekday()
+	return window.DaysMask&(1<<uint(yesterday)) != 0 && minute < window.ToMinute, nil
 }
 
 // NextOpening returns the next unix time at or after now that windowOpen would report open,
@@ -281,9 +299,16 @@ func deploymentWindowCheck(env *deployments_model.Environment, now int64) Check 
 	}
 }
 
+// requiredStatusContextRetrySeconds is how soon a missing or pending required context is
+// worth checking again — short, because a status report can land at any moment and this is
+// only ever a suggestion for when to poll, not a hold with its own timer.
+const requiredStatusContextRetrySeconds = 60
+
 // requiredContextsCheck is windowOpen's counterpart for commit statuses: pure over an already
-// -read status list, so the failure and success tables need no database.
-func requiredContextsCheck(required []string, statuses []*git_model.CommitStatus) Check {
+// -read status list, so the failure and success tables need no database. A context that has
+// not reported yet, or has reported pending, WAITS — it may still turn green. Only a report
+// of failure or error is terminal.
+func requiredContextsCheck(required []string, statuses []*git_model.CommitStatus, now int64) Check {
 	if len(required) == 0 {
 		return Check{Name: CheckRequiredStatusContexts, State: CheckPass}
 	}
@@ -293,11 +318,12 @@ func requiredContextsCheck(required []string, statuses []*git_model.CommitStatus
 	}
 	for _, want := range required {
 		state, ok := latest[want]
-		if !ok {
+		if !ok || state == commitstatus.CommitStatusPending {
 			return Check{
-				Name: CheckRequiredStatusContexts, State: CheckFail,
-				Reason:          fmt.Sprintf("%q has not reported a status on this commit", want),
-				SuggestedAction: fmt.Sprintf("Wait for %q to run, or remove it from required_status_contexts.", want),
+				Name: CheckRequiredStatusContexts, State: CheckWait,
+				Reason:          fmt.Sprintf("%q has not reported success on this commit yet", want),
+				SuggestedAction: fmt.Sprintf("Wait for %q to succeed, or remove it from required_status_contexts.", want),
+				RetryAt:         now + requiredStatusContextRetrySeconds,
 			}
 		}
 		if state != commitstatus.CommitStatusSuccess {
@@ -313,7 +339,7 @@ func requiredContextsCheck(required []string, statuses []*git_model.CommitStatus
 
 // requiredStatusContextsCheck reads the release commit's latest statuses and applies
 // requiredContextsCheck.
-func requiredStatusContextsCheck(ctx context.Context, repoID int64, env *deployments_model.Environment, sha string) (Check, error) {
+func requiredStatusContextsCheck(ctx context.Context, repoID int64, env *deployments_model.Environment, sha string, now int64) (Check, error) {
 	if len(env.RequiredStatusContexts) == 0 {
 		return Check{Name: CheckRequiredStatusContexts, State: CheckPass}, nil
 	}
@@ -328,16 +354,17 @@ func requiredStatusContextsCheck(ctx context.Context, repoID int64, env *deploym
 	if err != nil {
 		return Check{}, err
 	}
-	return requiredContextsCheck(env.RequiredStatusContexts, statuses), nil
+	return requiredContextsCheck(env.RequiredStatusContexts, statuses, now), nil
 }
 
 // exclusiveLockCheck holds a deploy while another is already waiting or running on the same
-// environment.
-func exclusiveLockCheck(ctx context.Context, repoID int64, env *deployments_model.Environment) (Check, error) {
+// environment. excludeID leaves the deployment under evaluation itself out of that search —
+// see CheckContext.ExcludeDeploymentID.
+func exclusiveLockCheck(ctx context.Context, repoID int64, env *deployments_model.Environment, excludeID int64) (Check, error) {
 	if !env.ExclusiveLock {
 		return Check{Name: CheckExclusiveLock, State: CheckPass}, nil
 	}
-	busy, err := deployments_model.ActiveDeploymentExists(ctx, repoID, env.Name)
+	busy, err := deployments_model.ActiveDeploymentExists(ctx, repoID, env.Name, excludeID)
 	if err != nil {
 		return Check{}, err
 	}

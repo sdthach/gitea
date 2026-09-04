@@ -37,13 +37,25 @@ type environmentBody struct {
 	WaitMinutes            int      `json:"wait_minutes"`
 	RequiredStatusContexts []string `json:"required_status_contexts"`
 	ExclusiveLock          bool     `json:"exclusive_lock"`
-	// DeployWindow is flattened into four scalar members rather than one nested object: the
-	// generated CLI marshals a body member by its own declared scalar type, with no object
-	// kind, so the window would otherwise have no flag to send it with.
-	DeployWindowDaysMask   int    `json:"deploy_window_days_mask"`
-	DeployWindowFromMinute int    `json:"deploy_window_from_minute"`
-	DeployWindowToMinute   int    `json:"deploy_window_to_minute"`
-	DeployWindowTimezone   string `json:"deploy_window_timezone"`
+	// DeployWindow takes the nested object directly; the CLI's ObjectBody flag kind marshals
+	// it from a JSON-string flag value. DeployWindowDaysMask and its three siblings remain as
+	// an alternative flat form for a caller that would rather send four scalars than one
+	// object — either form writes the same column. Sending neither leaves the stored window
+	// exactly as it was; sending deploy_window: null, or a days_mask of 0 in either form,
+	// clears it.
+	DeployWindow           *deployments_model.DeployWindow `json:"deploy_window"`
+	DeployWindowDaysMask   int                             `json:"deploy_window_days_mask"`
+	DeployWindowFromMinute int                             `json:"deploy_window_from_minute"`
+	DeployWindowToMinute   int                             `json:"deploy_window_to_minute"`
+	DeployWindowTimezone   string                          `json:"deploy_window_timezone"`
+
+	// hasDeployWindowKey and hasFlatWindowKeys record whether the raw request body carried
+	// the nested key or any of the four flat keys at all — set by readEnvironmentBody, which
+	// alone sees the raw JSON. A struct field left at its zero value by json.Unmarshal is
+	// indistinguishable from one the caller never mentioned; these two flags are what let
+	// resolveDeployWindow tell "omitted" apart from "explicitly zero".
+	hasDeployWindowKey bool
+	hasFlatWindowKeys  bool
 }
 
 var environmentBodyParams = []hubapi.Param{
@@ -63,8 +75,9 @@ var environmentBodyParams = []hubapi.Param{
 	{Name: "wait_minutes", In: "body", Type: "integer", Description: "Hold every deploy this many minutes after it is requested before dispatching. 0..10080 (a week)."},
 	{Name: "required_status_contexts", In: "body", Type: "array", Description: "Commit status contexts that must report success on the release commit before dispatching. Up to 20 entries."},
 	{Name: "exclusive_lock", In: "body", Type: "boolean", Description: "Refuse a deploy while another is already waiting or running on this environment."},
-	{Name: "deploy_window_days_mask", In: "body", Type: "integer", Description: "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open."},
-	{Name: "deploy_window_from_minute", In: "body", Type: "integer", Description: "Window open time, minutes since local midnight in deploy_window_timezone."},
+	{Name: "deploy_window", In: "body", Type: "object", Description: "The deploy window as one object: {days_mask, from_minute, to_minute, timezone}. An alternative to the four deploy_window_* scalars below; sending neither leaves the stored window unchanged, and null or a zero days_mask in either form clears it."},
+	{Name: "deploy_window_days_mask", In: "body", Type: "integer", Description: "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. Omit both this and deploy_window to leave the window unchanged; 0 clears it."},
+	{Name: "deploy_window_from_minute", In: "body", Type: "integer", Description: "Window open time, minutes since local midnight in deploy_window_timezone. After deploy_window_to_minute wraps the window past midnight."},
 	{Name: "deploy_window_to_minute", In: "body", Type: "integer", Description: "Window close time, minutes since local midnight in deploy_window_timezone."},
 	{Name: "deploy_window_timezone", In: "body", Type: "string", Description: "IANA timezone the window is evaluated in, for example \"America/New_York\"."},
 }
@@ -176,6 +189,7 @@ func CreateEnvironmentHandler(ctx *context.APIContext) {
 		return
 	}
 	env := bodyToEnvironment(body)
+	env.DeployWindow = resolveDeployWindow(body, nil)
 	env.AdminsCanBypass = true // GitHub's own default; overridden below when the body sets it
 	if body.AdminsCanBypass != nil {
 		env.AdminsCanBypass = *body.AdminsCanBypass
@@ -210,6 +224,7 @@ func UpdateEnvironmentHandler(ctx *context.APIContext) {
 	env := bodyToEnvironment(body)
 	env.ID = id
 	env.RepoID = existing.RepoID
+	env.DeployWindow = resolveDeployWindow(body, existing.DeployWindow)
 	env.AdminsCanBypass = existing.AdminsCanBypass // unchanged unless the body sets it
 	if body.AdminsCanBypass != nil {
 		env.AdminsCanBypass = *body.AdminsCanBypass
@@ -266,16 +281,37 @@ func bodyToEnvironment(body *environmentBody) *deployments_model.Environment {
 		RequiredStatusContexts: body.RequiredStatusContexts,
 		ExclusiveLock:          body.ExclusiveLock,
 	}
-	// A days_mask of zero is "no window configured", the same zero value as an omitted
-	// deploy_window entirely, so an update that leaves the four members off clears the window
-	// rather than accidentally validating four zeros as a window nobody asked for.
-	if body.DeployWindowDaysMask != 0 {
-		env.DeployWindow = &deployments_model.DeployWindow{
+	return env
+}
+
+// resolveDeployWindow decides the window a create or update actually stores. existing is the
+// row's current window (nil on create, since there is nothing yet to preserve).
+//
+//   - The nested deploy_window key, when the body carries it at all: null, or an object with
+//     days_mask 0, clears the window; anything else stores that object verbatim.
+//   - Failing that, any of the four flat deploy_window_* keys: a days_mask of 0 clears the
+//     window (the same rule an omitted flat form used to apply to every write, which is the
+//     bug this function fixes); otherwise the four scalars are assembled into one window.
+//   - Neither form present: the window is left exactly as existing, so a write touching some
+//     other field never silently clears a window nobody asked to change.
+func resolveDeployWindow(body *environmentBody, existing *deployments_model.DeployWindow) *deployments_model.DeployWindow {
+	switch {
+	case body.hasDeployWindowKey:
+		if body.DeployWindow == nil || body.DeployWindow.DaysMask == 0 {
+			return nil
+		}
+		return body.DeployWindow
+	case body.hasFlatWindowKeys:
+		if body.DeployWindowDaysMask == 0 {
+			return nil
+		}
+		return &deployments_model.DeployWindow{
 			DaysMask: body.DeployWindowDaysMask, FromMinute: body.DeployWindowFromMinute,
 			ToMinute: body.DeployWindowToMinute, Timezone: body.DeployWindowTimezone,
 		}
+	default:
+		return existing
 	}
-	return env
 }
 
 func readEnvironmentBody(ctx *context.APIContext) (*environmentBody, bool) {
@@ -297,6 +333,22 @@ func readEnvironmentBody(ctx *context.APIContext) (*environmentBody, bool) {
 			"the request body is not the JSON object this endpoint takes",
 			`Send {"name": "staging", "review_policy": "none"}.`)
 		return nil, false
+	}
+
+	// A second, untyped pass over the same bytes is what tells "the caller sent this key"
+	// apart from "json.Unmarshal left the field at its zero value" — the distinction
+	// resolveDeployWindow needs to leave an omitted window unchanged rather than clearing it.
+	var keys map[string]any
+	if err := json.Unmarshal(raw, &keys); err == nil {
+		_, body.hasDeployWindowKey = keys["deploy_window"]
+		for _, k := range []string{
+			"deploy_window_days_mask", "deploy_window_from_minute", "deploy_window_to_minute", "deploy_window_timezone",
+		} {
+			if _, ok := keys[k]; ok {
+				body.hasFlatWindowKeys = true
+				break
+			}
+		}
 	}
 	return body, true
 }

@@ -5,15 +5,18 @@ package hub
 
 import (
 	"testing"
+	"time"
 
 	"gitea.dev/models/db"
 	deployments_model "gitea.dev/models/deployments"
 	hub_model "gitea.dev/models/hub"
 	"gitea.dev/models/unittest"
 	"gitea.dev/modules/setting"
+	"gitea.dev/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"xorm.io/builder"
 )
 
 func TestInitMigratesAndSeeds(t *testing.T) {
@@ -59,4 +62,34 @@ func TestInitMigratesAndSeeds(t *testing.T) {
 	count, err = db.GetEngine(ctx).Count(new(deployments_model.Environment))
 	require.NoError(t, err)
 	assert.Zero(t, count, "with no configured set Init creates no environment")
+}
+
+// TestSweepWaitingDeploymentsUsesNowFunc drives the waiting sweeper directly, with nowFunc
+// overridden to a moment 11 minutes after the placeholder was created: only the fake clock,
+// never real elapsed time, is what could let a 10-minute wait timer already look elapsed.
+func TestSweepWaitingDeploymentsUsesNowFunc(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	env := &deployments_model.Environment{
+		RepoID: 1, Name: "hub-sweep-prod", ReviewPolicy: deployments_model.PolicyNone, RequiredReviewers: 1, WaitMinutes: 10,
+	}
+	require.NoError(t, deployments_model.ValidateEnvironment(env))
+	require.NoError(t, db.Insert(ctx, env))
+
+	placeholder := &deployments_model.Deployment{RepoID: 1, Environment: env.Name, ReleaseTag: "v1.1"}
+	require.NoError(t, deployments_model.AppendPlaceholderDeployment(ctx, placeholder))
+	requested := timeutil.TimeStampNow()
+
+	previous := nowFunc
+	t.Cleanup(func() { nowFunc = previous })
+	nowFunc = func() time.Time { return requested.AsTime().Add(11 * time.Minute) }
+
+	sweepWaitingDeployments(ctx)
+
+	events, err := deployments_model.FindAuditEvents(ctx, builder.Eq{
+		"repo_id": 1, "environment": env.Name, "event": deployments_model.AuditChecksPassed,
+	}, "id ASC", 0)
+	require.NoError(t, err)
+	assert.Len(t, events, 1, "the fake clock, not real time, is what let the 10-minute wait timer look elapsed")
 }

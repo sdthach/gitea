@@ -126,7 +126,10 @@ func CreateDeployment(ctx *context.APIContext) {
 		// A refusal is the rule speaking, not a malformed request, so it renders as the
 		// permission answer it is — with the action that would make it succeed.
 		ctx.JSON(http.StatusForbidden, result)
-	case body.Confirm && result.RequiresOverrideReason && !result.Confirmed:
+	case result.State == deployments_service.StateOverrideRequired:
+		// RequiresOverrideReason is a static property of the plan, true for every override
+		// from the moment it is offered; State is what actually says the confirm was
+		// rejected for lacking one, rather than reaching checks and being refused there.
 		ctx.JSON(http.StatusBadRequest, result)
 	case result.State == deployments_service.StateChecksFailed:
 		// A failing check is refused the same way a bad request body is: unprocessable,

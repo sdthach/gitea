@@ -3159,12 +3159,16 @@
                     "description": "Environments a release must pass through first.",
                     "type": "array"
                   },
+                  "deploy_window": {
+                    "description": "The deploy window as one object: {days_mask, from_minute, to_minute, timezone}. An alternative to the four deploy_window_* scalars below; sending neither leaves the stored window unchanged, and null or a zero days_mask in either form clears it.",
+                    "type": "object"
+                  },
                   "deploy_window_days_mask": {
-                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.",
+                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. Omit both this and deploy_window to leave the window unchanged; 0 clears it.",
                     "type": "integer"
                   },
                   "deploy_window_from_minute": {
-                    "description": "Window open time, minutes since local midnight in deploy_window_timezone.",
+                    "description": "Window open time, minutes since local midnight in deploy_window_timezone. After deploy_window_to_minute wraps the window past midnight.",
                     "type": "integer"
                   },
                   "deploy_window_timezone": {
@@ -3507,12 +3511,16 @@
                     "description": "Environments a release must pass through first.",
                     "type": "array"
                   },
+                  "deploy_window": {
+                    "description": "The deploy window as one object: {days_mask, from_minute, to_minute, timezone}. An alternative to the four deploy_window_* scalars below; sending neither leaves the stored window unchanged, and null or a zero days_mask in either form clears it.",
+                    "type": "object"
+                  },
                   "deploy_window_days_mask": {
-                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.",
+                    "description": "Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. Omit both this and deploy_window to leave the window unchanged; 0 clears it.",
                     "type": "integer"
                   },
                   "deploy_window_from_minute": {
-                    "description": "Window open time, minutes since local midnight in deploy_window_timezone.",
+                    "description": "Window open time, minutes since local midnight in deploy_window_timezone. After deploy_window_to_minute wraps the window past midnight.",
                     "type": "integer"
                   },
                   "deploy_window_timezone": {

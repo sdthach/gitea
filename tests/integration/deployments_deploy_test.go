@@ -11,12 +11,16 @@ import (
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	deployments_model "gitea.dev/models/deployments"
+	git_model "gitea.dev/models/git"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
+	"gitea.dev/modules/git"
 	"gitea.dev/modules/timeutil"
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	hubapi "gitea.dev/routers/api/hub"
+	deployments_service "gitea.dev/services/deployments"
 	"gitea.dev/services/notify"
 	"gitea.dev/tests"
 
@@ -122,6 +126,83 @@ func TestAPIDeploymentsMatrixProjectsRepeatDeploys(t *testing.T) {
 		[]int64{deployments[0].RunID, deployments[1].RunID, deployments[2].RunID})
 	assert.Empty(t, resp.Header().Get("X-Total-Count"),
 		"a cursor-paged resource carries no total: counting a table receiving concurrent inserts answers a stale question")
+}
+
+// matrixCellFor decodes GET /deployments/matrix and returns the named environment's cell for
+// releaseTag.
+func matrixCellFor(t *testing.T, token, releaseTag, environment string) (state, symbol string, found bool) {
+	t.Helper()
+	req := NewRequest(t, "GET", deploymentsv1.BasePath+"/deployments/matrix?repo_id=1").AddTokenAuth(token)
+	resp := MakeRequest(t, req, http.StatusOK)
+	var rows []struct {
+		ReleaseTag string `json:"release_tag"`
+		Cells      []struct {
+			Environment string `json:"environment"`
+			State       string `json:"state"`
+			Symbol      string `json:"symbol"`
+		} `json:"cells"`
+	}
+	DecodeJSON(t, resp, &rows)
+	for _, row := range rows {
+		if row.ReleaseTag != releaseTag {
+			continue
+		}
+		for _, cell := range row.Cells {
+			if cell.Environment == environment {
+				return cell.State, cell.Symbol, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// TestAPIDeploymentsMatrixShowsWaitingAndFailedCells: a deploy held on a pre-deployment check
+// renders as its own waiting cell, distinct from held (a review gate) and in progress (a run
+// actually under way); one whose checks turn up a failure on re-evaluation renders failed.
+func TestAPIDeploymentsMatrixShowsWaitingAndFailedCells(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "matrix-wait", SortOrder: 60, WaitMinutes: 10})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "matrix-fail", SortOrder: 61, RequiredStatusContexts: []string{"ci/build"},
+	})
+	token := hubWriteToken(t, "user2")
+	readToken := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeReadRepository)
+
+	// A wait timer holds the deploy without a real dispatch: its cell is CellWaiting, not
+	// CellInProgress — nothing has dispatched yet.
+	status, _ := promoteChecks(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "matrix-wait", "release_tag": promotionFullRelease, "confirm": true,
+	})
+	require.Equal(t, http.StatusCreated, status)
+	state, symbol, found := matrixCellFor(t, readToken, promotionFullRelease, "matrix-wait")
+	require.True(t, found)
+	assert.Equal(t, "waiting", state)
+	assert.Equal(t, "⏳", symbol)
+
+	// A missing required status context also waits at first — but once it reports failure,
+	// ReevaluateWaiting discovers it and the cell renders failed.
+	status, _ = promoteChecks(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "matrix-fail", "release_tag": promotionFullRelease, "confirm": true,
+	})
+	require.Equal(t, http.StatusCreated, status)
+	state, _, found = matrixCellFor(t, readToken, promotionFullRelease, "matrix-fail")
+	require.True(t, found)
+	assert.Equal(t, "waiting", state, "no report yet: still waiting, not refused")
+
+	sha, err := git.NewIDFromString("65f1bf27bc3bf70f64657658635e66094edbcb4d")
+	require.NoError(t, err)
+	require.NoError(t, git_model.NewCommitStatus(t.Context(), git_model.NewCommitStatusOptions{
+		Repo: repo, Creator: user2, SHA: sha,
+		CommitStatus: &git_model.CommitStatus{State: commitstatus.CommitStatusFailure, Context: "ci/build"},
+	}))
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), timeutil.TimeStampNow().AsTime().Unix()))
+	state, symbol, found = matrixCellFor(t, readToken, promotionFullRelease, "matrix-fail")
+	require.True(t, found)
+	assert.Equal(t, "failed", state)
+	assert.Equal(t, "✗", symbol)
 }
 
 // TestAPIDeploymentsAuditIsReadOnlyOverTheAPI: the audit resource publishes

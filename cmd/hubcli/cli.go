@@ -35,15 +35,17 @@ type Command struct {
 	PathParams  []string
 	QueryParams []string
 	// BodyParams are the request body's members, one flag each. RequiredBody is the subset
-	// the endpoint refuses the request without. BoolBody, IntBody, FloatBody and ArrayBody are
-	// the subsets that marshal as a JSON boolean, whole number, fractional number or array
-	// rather than a string.
+	// the endpoint refuses the request without. BoolBody, IntBody, FloatBody, ArrayBody and
+	// ObjectBody are the subsets that marshal as a JSON boolean, whole number, fractional
+	// number, array or object rather than a string; an ObjectBody flag's value is a JSON
+	// object or "null", sent verbatim.
 	BodyParams   []string
 	RequiredBody []string
 	BoolBody     []string
 	IntBody      []string
 	FloatBody    []string
 	ArrayBody    []string
+	ObjectBody   []string
 	// BodyHelp is each member's published description, used as its flag's help text so the
 	// generated command reference explains the body rather than listing it.
 	BodyHelp map[string]string
@@ -336,6 +338,15 @@ func composeBody(cfg Config, cmd Command, stringValues map[string]*string, bools
 				return nil, failf(2, "Send a JSON array, or a comma-separated list of values.", "%s is not a valid array: %v", flagName, err)
 			}
 			encoded = raw
+		case slices.Contains(cmd.ObjectBody, name):
+			if stringValues[name] == nil || *stringValues[name] == "" {
+				continue
+			}
+			raw, err := objectBodyJSON(*stringValues[name])
+			if err != nil {
+				return nil, failf(2, `Send a JSON object, or "null" to clear it.`, "%s is not a valid object: %v", flagName, err)
+			}
+			encoded = raw
 		case stringValues[name] != nil:
 			if *stringValues[name] == "" {
 				continue
@@ -380,6 +391,23 @@ func arrayBodyJSON(raw string) ([]byte, error) {
 		parts[i] = strings.TrimSpace(p)
 	}
 	return json.Marshal(parts)
+}
+
+// objectBodyJSON validates a JSON-string flag's value as a JSON object or null — the shape an
+// ObjectBody member's server-side struct expects — and returns it verbatim rather than
+// re-encoding it, so key order in the caller's own JSON survives to the request.
+func objectBodyJSON(raw string) ([]byte, error) {
+	trimmed := strings.TrimSpace(raw)
+	var v any
+	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		return nil, err
+	}
+	if v != nil {
+		if _, ok := v.(map[string]any); !ok {
+			return nil, fmt.Errorf("expected a JSON object or null, got %T", v)
+		}
+	}
+	return []byte(trimmed), nil
 }
 
 func apiFailure(cfg Config, status int, body []byte) *Error {

@@ -52,11 +52,16 @@ func Init(ctx context.Context) error {
 		}
 	})
 
-	go runSweeper(ctx, waitingSweepInterval, func() {
-		if err := deployments_service.ReevaluateWaiting(ctx, nowFunc().Unix()); err != nil {
-			log.Error("hub: re-evaluate waiting deployments: %v", err)
-		}
-	})
+	go runSweeper(ctx, waitingSweepInterval, func() { sweepWaitingDeployments(ctx) })
 
 	return nil
+}
+
+// sweepWaitingDeployments re-evaluates every waiting deployment at nowFunc's current answer.
+// Pulled out of Init's closure so a test can drive one sweep directly, with nowFunc overridden,
+// instead of waiting on the real ticker.
+func sweepWaitingDeployments(ctx context.Context) {
+	if err := deployments_service.ReevaluateWaiting(ctx, nowFunc().Unix()); err != nil {
+		log.Error("hub: re-evaluate waiting deployments: %v", err)
+	}
 }

@@ -48,7 +48,7 @@ func reevaluateWaitingDeployment(ctx context.Context, d *deployments_model.Deplo
 	}
 	checks, err := EvaluateChecks(ctx, CheckContext{
 		RepoID: d.RepoID, Env: env, ReleaseTag: d.ReleaseTag, SHA: d.SHA,
-		RequestedUnix: int64(d.CreatedUnix),
+		RequestedUnix: int64(d.CreatedUnix), ExcludeDeploymentID: d.ID,
 	}, now)
 	if err != nil {
 		log.Error("deployments: re-evaluate waiting deployment %d: evaluate checks: %v", d.ID, err)

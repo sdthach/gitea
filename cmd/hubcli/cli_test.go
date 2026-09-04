@@ -66,8 +66,9 @@ func testConfig() Config {
 			},
 			{
 				Name: "resize-widget", OperationID: "resizeWidget", Method: http.MethodPut, Path: "/widgets/{id}/size",
-				Summary: "Resize a widget", PathParams: []string{"id"}, BodyParams: []string{"size", "tags", "weight"},
-				IntBody: []string{"size"}, FloatBody: []string{"weight"}, ArrayBody: []string{"tags"}, Columns: []string{"id", "name"},
+				Summary: "Resize a widget", PathParams: []string{"id"}, BodyParams: []string{"size", "tags", "weight", "window"},
+				IntBody: []string{"size"}, FloatBody: []string{"weight"}, ArrayBody: []string{"tags"}, ObjectBody: []string{"window"},
+				Columns: []string{"id", "name"},
 			},
 		},
 	}
@@ -438,4 +439,36 @@ func TestArrayBodyAcceptsAJSONArrayOrACommaSeparatedList(t *testing.T) {
 	_, _, err = exec(t, cfg, rec2, "resize-widget", "--tags", "red, blue", "7")
 	require.Nil(t, err)
 	assert.JSONEq(t, `{"tags":["red","blue"]}`, requestBody(t, rec2.requests[0]))
+}
+
+// TestObjectBodyAcceptsAJSONObjectOrNull: an ObjectBody flag's value is sent verbatim when it
+// is a JSON object or "null", and refused otherwise, before the round-trip.
+func TestObjectBodyAcceptsAJSONObjectOrNull(t *testing.T) {
+	cfg := testConfig()
+
+	rec := &recorder{body: "{}"}
+	withRecorder(t, rec, cfg)
+	_, _, err := exec(t, cfg, rec, "resize-widget", "--window", `{"days_mask":1,"from_minute":60}`, "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"window":{"days_mask":1,"from_minute":60}}`, requestBody(t, rec.requests[0]))
+
+	rec2 := &recorder{body: "{}"}
+	withRecorder(t, rec2, cfg)
+	_, _, err = exec(t, cfg, rec2, "resize-widget", "--window", "null", "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{"window":null}`, requestBody(t, rec2.requests[0]), "an explicit null still sends the key, unlike an omitted flag")
+
+	rec3 := &recorder{body: "{}"}
+	withRecorder(t, rec3, cfg)
+	_, _, err = exec(t, cfg, rec3, "resize-widget", "--window", `["not","an","object"]`, "7")
+	require.NotNil(t, err)
+	assert.Equal(t, 2, err.ExitCode)
+	assert.Contains(t, err.Message, "--window")
+	assert.Empty(t, rec3.requests, "nothing was sent")
+
+	rec4 := &recorder{body: "{}"}
+	withRecorder(t, rec4, cfg)
+	_, _, err = exec(t, cfg, rec4, "resize-widget", "7")
+	require.Nil(t, err)
+	assert.JSONEq(t, `{}`, requestBody(t, rec4.requests[0]), "an omitted object flag sends no key at all")
 }

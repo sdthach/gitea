@@ -34,9 +34,12 @@ type Deployment struct {
 	Branch      string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''" json:"branch"`
 	RunID       int64  `xorm:"INDEX UNIQUE(run_env) NOT NULL DEFAULT 0" json:"run_id"`
 	RunURL      string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''" json:"run_url"`
-	// Status is the run status at the moment the deployment was first recorded. It is
-	// written once and never updated: a cell's current state is projected from the
-	// append-only audit log, never read from a mutable column.
+	// Status is the run's own latest reported status — refreshed in place as the same run
+	// moves from waiting to running to a terminal state, never a second row: the unique
+	// index is on (repo, environment, run_id), so one run is always one row. A cell's
+	// current state for DISPLAY is still projected from the append-only audit log, never
+	// read from this column; exclusiveLockCheck is the one caller that needs to know
+	// whether this run is CURRENTLY busy, which the audit log does not answer directly.
 	Status      string             `xorm:"VARCHAR(32) NOT NULL" json:"status"`
 	CreatedUnix timeutil.TimeStamp `xorm:"created INDEX NOT NULL" json:"created_unix"`
 }
@@ -103,11 +106,19 @@ func FailPlaceholderDeployment(ctx context.Context, id int64) error {
 // ActiveDeploymentExists reports whether repo/environment already has a deployment in the
 // waiting or the running state — the two exclusive_lock treats as busy. Any other status is
 // terminal and does not hold the lock.
-func ActiveDeploymentExists(ctx context.Context, repoID int64, environment string) (bool, error) {
-	return db.GetEngine(ctx).
+//
+// excludeID, when positive, is left out of the search: the deployment currently being
+// evaluated is itself a waiting row while its own checks run, and without excluding it a
+// re-evaluation would forever find itself busy. A non-positive excludeID excludes nothing,
+// which is what a first-time check (nothing recorded yet) needs.
+func ActiveDeploymentExists(ctx context.Context, repoID int64, environment string, excludeID int64) (bool, error) {
+	sess := db.GetEngine(ctx).
 		Where("repo_id = ? AND environment = ? AND status IN (?, ?)",
-			repoID, NormalizeEnvironmentName(environment), DeploymentStatusWaiting, "running").
-		Exist(new(Deployment))
+			repoID, NormalizeEnvironmentName(environment), DeploymentStatusWaiting, "running")
+	if excludeID > 0 {
+		sess = sess.And("id != ?", excludeID)
+	}
+	return sess.Exist(new(Deployment))
 }
 
 // DeploymentExists reports whether repo/environment already has any deployment row — waiting,
@@ -147,8 +158,10 @@ func ValidateDeployment(d *Deployment) error {
 //
 // It is the only write path to the table, and it is an append: a row carrying a primary key
 // is what an update looks like when written through the model, and it is refused. A second
-// call for a (repo, environment, run) already recorded is a no-op rather than an overwrite,
-// so a run that reports several status changes still leaves exactly one deployment row.
+// call for a (repo, environment, run) already recorded never inserts a second row — the
+// unique index on (repo, environment, run_id) would refuse it anyway — but it DOES refresh
+// that row's Status to the run's newly reported one, so a run that started "waiting" or
+// "running" and has since finished is no longer read back as busy by exclusiveLockCheck.
 func AppendDeployment(ctx context.Context, d *Deployment) error {
 	if d.ID != 0 {
 		return errAppendOnly("deploy_deployment", d.ID)
@@ -157,14 +170,19 @@ func AppendDeployment(ctx context.Context, d *Deployment) error {
 	if err := ValidateDeployment(d); err != nil {
 		return err
 	}
-	exists, err := db.GetEngine(ctx).
+	existing := new(Deployment)
+	has, err := db.GetEngine(ctx).
 		Where("repo_id = ? AND environment = ? AND run_id = ?", d.RepoID, d.Environment, d.RunID).
-		Exist(new(Deployment))
+		Get(existing)
 	if err != nil {
 		return err
 	}
-	if exists {
-		return nil
+	if has {
+		if existing.Status == d.Status {
+			return nil
+		}
+		_, err := db.GetEngine(ctx).ID(existing.ID).Cols("status").Update(&Deployment{Status: d.Status})
+		return err
 	}
 	return db.Insert(ctx, d)
 }

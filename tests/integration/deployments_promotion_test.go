@@ -10,9 +10,12 @@ import (
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	deployments_model "gitea.dev/models/deployments"
+	git_model "gitea.dev/models/git"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
+	"gitea.dev/modules/git"
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
 
@@ -231,6 +234,47 @@ func TestAPIDeploymentsPromotionOverrideLandsOnTheAuditLog(t *testing.T) {
 	assert.Equal(t, "prod", overrides[0].Environment)
 	assert.Equal(t, promotionFullRelease, overrides[0].ReleaseTag)
 	assert.Equal(t, deployments_model.SourceUI, overrides[0].Source)
+}
+
+// TestAPIDeploymentsPromotionChecksFailedLeavesNoOverrideAudit: an override request whose
+// checks then fail is refused at 422, and the override it would have recorded never lands —
+// the checks verdict is what gates writing the audit row, not merely being offered the
+// override at the plan step.
+func TestAPIDeploymentsPromotionChecksFailedLeavesNoOverrideAudit(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	setEnvironmentPolicy(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "prod", SortOrder: 50,
+		DependsOn: []string{"staging"}, RequirePriorDeployment: true, AdminsCanBypass: true,
+		RequiredStatusContexts: []string{"ci/build"},
+	})
+	sha, err := git.NewIDFromString("65f1bf27bc3bf70f64657658635e66094edbcb4d")
+	require.NoError(t, err)
+	require.NoError(t, git_model.NewCommitStatus(t.Context(), git_model.NewCommitStatusOptions{
+		Repo: repo, Creator: user2, SHA: sha,
+		CommitStatus: &git_model.CommitStatus{State: commitstatus.CommitStatusFailure, Context: "ci/build"},
+	}))
+	token := hubWriteToken(t, "user2") // user2 owns repo 1, so it is a repository admin
+
+	status, plan := promote(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "override", plan.Outcome, "the sequence rule alone would offer an override")
+	assert.True(t, plan.RequiresOverrideReason)
+
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/deployments", map[string]any{
+		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
+		"confirm": true, "override_reason": "hotfix; staging is down",
+	}).AddTokenAuth(token)
+	resp := MakeRequest(t, req, NoExpectedStatus)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.Code, "the failing required status context refuses the deploy despite the override")
+
+	unittest.AssertCount(t, &deployments_model.AuditEvent{
+		RepoID: repo.ID, Environment: "prod", ReleaseTag: promotionFullRelease, Event: deployments_model.AuditOverridden,
+	}, 0)
 }
 
 // TestAPIDeploymentsPromotionRefusesAPrereleaseWhereFullReleasesAreRequired covers the offer

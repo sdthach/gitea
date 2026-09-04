@@ -70,7 +70,7 @@ func GetDeploymentChecks(ctx *context.APIContext) {
 	}
 	checks, err := deployments_service.EvaluateChecks(ctx, deployments_service.CheckContext{
 		RepoID: d.RepoID, Env: env, ReleaseTag: d.ReleaseTag, SHA: d.SHA,
-		RequestedUnix: int64(d.CreatedUnix),
+		RequestedUnix: int64(d.CreatedUnix), ExcludeDeploymentID: d.ID,
 	}, time.Now().Unix())
 	if err != nil {
 		ctx.APIErrorInternal(err)

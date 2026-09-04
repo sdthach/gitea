@@ -5,6 +5,7 @@ package integration
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	deployments_model "gitea.dev/models/deployments"
 	repo_model "gitea.dev/models/repo"
 	unit_model "gitea.dev/models/unit"
+	"gitea.dev/models/unittest"
 	"gitea.dev/modules/setting"
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	"gitea.dev/tests"
@@ -308,6 +310,72 @@ func TestAPIDeploymentsEnvironmentByID(t *testing.T) {
 	missing := hubEnvironmentRefusal(t, "user4", 999999)
 	assert.Equal(t, missing.Code, hidden.Code)
 	assert.NotEmpty(t, missing.SuggestedAction, "every error carries a suggested next action")
+}
+
+// hubEnvironmentWindowRow decodes just the deploy_window field of an environment response.
+type hubEnvironmentWindowRow struct {
+	ID           int64                           `json:"id"`
+	SortOrder    int64                           `json:"sort_order"`
+	DeployWindow *deployments_model.DeployWindow `json:"deploy_window"`
+}
+
+// TestAPIDeploymentsEnvironmentDeployWindowSurvivesAnUnrelatedWrite: a write that touches some
+// other field leaves an existing deploy_window untouched — an update omitting both the nested
+// key and the four flat keys is not the same request as one clearing the window. The nested
+// object and the flat scalars are two ways to write the same column, and deploy_window: null
+// clears it explicitly.
+func TestAPIDeploymentsEnvironmentDeployWindowSurvivesAnUnrelatedWrite(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	token := hubWriteToken(t, "user2")
+
+	base := map[string]any{
+		"repo_id": repo.ID, "name": "window-prod", "review_policy": "none", "required_reviewers": 1,
+	}
+	withBase := func(extra map[string]any) map[string]any {
+		body := make(map[string]any, len(base)+len(extra))
+		maps.Copy(body, base)
+		maps.Copy(body, extra)
+		return body
+	}
+
+	var created hubEnvironmentWindowRow
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/environments", withBase(map[string]any{
+		"sort_order":              70,
+		"deploy_window_days_mask": 1, "deploy_window_from_minute": 60, "deploy_window_to_minute": 120, "deploy_window_timezone": "UTC",
+	})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &created)
+	require.NotNil(t, created.DeployWindow)
+	assert.Equal(t, 1, created.DeployWindow.DaysMask)
+
+	// A read-modify-write of sort_order alone, naming neither deploy_window nor any of its
+	// four flat siblings, leaves the window exactly as it was.
+	var updated hubEnvironmentWindowRow
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{"sort_order": 71})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	assert.Equal(t, int64(71), updated.SortOrder)
+	require.NotNil(t, updated.DeployWindow, "the window was not named in this write, so it stands")
+	assert.Equal(t, 1, updated.DeployWindow.DaysMask)
+	assert.Equal(t, 60, updated.DeployWindow.FromMinute)
+
+	// The nested object form replaces the window.
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{
+			"sort_order":    71,
+			"deploy_window": map[string]any{"days_mask": 2, "from_minute": 30, "to_minute": 90, "timezone": "UTC"},
+		})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	require.NotNil(t, updated.DeployWindow)
+	assert.Equal(t, 2, updated.DeployWindow.DaysMask)
+	assert.Equal(t, 30, updated.DeployWindow.FromMinute)
+
+	// deploy_window: null clears it.
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{"sort_order": 71, "deploy_window": nil})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	assert.Nil(t, updated.DeployWindow, "an explicit null clears the window")
 }
 
 func hubEnvironmentRefusal(t *testing.T, login string, id int64) hubRefusal {

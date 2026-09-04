@@ -4,9 +4,13 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	actions_model "gitea.dev/models/actions"
 	"gitea.dev/models/db"
@@ -21,6 +25,9 @@ import (
 	deploymentsv1 "gitea.dev/routers/api/deployments/v1"
 	deployments_service "gitea.dev/services/deployments"
 	"gitea.dev/services/notify"
+	release_service "gitea.dev/services/release"
+	repo_service "gitea.dev/services/repository"
+	files_service "gitea.dev/services/repository/files"
 	"gitea.dev/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -106,20 +113,100 @@ func recordRunEvent(t *testing.T, repo *repo_model.Repository, sender *user_mode
 	notify.WorkflowRunStatusUpdate(t.Context(), repo, sender, run)
 }
 
-// TestDeploymentsChecksRequiredStatusContextMissingRefusesTheDeploy: a required context that
-// has never reported on the release commit fails the deploy outright, and nothing is written.
-func TestDeploymentsChecksRequiredStatusContextMissingRefusesTheDeploy(t *testing.T) {
+// seedDeployableRelease creates a fresh repository carrying a real deploy-<environment>.yaml
+// workflow_dispatch workflow and a release tag pointing at it, so a real Promote dispatch has
+// an actual workflow to find — repo 1's own fixture tags carry none, which is what every
+// other deploy in this file relies on to test a checks-only outcome without a real dispatch.
+func seedDeployableRelease(t *testing.T, owner *user_model.User, environment string) (*repo_model.Repository, string) {
+	t.Helper()
+	repo, err := repo_service.CreateRepository(t.Context(), owner, owner, repo_service.CreateRepoOptions{
+		Name:     fmt.Sprintf("deploy-seed-%s-%d", environment, time.Now().UnixNano()),
+		AutoInit: true, DefaultBranch: "main", Readme: "Default",
+	})
+	require.NoError(t, err)
+
+	content := "on: workflow_dispatch\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./deploy.sh\n"
+	_, err = files_service.ChangeRepoFiles(t.Context(), repo, owner, &files_service.ChangeRepoFilesOptions{
+		Files: []*files_service.ChangeRepoFile{
+			{Operation: "create", TreePath: ".gitea/workflows/deploy-" + environment + ".yaml", ContentReader: strings.NewReader(content)},
+		},
+		Message: "add deploy workflow", OldBranch: "main", NewBranch: "main",
+		Author:    &files_service.IdentityOptions{GitUserName: owner.Name, GitUserEmail: owner.Email},
+		Committer: &files_service.IdentityOptions{GitUserName: owner.Name, GitUserEmail: owner.Email},
+		Dates:     &files_service.CommitDateOptions{Author: time.Now(), Committer: time.Now()},
+	})
+	require.NoError(t, err)
+
+	gitRepo, err := git.OpenRepository(t.Context(), repo)
+	require.NoError(t, err)
+	defer gitRepo.Close()
+
+	const tag = "v1.0.0"
+	require.NoError(t, release_service.CreateRelease(t.Context(), gitRepo, &repo_model.Release{
+		RepoID: repo.ID, Repo: repo, PublisherID: owner.ID, Publisher: owner,
+		TagName: tag, Target: "main", Title: tag, IsTag: true,
+	}, nil, ""))
+	return repo, tag
+}
+
+// TestDeploymentsChecksRequiredStatusContextMissingWaitsThenReevaluateDispatches: a required
+// context that has never reported on the release commit may still turn green, so it holds the
+// deploy waiting rather than failing it outright; once it reports success, ReevaluateWaiting
+// dispatches.
+func TestDeploymentsChecksRequiredStatusContextMissingWaitsThenReevaluateDispatches(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 	writeChecksEnvironment(t, &deployments_model.Environment{
 		RepoID: repo.ID, Name: "prod", SortOrder: 50,
 		RequiredStatusContexts: []string{"ci/build"},
 	})
 	token := hubWriteToken(t, "user2")
-	before := len(hubAuditEvents(t, deployments_model.AuditChecksFailed))
 
 	status, payload := promoteChecks(t, token, map[string]any{
+		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease, "confirm": true,
+	})
+
+	require.Equal(t, http.StatusCreated, status)
+	assert.Equal(t, "waiting", payload.State)
+	check, ok := checkNamed(payload.Checks, "required_status_contexts")
+	require.True(t, ok)
+	assert.Equal(t, "wait", check.State)
+	assert.Contains(t, check.Reason, "ci/build")
+	require.NotZero(t, check.RetryAt)
+
+	sha, err := git.NewIDFromString("65f1bf27bc3bf70f64657658635e66094edbcb4d")
+	require.NoError(t, err)
+	require.NoError(t, git_model.NewCommitStatus(t.Context(), git_model.NewCommitStatusOptions{
+		Repo: repo, Creator: user2, SHA: sha,
+		CommitStatus: &git_model.CommitStatus{State: commitstatus.CommitStatusSuccess, Context: "ci/build"},
+	}))
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), timeutil.TimeStampNow().AsTime().Unix()))
+	assert.NotEmpty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the context reported success; the gate opened")
+}
+
+// TestDeploymentsChecksRequiredStatusContextFailureFailsTheDeploy: a context that HAS
+// reported, and reported failure, fails the deploy outright rather than waiting — a report is
+// terminal, unlike silence.
+func TestDeploymentsChecksRequiredStatusContextFailureFailsTheDeploy(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "prod", SortOrder: 50,
+		RequiredStatusContexts: []string{"ci/build"},
+	})
+	sha, err := git.NewIDFromString("65f1bf27bc3bf70f64657658635e66094edbcb4d")
+	require.NoError(t, err)
+	require.NoError(t, git_model.NewCommitStatus(t.Context(), git_model.NewCommitStatusOptions{
+		Repo: repo, Creator: user2, SHA: sha,
+		CommitStatus: &git_model.CommitStatus{State: commitstatus.CommitStatusFailure, Context: "ci/build"},
+	}))
+	before := len(hubAuditEvents(t, deployments_model.AuditChecksFailed))
+
+	status, payload := promoteChecks(t, hubWriteToken(t, "user2"), map[string]any{
 		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease, "confirm": true,
 	})
 
@@ -247,29 +334,89 @@ func TestDeploymentsChecksExclusiveLockHoldsASecondDeploy(t *testing.T) {
 	running := hubDeploymentsFor(t, repo.ID, "prod", promotionFullRelease)
 	require.Len(t, running, 1)
 	assert.Equal(t, "running", running[0].Status, "the first deployment is untouched")
+
+	// Once the first run reports success, exclusiveLockCheck no longer counts it as busy,
+	// and the second — excluded from counting its OWN waiting row against itself — clears
+	// the lock and dispatches on the next sweep.
+	recordRunEvent(t, repo, sender, "prod", promotionFullRelease, 9301, actions_model.StatusSuccess)
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), timeutil.TimeStampNow().AsTime().Unix()))
+	assert.NotEmpty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the first run finished; the lock cleared")
 }
 
-// TestDeploymentsChecksAutoPromoteFollowsASuccess: once qa succeeds, an environment
-// depending on it with auto_promote set gets the auto_promoted audit event.
-func TestDeploymentsChecksAutoPromoteFollowsASuccess(t *testing.T) {
+// TestDeploymentsChecksExclusiveLockAndWaitTimerBothClearTogether: exclusive_lock and a wait
+// timer stacked on the same environment both have to clear before the held deploy dispatches
+// — clearing the lock alone is not enough while the timer has not elapsed, and the timer
+// elapsing alone is not enough while the lock is still held.
+func TestDeploymentsChecksExclusiveLockAndWaitTimerBothClearTogether(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "qa", SortOrder: 10})
 	writeChecksEnvironment(t, &deployments_model.Environment{
-		RepoID: repo.ID, Name: "staging", SortOrder: 20, DependsOn: []string{"qa"}, AutoPromote: true,
+		RepoID: repo.ID, Name: "prod", SortOrder: 50, ExclusiveLock: true, WaitMinutes: 10,
 	})
-	before := len(hubAuditEvents(t, deployments_model.AuditAutoPromoted))
+	recordRunEvent(t, repo, sender, "prod", promotionFullRelease, 9302, actions_model.StatusRunning)
 
-	recordRunEvent(t, repo, sender, "qa", promotionFullRelease, 9401, actions_model.StatusWaiting)
-	recordRunEvent(t, repo, sender, "qa", promotionFullRelease, 9401, actions_model.StatusSuccess)
+	status, payload := promoteChecks(t, hubWriteToken(t, "user2"), map[string]any{
+		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionPrerelease, "confirm": true,
+	})
+	require.Equal(t, http.StatusCreated, status)
+	assert.Equal(t, "waiting", payload.State)
+	lock, ok := checkNamed(payload.Checks, "exclusive_lock")
+	require.True(t, ok)
+	assert.Equal(t, "wait", lock.State, "the lock holds regardless of the timer")
+	timer, ok := checkNamed(payload.Checks, "wait_timer")
+	require.True(t, ok)
+	assert.Equal(t, "wait", timer.State, "the timer holds regardless of the lock")
+	rows := hubDeploymentsFor(t, repo.ID, "prod", promotionPrerelease)
+	require.Len(t, rows, 1)
+	requested := int64(rows[0].CreatedUnix)
 
-	events := hubAuditEvents(t, deployments_model.AuditAutoPromoted)
-	require.Len(t, events, before+1)
-	assert.Equal(t, "staging", events[len(events)-1].Environment)
-	assert.Equal(t, promotionFullRelease, events[len(events)-1].ReleaseTag)
-	assert.Contains(t, events[len(events)-1].Reason, "qa")
+	// The timer has elapsed but the first deploy is still running: the lock alone still
+	// holds it.
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), requested+11*60))
+	assert.Empty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the lock is still held")
+
+	// The first run finishes: both gates are now open, and the second dispatches.
+	recordRunEvent(t, repo, sender, "prod", promotionFullRelease, 9302, actions_model.StatusSuccess)
+	require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), requested+11*60))
+	assert.NotEmpty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "both the lock and the timer have cleared")
+}
+
+// TestDeploymentsChecksAutoPromoteFollowsASuccess: once qa succeeds, an environment
+// depending on it with auto_promote set gets the auto_promoted audit event, and Promote
+// actually dispatches staging — proven by a real staging deployment row, not only the audit
+// event. Replaying the identical qa success event creates neither a second staging row nor a
+// second auto_promoted event.
+func TestDeploymentsChecksAutoPromoteFollowsASuccess(t *testing.T) {
+	// seedDeployableRelease commits through Gitea's own push path, whose pre-receive hook
+	// calls back into the internal API, so the server has to be running.
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo, tag := seedDeployableRelease(t, sender, "staging")
+		writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "qa", SortOrder: 10})
+		writeChecksEnvironment(t, &deployments_model.Environment{
+			RepoID: repo.ID, Name: "staging", SortOrder: 20, DependsOn: []string{"qa"}, AutoPromote: true,
+		})
+		before := len(hubAuditEvents(t, deployments_model.AuditAutoPromoted))
+
+		recordRunEvent(t, repo, sender, "qa", tag, 9401, actions_model.StatusWaiting)
+		recordRunEvent(t, repo, sender, "qa", tag, 9401, actions_model.StatusSuccess)
+
+		events := hubAuditEvents(t, deployments_model.AuditAutoPromoted)
+		require.Len(t, events, before+1)
+		assert.Equal(t, "staging", events[len(events)-1].Environment)
+		assert.Equal(t, tag, events[len(events)-1].ReleaseTag)
+		assert.Contains(t, events[len(events)-1].Reason, "qa")
+		require.Len(t, hubDeploymentsFor(t, repo.ID, "staging", tag), 1, "Promote actually dispatched staging, not only recorded that it meant to")
+
+		// Replaying the same qa success event a second time — the notifier's own retry path,
+		// or a duplicate webhook delivery — promotes nothing further: autoPromoteOne's own
+		// DeploymentExists skip is what makes this idempotent.
+		recordRunEvent(t, repo, sender, "qa", tag, 9401, actions_model.StatusSuccess)
+		assert.Len(t, hubAuditEvents(t, deployments_model.AuditAutoPromoted), before+1, "no second auto_promoted event")
+		assert.Len(t, hubDeploymentsFor(t, repo.ID, "staging", tag), 1, "no second staging row")
+	})
 }
 
 // TestDeploymentsChecksAutoPromoteWaitsForEveryDependency: with two dependencies, a success on

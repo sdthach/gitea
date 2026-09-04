@@ -207,10 +207,10 @@ func validateDeployWindow(w *DeployWindow) error {
 			Code:            "bad_window", Status: http.StatusUnprocessableEntity,
 		}
 	}
-	if w.FromMinute >= w.ToMinute {
+	if w.FromMinute == w.ToMinute {
 		return &hub_model.Error{
-			Message:         fmt.Sprintf("deploy_window from_minute %d is not before to_minute %d", w.FromMinute, w.ToMinute),
-			SuggestedAction: "Set from_minute before to_minute; the window does not wrap past midnight.",
+			Message:         fmt.Sprintf("deploy_window from_minute and to_minute are both %d, which never opens", w.FromMinute),
+			SuggestedAction: "Set from_minute and to_minute to different values. from_minute after to_minute wraps the window past midnight.",
 			Code:            "bad_window", Status: http.StatusUnprocessableEntity,
 		}
 	}

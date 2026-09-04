@@ -306,10 +306,12 @@ Flags:
     	opaque cursor from a previous response
   -depends-on string
     	Environments a release must pass through first.
+  -deploy-window string
+    	The deploy window as one object: {days_mask, from_minute, to_minute, timezone}. An alternative to the four deploy_window_* scalars below; sending neither leaves the stored window unchanged, and null or a zero days_mask in either form clears it.
   -deploy-window-days-mask string
-    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.
+    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. Omit both this and deploy_window to leave the window unchanged; 0 clears it.
   -deploy-window-from-minute string
-    	Window open time, minutes since local midnight in deploy_window_timezone.
+    	Window open time, minutes since local midnight in deploy_window_timezone. After deploy_window_to_minute wraps the window past midnight.
   -deploy-window-timezone string
     	IANA timezone the window is evaluated in, for example "America/New_York".
   -deploy-window-to-minute string
@@ -446,10 +448,12 @@ Flags:
     	opaque cursor from a previous response
   -depends-on string
     	Environments a release must pass through first.
+  -deploy-window string
+    	The deploy window as one object: {days_mask, from_minute, to_minute, timezone}. An alternative to the four deploy_window_* scalars below; sending neither leaves the stored window unchanged, and null or a zero days_mask in either form clears it.
   -deploy-window-days-mask string
-    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. 0, the default, means always open.
+    	Days a deploy may dispatch, as a bitmask: bit 0 Sunday .. bit 6 Saturday, 1..127. Omit both this and deploy_window to leave the window unchanged; 0 clears it.
   -deploy-window-from-minute string
-    	Window open time, minutes since local midnight in deploy_window_timezone.
+    	Window open time, minutes since local midnight in deploy_window_timezone. After deploy_window_to_minute wraps the window past midnight.
   -deploy-window-timezone string
     	IANA timezone the window is evaluated in, for example "America/New_York".
   -deploy-window-to-minute string
