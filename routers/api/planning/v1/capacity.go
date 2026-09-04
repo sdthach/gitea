@@ -242,7 +242,7 @@ func GetCapacity(ctx *context.APIContext) {
 	)
 	switch {
 	case repoID > 0:
-		repo, ok := issueTypeReadableRepo(ctx, repoID)
+		repo, _, ok := issueTypeReadableRepo(ctx, repoID)
 		if !ok {
 			return
 		}
@@ -381,7 +381,8 @@ func capacityRoadmapRepo(ctx *context.APIContext, repoID int64) (*repo_model.Rep
 			"Pass ?repo_id=<id>, listing "+BasePath+"/repos to find it.")
 		return nil, false
 	}
-	return issueTypeReadableRepo(ctx, repoID)
+	repo, _, ok := issueTypeReadableRepo(ctx, repoID)
+	return repo, ok
 }
 
 // truncateIssues trims issues to at most maxIssues entries, reporting whether more than that

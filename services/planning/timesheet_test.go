@@ -25,9 +25,9 @@ func TestCurrentISOWeekSpansMondayToSunday(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC), to)
 }
 
-// TestTruncateBoundary is mutation proof (e)'s pure counterpart: exactly max items is kept and
-// not flagged; one more is trimmed to max and flagged. Widening the cap or dropping the check
-// turns this red without needing a database seeded past the limit.
+// TestTruncateBoundary covers the Truncate helper directly: exactly max items is kept and not
+// flagged, one more is trimmed to max and flagged. The end-to-end cap on a real endpoint's
+// response is covered by its own integration test.
 func TestTruncateBoundary(t *testing.T) {
 	kept, truncated := Truncate([]int{1, 2, 3}, 3)
 	assert.Len(t, kept, 3)

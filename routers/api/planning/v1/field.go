@@ -241,7 +241,7 @@ func scopeListRead[T any](
 
 // GetFields answers GET /fields.
 func GetFields(ctx *context.APIContext) {
-	scopeListRead(ctx, fieldSpec, issueTypeReadableRepo, planning_service.FieldsFor, planning_service.FieldsForOrg)
+	scopeListRead(ctx, fieldSpec, issueTypeReadableRepoNoPerm, planning_service.FieldsFor, planning_service.FieldsForOrg)
 }
 
 type fieldBody struct {

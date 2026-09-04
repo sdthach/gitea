@@ -12,7 +12,7 @@ import (
 
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
-	"gitea.dev/models/perm/access"
+	planning_model "gitea.dev/models/planning"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	user_model "gitea.dev/models/user"
@@ -22,14 +22,15 @@ import (
 	planning_service "gitea.dev/services/planning"
 )
 
-// The Time tab's own limits: maxTimesheetWindowDays bounds a chart no client renders wider
-// than one screen at a time; maxTimesheetEntries bounds how many tracked-time rows one
-// response folds in, the same truncate-and-flag contract GetRoadmapCapacity's own issue cap
-// carries.
-const (
-	maxTimesheetWindowDays = 92
-	maxTimesheetEntries    = 5000
-)
+// maxTimesheetWindowDays bounds the Time tab's chart: no client renders one wider than a
+// single screen at a time.
+const maxTimesheetWindowDays = 92
+
+// MaxTimesheetEntries bounds how many tracked-time rows one response folds in, the same
+// truncate-and-flag contract GetRoadmapCapacity's own issue cap carries. A package variable
+// rather than a constant so an integration test can lower it and prove the truncation path
+// actually triggers without seeding a database past a five-figure row count.
+var MaxTimesheetEntries = 5000
 
 // Timesheet is GET /timesheet's response: one lane per user, the timers currently running, and
 // totals sliced four ways.
@@ -60,8 +61,8 @@ type TimesheetDay struct {
 	Entries []TimesheetEntry `json:"entries"`
 }
 
-// TimesheetEntry is one tracked-time row. Editable mirrors DeleteTime's own rule: the doer owns
-// the entry, or can write the Issues unit.
+// TimesheetEntry is one tracked-time row. Editable is set when the doer owns the entry or can
+// write the Issues unit.
 type TimesheetEntry struct {
 	ID          int64  `json:"id"`
 	IssueID     int64  `json:"issue_id"`
@@ -134,8 +135,11 @@ func getTimesheetEndpoint() *hubapi.Endpoint {
 			Description: "repo_id is required and readable the same way GET /issue-types checks it. from and to are " +
 				"YYYY-MM-DD UTC dates, inclusive, defaulting to the current ISO week (Monday through Sunday) when " +
 				"both are omitted; the window is at most 92 days (bad_window otherwise). user_id restricts the " +
-				"response to that one user's own lane and running timer. lanes cover every repository assignee plus " +
-				"anyone else who logged time in the window, even one with no entries at all. entries come from " +
+				"response to that one user's own lane and running timer; a doer who is neither a site administrator " +
+				"nor an Issues writer on the repository is limited to their own lane regardless of user_id, and " +
+				"naming another user answers not_allowed_to_query_user. lanes cover every repository assignee plus " +
+				"anyone else who logged time in the window, even one with no entries at all, except a lane the " +
+				"caller has no access to query, which is omitted rather than shown empty. entries come from " +
 				"Gitea's own time-tracking; a deleted entry never appears. running lists this repository's own " +
 				"stopwatches currently ticking. Totals are summed over the same entries the lanes publish. " +
 				"truncated marks a window with more than 5000 tracked-time rows, where only a prefix was folded in.",
@@ -188,19 +192,11 @@ type timesheetStopwatch struct {
 	CreatedUnix int64
 }
 
-// timesheetRunningStopwatches reads every stopwatch running on one of repoID's own issues.
-// Gitea's stopwatch table carries no repo_id of its own, so this joins through the repository's
-// issue ids rather than a repo-scoped column that does not exist.
+// timesheetRunningStopwatches reads every stopwatch running on one of repoID's own issues,
+// joined through the issue table since Gitea's stopwatch table carries no repo_id of its own.
 func timesheetRunningStopwatches(ctx *context.APIContext, repoID int64) ([]timesheetStopwatch, error) {
-	issueIDs, err := issues_model.GetIssueIDsByRepoID(ctx, repoID)
+	sws, err := planning_model.RunningStopwatches(ctx, repoID)
 	if err != nil {
-		return nil, err
-	}
-	if len(issueIDs) == 0 {
-		return nil, nil
-	}
-	var sws []*issues_model.Stopwatch
-	if err := db.GetEngine(ctx).In("issue_id", issueIDs).Find(&sws); err != nil {
 		return nil, err
 	}
 	rows := make([]timesheetStopwatch, 0, len(sws))
@@ -223,7 +219,7 @@ func GetTimesheet(ctx *context.APIContext) {
 			"Pass ?repo_id=<id>, listing "+BasePath+"/repos to find it.")
 		return
 	}
-	repo, ok := issueTypeReadableRepo(ctx, repoID)
+	repo, perm, ok := issueTypeReadableRepo(ctx, repoID)
 	if !ok {
 		return
 	}
@@ -232,16 +228,25 @@ func GetTimesheet(ctx *context.APIContext) {
 		return
 	}
 	userFilter := hubapi.EqualityFilterInt(q, "user_id")
-
-	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
-	if err != nil {
-		ctx.APIErrorInternal(err)
-		return
-	}
 	canWriteIssues := perm.CanWrite(unit.TypeIssues)
 
+	// A plain reader — neither a site administrator nor an Issues writer — sees only their own
+	// lane: user_id is forced to the doer when omitted, and naming anyone else is refused
+	// rather than answered with another user's entries.
+	cantSetUser := !ctx.Doer.IsAdmin && !canWriteIssues && userFilter != ctx.Doer.ID
+	if cantSetUser {
+		if userFilter == 0 {
+			userFilter = ctx.Doer.ID
+		} else {
+			hubapi.APIError(ctx, http.StatusForbidden, "not_allowed_to_query_user",
+				"query by user not allowed; not enough rights",
+				"Omit user_id to read your own lane, or ask a repository Issues writer.")
+			return
+		}
+	}
+
 	opts := &issues_model.FindTrackedTimesOptions{
-		ListOptions:       db.ListOptions{Page: 1, PageSize: maxTimesheetEntries + 1},
+		ListOptions:       db.ListOptionsAll,
 		RepositoryID:      repo.ID,
 		UserID:            userFilter,
 		CreatedAfterUnix:  from.Unix(),
@@ -252,7 +257,7 @@ func GetTimesheet(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	times, truncated := planning_service.Truncate(times, maxTimesheetEntries)
+	times, truncated := planning_service.Truncate(times, MaxTimesheetEntries)
 
 	running, err := timesheetRunningStopwatches(ctx, repo.ID)
 	if err != nil {

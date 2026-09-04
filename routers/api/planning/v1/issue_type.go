@@ -205,25 +205,34 @@ func getIssueTypeAssignmentsEndpoint() *hubapi.Endpoint {
 	}
 }
 
-// issueTypeReadableRepo resolves and authorizes the repository a type read names.
-func issueTypeReadableRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, bool) {
+// issueTypeReadableRepo resolves and authorizes the repository a type read names, also
+// returning the doer's own permission on it so a caller that needs it (a write check, a
+// reader-parity gate) never resolves it a second time.
+func issueTypeReadableRepo(ctx *context.APIContext, repoID int64) (*repo_model.Repository, access.Permission, bool) {
 	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 	if err != nil {
 		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
 			"no repository with that id is visible to you", "Check the id against "+BasePath+"/repos.")
-		return nil, false
+		return nil, access.Permission{}, false
 	}
 	perm, err := access.GetDoerRepoPermission(ctx, repo, ctx.Doer)
 	if err != nil {
 		ctx.APIErrorInternal(err)
-		return nil, false
+		return nil, access.Permission{}, false
 	}
 	if !perm.CanRead(unit.TypeIssues) {
 		hubapi.APIError(ctx, http.StatusNotFound, "repo_not_found",
 			"no repository with that id is visible to you", "Check the id against "+BasePath+"/repos.")
-		return nil, false
+		return nil, access.Permission{}, false
 	}
-	return repo, true
+	return repo, perm, true
+}
+
+// issueTypeReadableRepoNoPerm adapts issueTypeReadableRepo for callers that have no use for
+// the permission it also resolves, such as scopeListRead's fixed function-value signature.
+func issueTypeReadableRepoNoPerm(ctx *context.APIContext, repoID int64) (*repo_model.Repository, bool) {
+	repo, _, ok := issueTypeReadableRepo(ctx, repoID)
+	return repo, ok
 }
 
 // issueIDsInRepo keeps, in order, the ids among ids that belong to repoID; an id that does not
@@ -267,7 +276,7 @@ func issueTypeVisibleOrg(ctx *context.APIContext, orgID int64) (*org_model.Organ
 
 // GetIssueTypes answers GET /issue-types.
 func GetIssueTypes(ctx *context.APIContext) {
-	scopeListRead(ctx, issueTypeSpec, issueTypeReadableRepo, planning_service.TypesFor, planning_service.TypesForOrg)
+	scopeListRead(ctx, issueTypeSpec, issueTypeReadableRepoNoPerm, planning_service.TypesFor, planning_service.TypesForOrg)
 }
 
 type issueTypeBody struct {
@@ -446,7 +455,7 @@ func GetIssueTypeAssignments(ctx *context.APIContext) {
 			"repo_id is required", "Send repo_id naming the repository the issue ids belong to.")
 		return
 	}
-	repo, ok := issueTypeReadableRepo(ctx, repoID)
+	repo, _, ok := issueTypeReadableRepo(ctx, repoID)
 	if !ok {
 		return
 	}

@@ -124,11 +124,9 @@ func timesheetDayFor(lane timesheetLanePayload, unix int64) (timesheetDayPayload
 	return timesheetDayPayload{}, false
 }
 
-// TestPlanningTimesheetEntriesScopedToWindowRepoAndNotDeleted is mutation proof (a) window
-// filter dropped, (b) repo filter dropped and (d) deleted entries included: only the in-window,
-// same-repo, non-deleted rows reach the lane, its day, and the totals; the out-of-window row,
-// the other repo's row and the deleted row would each inflate a total if their own guard were
-// removed.
+// TestPlanningTimesheetEntriesScopedToWindowRepoAndNotDeleted: only the in-window, same-repo,
+// non-deleted rows reach the lane, its day, and the totals; an out-of-window row, another
+// repo's row, and a deleted row are each excluded rather than inflating a total.
 func TestPlanningTimesheetEntriesScopedToWindowRepoAndNotDeleted(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -213,10 +211,8 @@ func TestPlanningTimesheetRunningListsStopwatch(t *testing.T) {
 	assert.True(t, found, "the running stopwatch is listed")
 }
 
-// TestPlanningTimesheetEditableIsOwnerOrIssuesWrite is mutation proof (c): user40 owns the
-// entry and may always edit their own; user4, a plain reader with neither ownership nor Issues
-// write on repo1, sees it as not editable. Hardcoding editable true turns the second assertion
-// red.
+// TestPlanningTimesheetEditableIsOwnerOrIssuesWrite: user40 owns the entry and may always edit
+// their own. Hardcoding editable true would leave this the only assertion able to catch it.
 func TestPlanningTimesheetEditableIsOwnerOrIssuesWrite(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -235,15 +231,33 @@ func TestPlanningTimesheetEditableIsOwnerOrIssuesWrite(t *testing.T) {
 	entry := findTimesheetEntry(lane, issue.ID)
 	require.NotNil(t, entry, "the entry is on some day in the default current-week window")
 	assert.True(t, entry.Editable, "the entry's own owner may always edit it")
+}
+
+// TestPlanningTimesheetReaderSeesOnlyOwnLane: user4, a plain reader with neither ownership nor
+// Issues write on repo1, gets no lane at all for another user when user_id is omitted — their
+// own user_id is forced in rather than the other lane being rendered empty or with entries
+// marked not editable. Naming another user explicitly is refused, not silently narrowed.
+func TestPlanningTimesheetReaderSeesOnlyOwnLane(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	issue := timesheetIssue(t, repo1, user2, []int64{40})
+	insertTrackedTime(t, issue.ID, 40, 100, time.Now().Unix(), false)
 
 	readerToken := getTokenForLoggedInUser(t, loginUser(t, "user4"), auth_model.AccessTokenScopeAll)
-	payload, refusal, status = getTimesheet(t, readerToken, "repo_id=1")
+	payload, refusal, status := getTimesheet(t, readerToken, "repo_id=1")
 	require.Equal(t, http.StatusOK, status, "%+v", refusal)
-	lane, ok = timesheetLaneFor(payload, 40)
-	require.True(t, ok)
-	entry = findTimesheetEntry(lane, issue.ID)
-	require.NotNil(t, entry)
-	assert.False(t, entry.Editable, "a plain reader owns nothing here and cannot write Issues")
+	_, hasUser40 := timesheetLaneFor(payload, 40)
+	assert.False(t, hasUser40, "a plain reader without ownership or Issues write cannot see another user's lane at all")
+	lane, ok := timesheetLaneFor(payload, 4)
+	require.True(t, ok, "the reader's own lane is still present, forced in place of the omitted user_id")
+	assert.Equal(t, int64(0), lane.TotalSeconds, "user4 logged nothing, so their own lane is empty")
+
+	_, refusal, status = getTimesheet(t, readerToken, "repo_id=1&user_id=40")
+	assert.Equal(t, http.StatusForbidden, status)
+	assert.Equal(t, "not_allowed_to_query_user", refusal.Code)
 }
 
 func findTimesheetEntry(lane timesheetLanePayload, issueID int64) *timesheetEntryPayload {
@@ -282,8 +296,7 @@ func TestPlanningTimesheetUserIDFiltersLanes(t *testing.T) {
 	assert.False(t, hasUser40, "user_id drops every other assignee's lane")
 }
 
-// TestPlanningTimesheetWindowBoundary is mutation proof (e): 92 days is accepted, 93 is refused
-// bad_window. Widening the 92-day cap turns the second case red.
+// TestPlanningTimesheetWindowBoundary: 92 days is accepted, 93 is refused bad_window.
 func TestPlanningTimesheetWindowBoundary(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -318,4 +331,74 @@ func TestPlanningTimesheetMissingRepoIDRefused(t *testing.T) {
 	_, refusal, status := getTimesheet(t, token, "")
 	assert.Equal(t, http.StatusUnprocessableEntity, status)
 	assert.Equal(t, "missing_repo_id", refusal.Code)
+}
+
+// TestPlanningTimesheetSixtyEntriesInOneDayAllReturned: every one of 60 same-day rows reaches
+// the lane, its day, and the totals, proving the response is not silently capped at Gitea's own
+// 50-row API default the way a page-size ceiling meant for other endpoints would.
+func TestPlanningTimesheetSixtyEntriesInOneDayAllReturned(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	issue := timesheetIssue(t, repo1, user2, []int64{2})
+	day := time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC)
+	const count = 60
+	var wantTotal int64
+	for i := range count {
+		insertTrackedTime(t, issue.ID, 2, int64(10+i), day.Unix(), false)
+		wantTotal += int64(10 + i)
+	}
+
+	payload, refusal, status := getTimesheet(t, token, "repo_id=1&from="+day.Format(time.DateOnly)+"&to="+day.Format(time.DateOnly))
+	require.Equal(t, http.StatusOK, status, "%+v", refusal)
+	assert.False(t, payload.Truncated)
+
+	lane, ok := timesheetLaneFor(payload, 2)
+	require.True(t, ok)
+	dayPayload, ok := timesheetDayFor(lane, day.Unix())
+	require.True(t, ok)
+	assert.Len(t, dayPayload.Entries, count, "all 60 same-day rows are returned")
+	assert.Equal(t, wantTotal, dayPayload.Seconds)
+	assert.Equal(t, wantTotal, lane.TotalSeconds)
+
+	var issueTotal int64
+	for _, it := range payload.Totals.ByIssue {
+		if it.IssueID == issue.ID {
+			issueTotal = it.Seconds
+		}
+	}
+	assert.Equal(t, wantTotal, issueTotal)
+}
+
+// TestPlanningTimesheetCapTruncatesPastLoweredLimit lowers MaxTimesheetEntries for its own
+// duration so the truncation path is proven without seeding a database with 5000 real rows.
+func TestPlanningTimesheetCapTruncatesPastLoweredLimit(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	original := planningv1.MaxTimesheetEntries
+	planningv1.MaxTimesheetEntries = 10
+	defer func() { planningv1.MaxTimesheetEntries = original }()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	token := getTokenForLoggedInUser(t, loginUser(t, "user2"), auth_model.AccessTokenScopeAll)
+
+	issue := timesheetIssue(t, repo1, user2, []int64{2})
+	day := time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC)
+	for i := range 15 {
+		insertTrackedTime(t, issue.ID, 2, int64(1+i), day.Unix(), false)
+	}
+
+	payload, refusal, status := getTimesheet(t, token, "repo_id=1&from="+day.Format(time.DateOnly)+"&to="+day.Format(time.DateOnly))
+	require.Equal(t, http.StatusOK, status, "%+v", refusal)
+	assert.True(t, payload.Truncated, "15 rows is more than the lowered cap of 10")
+
+	lane, ok := timesheetLaneFor(payload, 2)
+	require.True(t, ok)
+	dayPayload, ok := timesheetDayFor(lane, day.Unix())
+	require.True(t, ok)
+	assert.Len(t, dayPayload.Entries, 10, "the response holds exactly the lowered cap, not all 15 rows")
 }
