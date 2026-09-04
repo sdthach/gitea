@@ -61,6 +61,13 @@ const (
 	DeploymentStatusFailed  = "failed"
 )
 
+// deploymentTerminalStatuses are the run-final values AppendDeployment refuses to move
+// backwards off: a run's own notifications can arrive out of order, and a running or waiting
+// report replaying after the run already finished must not erase what it finished as.
+var deploymentTerminalStatuses = map[string]bool{
+	"success": true, "failure": true, "cancelled": true, "skipped": true, DeploymentStatusFailed: true,
+}
+
 // placeholderRunSeq hands out the negative RunID a checks-pending deployment is appended
 // under, before any Actions run exists to name. It starts below any real run id (which is
 // always positive) and counts down for the life of the process, so two placeholders appended
@@ -180,6 +187,9 @@ func AppendDeployment(ctx context.Context, d *Deployment) error {
 	if has {
 		if existing.Status == d.Status {
 			return nil
+		}
+		if deploymentTerminalStatuses[existing.Status] && !deploymentTerminalStatuses[d.Status] {
+			return nil // an out-of-order running/waiting replay must not undo a terminal status
 		}
 		_, err := db.GetEngine(ctx).ID(existing.ID).Cols("status").Update(&Deployment{Status: d.Status})
 		return err

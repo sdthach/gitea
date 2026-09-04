@@ -102,8 +102,14 @@ func cellSymbol(state CellState, successes int) string {
 
 // aggregate is what one (release, environment) group reduces to.
 type aggregate struct {
-	successes    int
-	last         Event
+	successes int
+	// last is the newest STATE-BEARING event — everything but auto_promoted, which records why
+	// a deploy was created rather than its disposition — and decides cell.State.
+	last Event
+	// lastAny is the newest event of any kind, auto_promoted included, and supplies the run
+	// metadata (RunID, RunURL, OccurredUnix): a cell always reports the newest run it knows
+	// about even when the newest event about it is an attribution rather than a state change.
+	lastAny      Event
 	lastSuccess  Event
 	hasEvents    bool
 	hasSucceeded bool
@@ -143,6 +149,7 @@ func ProjectCells(environments, releases []string, events []Event, policies map[
 			groups[k] = agg
 		}
 		agg.hasEvents = true
+		agg.lastAny = e
 		if e.Event != deployments_model.AuditAutoPromoted {
 			// auto_promoted records WHY a deploy was created, not its current disposition —
 			// the checks_pending or requested event alongside it already carries that, and
@@ -194,9 +201,9 @@ func projectOne(environment, release string, agg *aggregate, liveRelease, policy
 	}
 
 	cell.Successes = agg.successes
-	cell.RunID = agg.last.RunID
-	cell.RunURL = agg.last.RunURL
-	cell.OccurredUnix = agg.last.OccurredUnix
+	cell.RunID = agg.lastAny.RunID
+	cell.RunURL = agg.lastAny.RunURL
+	cell.OccurredUnix = agg.lastAny.OccurredUnix
 
 	switch agg.last.Event {
 	case deployments_model.AuditSucceeded:

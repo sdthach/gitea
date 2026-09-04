@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.dev/models/db"
 	hub_model "gitea.dev/models/hub"
+	"gitea.dev/models/unittest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -137,6 +139,21 @@ func TestValidateEnvironmentRequiredStatusContexts(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorAs(t, err, &hubErr)
 	assert.Equal(t, "bad_contexts", hubErr.Code)
+}
+
+// TestEffectiveEnvironmentNamesIsScopedToItsRepo: a repository's effective set is its own rows
+// plus the instance-wide defaults — never another repository's environment, whatever it is named.
+func TestEffectiveEnvironmentNamesIsScopedToItsRepo(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 1, Name: "own-repo-1", ReviewPolicy: PolicyNone, RequiredReviewers: 1}))
+	require.NoError(t, db.Insert(ctx, &Environment{RepoID: 2, Name: "only-in-repo-2", ReviewPolicy: PolicyNone, RequiredReviewers: 1}))
+
+	names, err := EffectiveEnvironmentNames(ctx, 1)
+	require.NoError(t, err)
+	assert.Contains(t, names, "own-repo-1")
+	assert.NotContains(t, names, "only-in-repo-2", "repo 2's own environment is not part of repo 1's effective set")
 }
 
 // TestDependencyGraph tables the pure cycle check: a missing dependency, a self-cycle, a

@@ -189,6 +189,33 @@ func TestMatrixOrdersOutOfOrderEvents(t *testing.T) {
 	assert.Equal(t, CellSuperseded, cells["v1"][0].State)
 }
 
+// TestMatrixAutoPromotedCarriesTheNewestRunMetadata: auto_promoted never decides cell.State —
+// it records why a deploy was created, not its disposition — but a cell must still report the
+// newest run's own id and timestamp even when auto_promoted is the newest event about it.
+func TestMatrixAutoPromotedCarriesTheNewestRunMetadata(t *testing.T) {
+	t.Run("lone auto_promoted event", func(t *testing.T) {
+		events := []Event{{ID: 1, OccurredUnix: 5, ReleaseTag: "v1", Environment: "qa", Event: deployments_model.AuditAutoPromoted, RunID: 42}}
+		cell := ProjectCells([]string{"qa"}, []string{"v1"}, events, nil)["v1"][0]
+
+		assert.False(t, cell.State == CellInProgress && cell.RunID == 0,
+			"the only event about this run is auto_promoted; it must not be read as an in-progress run with no run behind it")
+		assert.Equal(t, int64(42), cell.RunID, "the newest (only) run's id is still reported")
+		assert.Equal(t, int64(5), cell.OccurredUnix)
+	})
+
+	t.Run("auto_promoted after success", func(t *testing.T) {
+		events := []Event{
+			{ID: 1, OccurredUnix: 5, ReleaseTag: "v1", Environment: "qa", Event: deployments_model.AuditSucceeded, RunID: 41},
+			{ID: 2, OccurredUnix: 9, ReleaseTag: "v1", Environment: "qa", Event: deployments_model.AuditAutoPromoted, RunID: 42},
+		}
+		cell := ProjectCells([]string{"qa"}, []string{"v1"}, events, nil)["v1"][0]
+
+		assert.Equal(t, CellLive, cell.State, "the state still comes from the last state-bearing event, succeeded")
+		assert.Equal(t, int64(42), cell.RunID, "the metadata comes from the newest event overall, auto_promoted")
+		assert.Equal(t, int64(9), cell.OccurredUnix)
+	})
+}
+
 func TestMatrixCarriesTheRunLink(t *testing.T) {
 	events := []Event{{
 		ID: 1, OccurredUnix: 5, ReleaseTag: "v1", Environment: "qa",

@@ -83,6 +83,32 @@ func TestDeploymentsDeploymentsAreAppendOnly(t *testing.T) {
 	assert.NotEmpty(t, hubErr.SuggestedAction)
 }
 
+// TestDeploymentsAppendDeploymentNeverDowngradesATerminalStatus: a run's notifications can
+// replay out of order, and a running or waiting report arriving after the run already finished
+// must not erase what it finished as.
+func TestDeploymentsAppendDeploymentNeverDowngradesATerminalStatus(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	require.NoError(t, AppendDeployment(ctx, &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 401, Status: "running"}))
+	require.NoError(t, AppendDeployment(ctx, &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 401, Status: "success"}))
+
+	// A stale "running" notification, delivered after "success" because of ordinary network
+	// reordering, replays on the same run.
+	require.NoError(t, AppendDeployment(ctx, &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 401, Status: "running"}))
+
+	rows, err := FindDeployments(ctx, builderEq("run_id", int64(401)), "id ASC", 0)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "still one row for the one run")
+	assert.Equal(t, "success", rows[0].Status, "the out-of-order running replay did not downgrade the terminal status")
+
+	// A later "waiting" replay is refused the same way.
+	require.NoError(t, AppendDeployment(ctx, &Deployment{RepoID: 1, Environment: "qa", ReleaseTag: "v1", RunID: 401, Status: "waiting"}))
+	rows, err = FindDeployments(ctx, builderEq("run_id", int64(401)), "id ASC", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "success", rows[0].Status)
+}
+
 func TestDeploymentsFindDeploymentsLimitsWithoutOffset(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()

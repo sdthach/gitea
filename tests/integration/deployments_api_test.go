@@ -376,6 +376,43 @@ func TestAPIDeploymentsEnvironmentDeployWindowSurvivesAnUnrelatedWrite(t *testin
 		withBase(map[string]any{"sort_order": 71, "deploy_window": nil})).AddTokenAuth(token)
 	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
 	assert.Nil(t, updated.DeployWindow, "an explicit null clears the window")
+
+	// The flat form clears the window the same way: a days_mask of 0 alongside the other flat
+	// keys, not only their absence, means "clear" rather than "store a zero mask".
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{
+			"sort_order":              71,
+			"deploy_window_days_mask": 3, "deploy_window_from_minute": 30, "deploy_window_to_minute": 90, "deploy_window_timezone": "UTC",
+		})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	require.NotNil(t, updated.DeployWindow, "the flat form set a window")
+	assert.Equal(t, 3, updated.DeployWindow.DaysMask)
+
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{
+			"sort_order":              71,
+			"deploy_window_days_mask": 0, "deploy_window_from_minute": 30, "deploy_window_to_minute": 90, "deploy_window_timezone": "UTC",
+		})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	assert.Nil(t, updated.DeployWindow, "days_mask 0 in the flat form clears the window")
+
+	// The nested form's own zero mask clears it too, distinct from the null case already
+	// covered above.
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{
+			"sort_order":    71,
+			"deploy_window": map[string]any{"days_mask": 2, "from_minute": 30, "to_minute": 90, "timezone": "UTC"},
+		})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	require.NotNil(t, updated.DeployWindow, "the nested form set a window")
+
+	req = NewRequestWithJSON(t, "PUT", fmt.Sprintf("%s/environments/%d", deploymentsv1.BasePath, created.ID),
+		withBase(map[string]any{
+			"sort_order":    71,
+			"deploy_window": map[string]any{"days_mask": 0, "from_minute": 30, "to_minute": 90, "timezone": "UTC"},
+		})).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusOK), &updated)
+	assert.Nil(t, updated.DeployWindow, "days_mask 0 in the nested object, not only a nested null, clears the window")
 }
 
 func hubEnvironmentRefusal(t *testing.T, login string, id int64) hubRefusal {

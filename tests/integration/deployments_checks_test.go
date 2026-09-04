@@ -343,6 +343,33 @@ func TestDeploymentsChecksExclusiveLockHoldsASecondDeploy(t *testing.T) {
 	assert.NotEmpty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the first run finished; the lock cleared")
 }
 
+// TestDeploymentsChecksExclusiveLockDoesNotCrossEnvironments: a running deployment on one
+// environment must not hold the lock for a different environment of the same repository —
+// exclusive_lock is scoped per environment, not per repository.
+func TestDeploymentsChecksExclusiveLockDoesNotCrossEnvironments(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "staging", SortOrder: 40, ExclusiveLock: true,
+	})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "prod", SortOrder: 50, ExclusiveLock: true,
+	})
+	recordRunEvent(t, repo, sender, "staging", promotionFullRelease, 9801, actions_model.StatusRunning)
+
+	// The plan step (confirm omitted) already carries checks, without needing repo1's own
+	// deploy-prod.yaml workflow, which an actual dispatch would.
+	status, payload := promoteChecks(t, hubWriteToken(t, "user2"), map[string]any{
+		"repo": repo.FullName(), "environment": "prod", "release_tag": promotionFullRelease,
+	})
+	require.Equal(t, http.StatusOK, status)
+	check, ok := checkNamed(payload.Checks, "exclusive_lock")
+	require.True(t, ok)
+	assert.Equal(t, "pass", check.State, "staging's own running deployment must not hold prod's lock")
+}
+
 // TestDeploymentsChecksExclusiveLockAndWaitTimerBothClearTogether: exclusive_lock and a wait
 // timer stacked on the same environment both have to clear before the held deploy dispatches
 // — clearing the lock alone is not enough while the timer has not elapsed, and the timer
@@ -419,6 +446,28 @@ func TestDeploymentsChecksAutoPromoteFollowsASuccess(t *testing.T) {
 	})
 }
 
+// TestDeploymentsChecksAutoPromoteRefusedIntoReleasesOnlyWritesNothing: a prerelease auto-
+// promoted into a releases_only environment is refused by Promote before anything dispatches,
+// so there is nothing for auto_promote to be credited with — no audit row and no deployment.
+func TestDeploymentsChecksAutoPromoteRefusedIntoReleasesOnlyWritesNothing(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "qa", SortOrder: 10})
+	writeChecksEnvironment(t, &deployments_model.Environment{
+		RepoID: repo.ID, Name: "staging", SortOrder: 20, DependsOn: []string{"qa"}, AutoPromote: true, ReleasesOnly: true,
+	})
+	before := len(hubAuditEvents(t, deployments_model.AuditAutoPromoted))
+
+	recordRunEvent(t, repo, sender, "qa", promotionPrerelease, 9601, actions_model.StatusWaiting)
+	recordRunEvent(t, repo, sender, "qa", promotionPrerelease, 9601, actions_model.StatusSuccess)
+
+	assert.Len(t, hubAuditEvents(t, deployments_model.AuditAutoPromoted), before,
+		"staging refused the prerelease; auto_promote credits nothing that never happened")
+	assert.Empty(t, hubDeploymentsFor(t, repo.ID, "staging", promotionPrerelease), "nothing dispatched into staging")
+}
+
 // TestDeploymentsChecksAutoPromoteWaitsForEveryDependency: with two dependencies, a success on
 // only one of them promotes nothing.
 func TestDeploymentsChecksAutoPromoteWaitsForEveryDependency(t *testing.T) {
@@ -437,6 +486,42 @@ func TestDeploymentsChecksAutoPromoteWaitsForEveryDependency(t *testing.T) {
 
 	assert.Empty(t, hubAuditEvents(t, deployments_model.AuditAutoPromoted), "uat has not held the release yet")
 	assert.Empty(t, hubDeploymentsFor(t, repo.ID, "staging", promotionFullRelease))
+}
+
+// TestDeploymentsChecksAutoPromoteIntoAWaitTimerAttributesAndLaterDispatches: an auto-promote
+// whose checks answer wait still gets its audit — the waiting placeholder row already exists,
+// so auto_promoted attaches to it exactly as it would a dispatched run — and once the timer
+// elapses the sweeper's own dispatch reports checks_passed as it would for any waiting deploy.
+func TestDeploymentsChecksAutoPromoteIntoAWaitTimerAttributesAndLaterDispatches(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		sender := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo, tag := seedDeployableRelease(t, sender, "staging")
+		writeChecksEnvironment(t, &deployments_model.Environment{RepoID: repo.ID, Name: "qa", SortOrder: 10})
+		writeChecksEnvironment(t, &deployments_model.Environment{
+			RepoID: repo.ID, Name: "staging", SortOrder: 20, DependsOn: []string{"qa"}, AutoPromote: true, WaitMinutes: 10,
+		})
+
+		recordRunEvent(t, repo, sender, "qa", tag, 9701, actions_model.StatusWaiting)
+		recordRunEvent(t, repo, sender, "qa", tag, 9701, actions_model.StatusSuccess)
+
+		rows := hubDeploymentsFor(t, repo.ID, "staging", tag)
+		require.Len(t, rows, 1, "the waiting placeholder was appended")
+		assert.Equal(t, "waiting", rows[0].Status)
+
+		events := hubAuditEvents(t, deployments_model.AuditAutoPromoted)
+		require.NotEmpty(t, events, "the waiting row still gets credited to auto_promote")
+		last := events[len(events)-1]
+		assert.Equal(t, "staging", last.Environment)
+		assert.Equal(t, tag, last.ReleaseTag)
+		assert.Equal(t, rows[0].RunID, last.RunID, "the audit attaches to the placeholder's own row")
+
+		requested := int64(rows[0].CreatedUnix)
+		require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), requested+1))
+		assert.Empty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the timer has not elapsed yet")
+
+		require.NoError(t, deployments_service.ReevaluateWaiting(t.Context(), requested+11*60))
+		assert.NotEmpty(t, hubAuditEvents(t, deployments_model.AuditChecksPassed), "the timer elapsed; the sweeper dispatched")
+	})
 }
 
 // TestDeploymentsChecksCycleRefusesTheWriteAndLeavesTheRowUnchanged: a depends_on cycle is
@@ -468,6 +553,29 @@ func TestDeploymentsChecksCycleRefusesTheWriteAndLeavesTheRowUnchanged(t *testin
 	reloaded, err := deployments_model.GetEnvironmentByID(t.Context(), staging.ID)
 	require.NoError(t, err)
 	assert.Empty(t, reloaded.DependsOn, "the refused write left the row exactly as it was")
+}
+
+// TestDeploymentsChecksDependsOnDoesNotCrossRepositories: an environment name that exists only
+// in another repository is outside this repository's effective set, so depends_on naming it is
+// refused exactly as it would be for a name that exists nowhere at all.
+func TestDeploymentsChecksDependsOnDoesNotCrossRepositories(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	otherRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+	writeChecksEnvironment(t, &deployments_model.Environment{RepoID: otherRepo.ID, Name: "only-in-repo-2", SortOrder: 10})
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	body := map[string]any{
+		"repo_id": repo.ID, "name": "cross-repo-prod", "sort_order": 60, "review_policy": "none", "required_reviewers": 1,
+		"depends_on": []string{"only-in-repo-2"},
+	}
+	req := NewRequestWithJSON(t, "POST", deploymentsv1.BasePath+"/environments", body).AddTokenAuth(hubWriteToken(t, "user2"))
+	resp := MakeRequest(t, req, NoExpectedStatus)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+	var refused hubRefusal
+	DecodeJSON(t, resp, &refused)
+	assert.Contains(t, refused.Message, "only-in-repo-2")
+	assert.Contains(t, refused.Message, "does not exist", "repo 2's environment is not part of repo 1's effective set")
 }
 
 // TestDeploymentsChecksEnvironmentValidationCodes tables bad_wait, bad_window and bad_contexts
