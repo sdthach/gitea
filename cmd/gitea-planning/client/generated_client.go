@@ -441,7 +441,7 @@ var Commands = []hubcli.Command{
 		IntBody:      nil,
 		FloatBody:    nil,
 		ArrayBody:    nil,
-		BodyHelp:     map[string]string{"repo": "Repository as owner/name.", "time_estimate": "Duration such as \"3d\" or \"4h30m\"."},
+		BodyHelp:     map[string]string{"repo": "Repository as owner/name.", "time_estimate": "Duration such as \"8h\" or \"4h30m\"; hours, minutes and seconds only."},
 		Columns:      []string{"can_write", "children", "fields", "issue_id", "milestone", "number", "parent", "progress", "repo_id", "schedule", "time_estimate", "tracked_seconds", "type", "types", "values"},
 		IsList:       false,
 	},

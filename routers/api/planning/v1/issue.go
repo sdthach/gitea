@@ -174,11 +174,11 @@ func setIssueEstimateEndpoint() *hubapi.Endpoint {
 		Op: &hubapi.Operation{
 			ID: "setIssueEstimate", Method: http.MethodPut, Path: "/issues/{issue_id}/estimate",
 			Summary: "Set an issue's time estimate",
-			Description: "time_estimate is a duration like \"3d\" or \"4h30m\", parsed and written through Gitea's own " +
+			Description: "time_estimate is a duration like \"8h\" or \"4h30m\" (hours, minutes and seconds; Gitea parses no day unit), parsed and written through Gitea's own " +
 				"time-tracking. Authorized by Gitea's own write check on the Issues unit.",
 			Tag: "issues", PathParams: issueParam,
 			Body: append(append([]hubapi.Param{}, repoParam...),
-				hubapi.Param{Name: "time_estimate", In: "body", Type: "string", Required: true, Description: "Duration such as \"3d\" or \"4h30m\"."}),
+				hubapi.Param{Name: "time_estimate", In: "body", Type: "string", Required: true, Description: "Duration such as \"8h\" or \"4h30m\"; hours, minutes and seconds only."}),
 			CLINames: []string{"issue-set-estimate"},
 			Response: "IssueFacets", ResponseIs: "object",
 		},
@@ -282,7 +282,7 @@ func SetIssueEstimate(ctx *context.APIContext) {
 	if err != nil {
 		hubapi.APIError(ctx, http.StatusUnprocessableEntity, "bad_estimate",
 			fmt.Sprintf("%q is not a time estimate this endpoint reads", body.TimeEstimate),
-			`Send a duration like "3d" or "4h30m".`)
+			`Send a duration like "8h" or "4h30m"; Gitea parses hours, minutes and seconds, not days.`)
 		return
 	}
 	if err := issue_service.ChangeTimeEstimate(ctx, issue, ctx.Doer, seconds); err != nil {

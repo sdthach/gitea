@@ -2842,7 +2842,7 @@
     },
     "/issues/{issue_id}/estimate": {
       "put": {
-        "description": "time_estimate is a duration like \"3d\" or \"4h30m\", parsed and written through Gitea's own time-tracking. Authorized by Gitea's own write check on the Issues unit.",
+        "description": "time_estimate is a duration like \"8h\" or \"4h30m\" (hours, minutes and seconds; Gitea parses no day unit), parsed and written through Gitea's own time-tracking. Authorized by Gitea's own write check on the Issues unit.",
         "operationId": "setIssueEstimate",
         "parameters": [
           {
@@ -2865,7 +2865,7 @@
                     "type": "string"
                   },
                   "time_estimate": {
-                    "description": "Duration such as \"3d\" or \"4h30m\".",
+                    "description": "Duration such as \"8h\" or \"4h30m\"; hours, minutes and seconds only.",
                     "type": "string"
                   }
                 },

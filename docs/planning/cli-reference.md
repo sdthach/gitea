@@ -1000,7 +1000,7 @@ Flags:
   -sort-by string
     	sort field
   -time-estimate string
-    	required. Duration such as "3d" or "4h30m".
+    	required. Duration such as "8h" or "4h30m"; hours, minutes and seconds only.
   -token string
     	API token; resolved by the same precedence detect.sh implements
 ```
