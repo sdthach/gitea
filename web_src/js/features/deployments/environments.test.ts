@@ -31,6 +31,13 @@ test('normalize copies its array fields, so mutating one draft touches neither a
   expect(source.depends_on).toEqual(['live']);
 });
 
+test('normalize copies deploy_window, so mutating the draft leaves the input intact', () => {
+  const source = env({deploy_window: {days_mask: 31, from_minute: 0, to_minute: 60, timezone: 'UTC'}});
+  const draft = normalize(source);
+  draft.deploy_window!.from_minute = 999;
+  expect(source.deploy_window!.from_minute).toBe(0);
+});
+
 // payloadOf must forward every field the endpoint accepts, including the promotion path
 // editor's own fields, or a write from the identity or checks form would silently clear them —
 // UpdateEnvironmentHandler replaces the whole row from this body.

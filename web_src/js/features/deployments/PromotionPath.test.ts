@@ -30,15 +30,18 @@ function node(name: string) {
 
 afterEach(() => {
   vi.clearAllMocks();
+  document.body.replaceChildren();
 });
 
 test('a node inherited from the instance defaults renders locked and is never written, while the repository\'s own node writes its own id', async () => {
-  vi.mocked(getEnvironmentPaths).mockResolvedValue({nodes: [node('shared'), node('own')], edges: []});
+  // an edge into the locked node, so removeEdge's own guard has something to be exercised on.
+  vi.mocked(getEnvironmentPaths).mockResolvedValue({nodes: [node('shared'), node('own')], edges: [{from: 'own', to: 'shared'}]});
   vi.mocked(getEnvironments).mockImplementation(async (_config, opts) =>
     opts?.repoId === 0 ? [env({id: 100, repo_id: 0, name: 'shared'})] : [env({id: 200, repo_id: 5, name: 'own'})]);
   vi.mocked(updateEnvironment).mockResolvedValue(env());
 
   const root = document.createElement('div');
+  document.body.append(root); // startDrag's own listener is on window, which only a connected node's mouseup reaches
   createApp(PromotionPath, {config, repoId: 5, label: 'octocat/hello'}).mount(root);
 
   await vi.waitFor(() => expect(root.querySelectorAll('[data-promotion-node]')).toHaveLength(2));
@@ -50,10 +53,37 @@ test('a node inherited from the instance defaults renders locked and is never wr
 
   // A change event is dispatched directly, rather than relying on the browser's own
   // click()-on-a-disabled-element suppression, so the assertion is of canWrite's own refusal
-  // inside toggleAutoPromote, not merely of the disabled attribute the same rule renders.
+  // inside each handler, not merely of the disabled attribute the same rule renders.
   const sharedCheckbox = sharedNode.querySelector('input[type="checkbox"]') as HTMLInputElement;
   expect(sharedCheckbox.disabled).toBe(true);
   sharedCheckbox.dispatchEvent(new Event('change', {bubbles: true}));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(updateEnvironment).not.toHaveBeenCalled();
+
+  // the three check-row inputs for the locked node: wait minutes, exclusive lock, required
+  // status contexts — nodes render in path order, so the first row is 'shared'.
+  const sharedRow = root.querySelector('.deployments-promotion-checks tbody tr')!;
+  const waitInput = sharedRow.querySelector('input[type="number"]') as HTMLInputElement;
+  const lockCheckbox = sharedRow.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  const contextsInput = sharedRow.querySelector('input[type="text"]') as HTMLInputElement;
+  expect(waitInput.disabled).toBe(true);
+  expect(lockCheckbox.disabled).toBe(true);
+  expect(contextsInput.disabled).toBe(true);
+  waitInput.dispatchEvent(new Event('change', {bubbles: true}));
+  lockCheckbox.dispatchEvent(new Event('change', {bubbles: true}));
+  contextsInput.dispatchEvent(new Event('change', {bubbles: true}));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(updateEnvironment).not.toHaveBeenCalled();
+
+  // the inbound edge into the locked node
+  const edge = root.querySelector('.deployments-promotion-edge')!;
+  edge.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(updateEnvironment).not.toHaveBeenCalled();
+
+  // a drag started from the locked node and dropped onto the writable one
+  sharedNode.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  ownNode.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(updateEnvironment).not.toHaveBeenCalled();
 

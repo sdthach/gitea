@@ -25,6 +25,7 @@ export function normalize(env: Environment): Environment {
     reviewer_user_ids: [...(env.reviewer_user_ids ?? [])],
     reviewer_team_ids: [...(env.reviewer_team_ids ?? [])],
     required_status_contexts: [...(env.required_status_contexts ?? [])],
+    deploy_window: env.deploy_window && {...env.deploy_window},
   };
 }
 
