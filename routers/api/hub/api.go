@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/session"
@@ -29,8 +28,6 @@ import (
 
 	chi_middleware "github.com/go-chi/chi/v5/middleware"
 )
-
-var sessioner = sync.OnceValue(common.MustInitSessioner)
 
 // Endpoint binds one documented Operation to its handler and its authorization.
 type Endpoint struct {
@@ -71,7 +68,7 @@ func apiAuth(authMethod auth_service.Method) func(*context.APIContext) {
 		if ctx.Req.Method == http.MethodGet || ctx.Req.Method == http.MethodHead {
 			// The middleware attaches the session to the request it hands its next
 			// handler, not to ctx.Req itself, so that request has to be captured back out.
-			sessioner()(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx.Req = r })).ServeHTTP(ctx.Resp, ctx.Req)
+			common.MustInitSessioner()(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { ctx.Req = r })).ServeHTTP(ctx.Resp, ctx.Req)
 			sessionStore = session.GetContextSession(ctx.Req)
 		}
 		ar, err := common.AuthShared(ctx.Base, sessionStore, authMethod)

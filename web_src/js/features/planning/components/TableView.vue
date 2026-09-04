@@ -78,7 +78,7 @@ const rows = computed<Row[]>(() => {
       upsert({
         issueId: bar.issue_id, number: bar.number, title: bar.title, url: bar.url,
         isClosed: bar.is_closed, type: bar.type, typeIcon: bar.type_icon, typeId: bar.type_id,
-        assignees: bar.assignees ?? [], labels: bar.labels ?? [],
+        assignees: bar.assignees, labels: bar.labels,
         milestone: bar.milestone, milestoneId: bar.milestone_id,
         parentIssueId: bar.parent_issue_id, rootIssueId: bar.root_issue_id, depth: bar.depth ?? 0,
         hasChildren: bar.has_children ?? false, startUnix: bar.start_unix, endUnix: bar.end_unix,
@@ -90,7 +90,7 @@ const rows = computed<Row[]>(() => {
       upsert({
         issueId: item.issue_id, number: item.number, title: item.title, url: item.url,
         isClosed: item.is_closed, type: item.type, typeId: item.type_id,
-        assignees: item.assignees ?? [], labels: item.labels ?? [],
+        assignees: item.assignees, labels: item.labels,
         milestoneId: item.milestone_id, points: item.points, fields: item.fields,
         timeEstimate: item.time_estimate, trackedSeconds: item.tracked_seconds,
       });

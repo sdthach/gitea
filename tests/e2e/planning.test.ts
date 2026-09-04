@@ -1,7 +1,7 @@
 import {env} from 'node:process';
 import {test, expect} from '@playwright/test';
 import type {APIRequestContext} from '@playwright/test';
-import {login, loginUser, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
+import {login, loginUser, apiCreateIssue, apiCreateRepo, apiCreateUser, apiDeleteUser, apiHeaders, baseUrl, randomString} from './utils.ts';
 
 // The planning pages authenticate with a token, not the browser session, cached in the
 // session store and reused across renders rather than minted fresh each time. These tests
@@ -69,6 +69,65 @@ async function apiMakeRepoPublic(request: APIRequestContext, owner: string, name
     data: {private: false},
   });
   expect(response.ok(), `publish repo ${name}: ${await response.text()}`).toBe(true);
+}
+
+// template_type "none" starts a project with no columns, so the board's own two columns are
+// exactly the ones this test creates, nothing a default template added.
+async function apiCreateProject(request: APIRequestContext, owner: string, name: string, title: string): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/projects`, {
+    headers: apiHeaders(),
+    data: {title, template_type: 'none'},
+  });
+  expect(response.ok(), `create project: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
+}
+
+async function apiCreateProjectColumn(request: APIRequestContext, owner: string, name: string, projectID: number, title: string): Promise<number> {
+  const response = await request.post(`${baseUrl()}/api/v1/repos/${owner}/${name}/projects/${projectID}/columns`, {
+    headers: apiHeaders(),
+    data: {title},
+  });
+  expect(response.ok(), `create project column: ${await response.text()}`).toBe(true);
+  return (await response.json()).id;
+}
+
+async function apiMoveCardToColumn(request: APIRequestContext, issueID: number, repo: string, projectID: number, columnID: number) {
+  const response = await request.post(`${baseUrl()}/api/planning/v1/board/cards/${issueID}/column`, {
+    headers: apiHeaders(),
+    data: {repo, project_id: projectID, column_id: columnID},
+  });
+  expect(response.ok(), `move card to column: ${await response.text()}`).toBe(true);
+}
+
+async function apiBoardCardColumn(request: APIRequestContext, repoID: number, projectID: number, issueID: number): Promise<number> {
+  const response = await request.get(`${baseUrl()}/api/planning/v1/board?repo_id=${repoID}&project_id=${projectID}`, {headers: apiHeaders()});
+  expect(response.ok(), `get board: ${await response.text()}`).toBe(true);
+  const board = await response.json() as {groups: Array<{columns: Array<{cards: Array<{issue_id: number, column_id: number}>}>}>};
+  const card = board.groups.flatMap((g) => g.columns).flatMap((c) => c.cards).find((c) => c.issue_id === issueID);
+  expect(card, `issue ${issueID} is a card on the board`).toBeTruthy();
+  return card!.column_id;
+}
+
+async function apiAssignIssue(request: APIRequestContext, owner: string, name: string, issueNumber: number, assignee: string) {
+  const response = await request.patch(`${baseUrl()}/api/v1/repos/${owner}/${name}/issues/${issueNumber}`, {
+    headers: apiHeaders(),
+    data: {assignees: [assignee]},
+  });
+  expect(response.ok(), `assign issue: ${await response.text()}`).toBe(true);
+}
+
+// apiBoardColumnOrder reads one column's own cards, in their published order, across every
+// group — the same shape an order write covers, so a test can tell a real reorder from a card
+// silently dropped out of the column by a regression in that cross-group merge.
+async function apiBoardColumnOrder(request: APIRequestContext, repoID: number, projectID: number, groupBy: string, columnID: number): Promise<number[]> {
+  const response = await request.get(`${baseUrl()}/api/planning/v1/board?repo_id=${repoID}&project_id=${projectID}&group_by=${groupBy}`, {headers: apiHeaders()});
+  expect(response.ok(), `get board: ${await response.text()}`).toBe(true);
+  const board = await response.json() as {groups: Array<{columns: Array<{column_id: number, cards: Array<{issue_id: number}>}>}>};
+  return board.groups
+    .flatMap((g) => g.columns)
+    .filter((c) => c.column_id === columnID)
+    .flatMap((c) => c.cards)
+    .map((c) => c.issue_id);
 }
 
 test('planning roadmap reads a parent as a bracket and its children as bars', async ({page}) => {
@@ -156,6 +215,128 @@ test('planning roadmap offers a reader no handle and no drop target', async ({pa
     await expect(chart.locator('tr[data-group]')).toHaveCount(0);
     await expect(page.locator('#planning-token-box')).toBeHidden();
     await expect(page.locator('#planning-error')).toBeHidden();
+  } finally {
+    await apiDeleteUser(page.request, reader);
+  }
+});
+
+test('planning board drags a card between columns', async ({page}) => {
+  const repoName = `e2e-planning-board-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+  const repo = `${owner}/${repoName}`;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Board e2e');
+  const columnOne = await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Todo');
+  const columnTwo = await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Doing');
+
+  const cardOne = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'card one', projects: [projectID]});
+  const cardTwo = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'card two', projects: [projectID]});
+  const cardOneID = await apiIssueGlobalID(page.request, owner, repoName, cardOne.index);
+  const cardTwoID = await apiIssueGlobalID(page.request, owner, repoName, cardTwo.index);
+  await apiMoveCardToColumn(page.request, cardOneID, repo, projectID, columnOne);
+  await apiMoveCardToColumn(page.request, cardTwoID, repo, projectID, columnOne);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=board`);
+  await expect(page.getByText('Todo')).toBeVisible();
+  await expect(page.getByText('Doing')).toBeVisible();
+
+  const sourceCard = page.locator('.board-card').filter({hasText: 'card one'});
+  const targetCell = page.locator(`[data-column-id="${columnTwo}"]`);
+  const from = (await sourceCard.boundingBox())!;
+  const to = (await targetCell.boundingBox())!;
+  const startX = from.x + from.width / 2;
+  const startY = from.y + from.height / 2;
+  const endX = to.x + to.width / 2;
+  const endY = to.y + to.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  // sortablejs's own delay elapses and it marks the item chosen before any drag is recognised.
+  await expect(sourceCard).toHaveClass(/tw-cursor-grabbing/);
+  for (let step = 1; step <= 20; step++) {
+    await page.mouse.move(startX + ((endX - startX) * step) / 20, startY + ((endY - startY) * step) / 20);
+  }
+  await page.mouse.up();
+
+  await expect.poll(() => apiBoardCardColumn(page.request, repoID, projectID, cardOneID)).toBe(columnTwo);
+});
+
+test('planning board drags an unassigned card into an assignee swimlane within one column', async ({page}) => {
+  const repoName = `e2e-planning-board-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+  const repo = `${owner}/${repoName}`;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Board assignee e2e');
+  const columnOne = await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Todo');
+
+  const assigned = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'assigned card', projects: [projectID]});
+  const unassigned = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'unassigned card', projects: [projectID]});
+  const assignedID = await apiIssueGlobalID(page.request, owner, repoName, assigned.index);
+  const unassignedID = await apiIssueGlobalID(page.request, owner, repoName, unassigned.index);
+  await apiAssignIssue(page.request, owner, repoName, assigned.index, owner);
+  await apiMoveCardToColumn(page.request, assignedID, repo, projectID, columnOne);
+  await apiMoveCardToColumn(page.request, unassignedID, repo, projectID, columnOne);
+
+  const before = await apiBoardColumnOrder(page.request, repoID, projectID, 'assignee', columnOne);
+
+  await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=board&group_by=assignee`);
+  await expect(page.getByText('unassigned card')).toBeVisible();
+  await expect(page.getByText('assigned card', {exact: true})).toBeVisible();
+
+  const sourceCard = page.locator('.board-card').filter({hasText: 'unassigned card'});
+  // Both swimlanes carry the same column, stacked one above the other, so the drop target is
+  // the same column at a different row rather than a different column.
+  const targetCell = page.locator(`[data-column-id="${columnOne}"][data-group-key="${owner}"]`);
+  const from = (await sourceCard.boundingBox())!;
+  const to = (await targetCell.boundingBox())!;
+  const startX = from.x + from.width / 2;
+  const startY = from.y + from.height / 2;
+  const endX = to.x + to.width / 2;
+  const endY = to.y + to.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await expect(sourceCard).toHaveClass(/tw-cursor-grabbing/);
+  for (let step = 1; step <= 20; step++) {
+    await page.mouse.move(startX + ((endX - startX) * step) / 20, startY + ((endY - startY) * step) / 20);
+  }
+  await page.mouse.up();
+
+  await expect.poll(() => apiBoardCardColumn(page.request, repoID, projectID, unassignedID)).toBe(columnOne);
+  await expect.poll(() => apiBoardColumnOrder(page.request, repoID, projectID, 'assignee', columnOne)).not.toEqual(before);
+  const after = await apiBoardColumnOrder(page.request, repoID, projectID, 'assignee', columnOne);
+  expect(after, 'neither card is dropped from the column by the cross-group merge').toHaveLength(2);
+  expect(after).toEqual(expect.arrayContaining([assignedID, unassignedID]));
+  await expect(page.locator('.ui.negative.message')).toHaveCount(0);
+});
+
+test('planning board offers a reader no drag handle', async ({page}) => {
+  const repoName = `e2e-planning-board-${randomString(8)}`;
+  const reader = `e2ereader${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  // Every setup call authenticates with the instance token, so the browser session stays
+  // free for the reader.
+  await apiCreateRepo(page.request, {name: repoName});
+  await apiMakeRepoPublic(page.request, owner, repoName);
+  const projectID = await apiCreateProject(page.request, owner, repoName, 'Board reader e2e');
+  const columnOne = await apiCreateProjectColumn(page.request, owner, repoName, projectID, 'Todo');
+  const card = await apiCreateIssue(page.request, {owner, repo: repoName, title: 'reader card', projects: [projectID]});
+  const cardID = await apiIssueGlobalID(page.request, owner, repoName, card.index);
+  await apiMoveCardToColumn(page.request, cardID, `${owner}/${repoName}`, projectID, columnOne);
+  await apiCreateUser(page.request, reader);
+
+  try {
+    await loginUser(page, reader);
+    await page.goto(`/planning/projects/${owner}/${repoName}/${projectID}?view=board`);
+    await expect(page.getByText('reader card')).toBeVisible();
+    await expect(page.locator('[data-drag]')).toHaveCount(0);
   } finally {
     await apiDeleteUser(page.request, reader);
   }

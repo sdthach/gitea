@@ -22,6 +22,10 @@ export const paths = {
   issueType: '/issues/{issue_id}/type',
   issueFields: '/issues/{issue_id}/fields',
   issueEstimate: '/issues/{issue_id}/estimate',
+  boardCards: '/board/cards',
+  boardCardColumn: '/board/cards/{issue_id}/column',
+  boardCardGroup: '/board/cards/{issue_id}/group',
+  boardColumnOrder: '/board/columns/{column_id}/order',
 };
 
 function withParam(template: string, name: string, value: number): string {
@@ -55,7 +59,7 @@ type CallOptions = {
 
 export async function call<T>(config: PlanningApiConfig, path: string, {method = 'GET', body}: CallOptions = {}): Promise<T> {
   const headers: Record<string, string> = {accept: 'application/json'};
-  if (method !== 'GET' && config.token) headers.authorization = `token ${config.token}`;
+  if (config.token && method !== 'GET') headers.authorization = `token ${config.token}`;
 
   const resp = await request(`${config.apiBase}${path}`, {
     method,
@@ -137,4 +141,20 @@ export function setIssueFields(config: PlanningApiConfig, issueId: number, body:
 
 export function setIssueEstimate(config: PlanningApiConfig, issueId: number, body: {repo: string; time_estimate: string}): Promise<IssueFacets> {
   return call<IssueFacets>(config, withParam(paths.issueEstimate, 'issue_id', issueId), {method: 'PUT', body});
+}
+
+export function moveIssueColumn(config: PlanningApiConfig, issueId: number, body: {repo: string; project_id: number; column_id: number; sorting?: number}): Promise<Board> {
+  return call<Board>(config, withParam(paths.boardCardColumn, 'issue_id', issueId), {method: 'POST', body});
+}
+
+export function moveIssueGroup(config: PlanningApiConfig, issueId: number, body: {repo: string; project_id: number; group_by: string; group?: string}): Promise<Board> {
+  return call<Board>(config, withParam(paths.boardCardGroup, 'issue_id', issueId), {method: 'POST', body});
+}
+
+export function orderColumn(config: PlanningApiConfig, columnId: number, body: {repo: string; project_id: number; issue_ids: number[]; group_by?: string}): Promise<Board> {
+  return call<Board>(config, withParam(paths.boardColumnOrder, 'column_id', columnId), {method: 'POST', body});
+}
+
+export function addCard(config: PlanningApiConfig, body: {repo: string; project_id: number; column_id: number; title: string; group_by?: string; group?: string; type_id?: number}): Promise<Board> {
+  return call<Board>(config, paths.boardCards, {method: 'POST', body});
 }

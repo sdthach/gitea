@@ -65,6 +65,17 @@ func TestPlanningProjectPage(t *testing.T) {
 // nothing but the browser session, so a GET must not be turned away for lacking a token.
 // The same session posting a write still gets refused: only a minted token, not the
 // session alone, carries write scope.
+//
+// This alone does not catch a regression to two independent session managers: tests/sqlite.ini
+// sets [session] PROVIDER = file, and every request in this package shares that one on-disk
+// store regardless of which router's common.MustInitSessioner() built it, so the read here
+// passes whether or not the manager is actually shared. A memory-provider variant would catch
+// that, but common.MustInitSessioner is a sync.OnceValue: the whole integration binary runs one
+// server, earlier tests have already forced it to build its manager from this file's config
+// before this test runs, and tests.PrepareTestEnv does not restart the router, so flipping
+// setting.SessionConfig.Provider here would change a global the already-built manager never
+// reads again. TestMustInitSessionerSharesOneManager in routers/common is the guard for this
+// defect instead.
 func TestPlanningAPIAcceptsTheBrowserSessionForReads(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 

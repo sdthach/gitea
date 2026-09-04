@@ -169,9 +169,10 @@ type Bar struct {
 	StartUnix   int64  `json:"start_unix"`
 	EndUnix     int64  `json:"end_unix"`
 	// Labels and Assignees carry group assignment onto the chart, so a vertical drag and a
-	// board group move write the same field.
-	Labels    []string `json:"labels,omitempty"`
-	Assignees []string `json:"assignees,omitempty"`
+	// board group move write the same field. Never nil: ResolveBar always gives a bar with
+	// no labels or assignees an empty slice, so the field is always an array, never null.
+	Labels    []string `json:"labels"`
+	Assignees []string `json:"assignees"`
 	// StartSource and EndSource are on every bar: declaring where an endpoint came from is
 	// the point of the view rather than a detail of it.
 	StartSource StartSource `json:"start_source"`
@@ -209,8 +210,8 @@ type Unmanaged struct {
 	// Labels, Assignees, Type, TypeID, MilestoneID and IsClosed are the same fields a bar
 	// would have carried, published even without a bar so a client can still filter and
 	// group the issues it lists here.
-	Labels      []string `json:"labels,omitempty"`
-	Assignees   []string `json:"assignees,omitempty"`
+	Labels      []string `json:"labels"`
+	Assignees   []string `json:"assignees"`
 	Type        string   `json:"type,omitempty"`
 	TypeID      int64    `json:"type_id,omitempty"`
 	MilestoneID int64    `json:"milestone_id,omitempty"`
@@ -221,6 +222,15 @@ type Unmanaged struct {
 	// TimeEstimate and TrackedSeconds are the same fields a bar would have carried.
 	TimeEstimate   int64 `json:"time_estimate"`
 	TrackedSeconds int64 `json:"tracked_seconds"`
+}
+
+// nonNilStrings gives a nil slice an empty one in its place, so a bar or unmanaged row with
+// none of a field always publishes an array, never a JSON null.
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // Managed reports whether an issue is managed enough to draw a bar for it: it carries an
@@ -242,7 +252,7 @@ func ResolveBar(in BarInput) (Bar, bool) {
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Milestone: in.Milestone, MilestoneID: in.MilestoneID,
 		Type: in.TypeName, TypeID: in.TypeID, TypeColor: in.TypeColor, TypeIcon: in.TypeIcon,
-		Labels: in.Labels, Assignees: in.Assignees,
+		Labels: nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees),
 		IsClosed:      in.IsClosed,
 		ParentIssueID: in.ParentIssueID, RootIssueID: in.RootIssueID,
 		Depth: in.Depth, HasChildren: in.HasChildren,
@@ -287,7 +297,7 @@ func UnmanagedFor(in BarInput) Unmanaged {
 		IssueID: in.IssueID, Number: in.Number, Title: in.Title, URL: in.URL,
 		Reason:          "this issue has no type, no parent and no start date, so there is no bar to draw",
 		SuggestedAction: "Set a type, a parent or a start date first. A bar drawn from creation alone would present a guess as a schedule.",
-		Labels:          in.Labels, Assignees: in.Assignees,
+		Labels:          nonNilStrings(in.Labels), Assignees: nonNilStrings(in.Assignees),
 		Type: in.TypeName, TypeID: in.TypeID, MilestoneID: in.MilestoneID, IsClosed: in.IsClosed,
 		Fields: in.Fields, Points: PointsOf(in.Fields),
 		TimeEstimate: in.TimeEstimate, TrackedSeconds: in.TrackedSeconds,

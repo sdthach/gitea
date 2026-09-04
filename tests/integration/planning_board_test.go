@@ -44,12 +44,14 @@ type boardPayload struct {
 			ColumnID int64 `json:"column_id"`
 			Title    string
 			Cards    []struct {
-				IssueID        int64 `json:"issue_id"`
-				Number         int64 `json:"number"`
-				ColumnID       int64 `json:"column_id"`
-				MilestoneID    int64 `json:"milestone_id"`
-				TimeEstimate   int64 `json:"time_estimate"`
-				TrackedSeconds int64 `json:"tracked_seconds"`
+				IssueID        int64    `json:"issue_id"`
+				Number         int64    `json:"number"`
+				ColumnID       int64    `json:"column_id"`
+				MilestoneID    int64    `json:"milestone_id"`
+				TimeEstimate   int64    `json:"time_estimate"`
+				TrackedSeconds int64    `json:"tracked_seconds"`
+				Labels         []string `json:"labels"`
+				Assignees      []string `json:"assignees"`
 			} `json:"cards"`
 		} `json:"columns"`
 	} `json:"groups"`
@@ -175,6 +177,14 @@ func TestAPIPlanningBoardRendersGroupsOverGiteasColumns(t *testing.T) {
 					assert.Equal(t, int64(1), card.MilestoneID, "issue2's fixture milestone carries onto its card")
 					assert.EqualValues(t, 3600, card.TimeEstimate, "the estimate carries onto the card with no per-row facets call")
 					assert.EqualValues(t, 3682, card.TrackedSeconds, "tracked_time.yml's own three non-deleted rows on issue2, summed over both users")
+				}
+				if card.IssueID == 3 {
+					// issue3 carries neither a label nor an assignee in the fixtures. A nil
+					// slice and an empty one decode identically except for this: encoding/json
+					// leaves a Go slice nil for a JSON null and non-nil for [], so NotNil here
+					// is exactly the check that the wire value was [], not null.
+					assert.NotNil(t, card.Labels, "a card with no labels publishes an empty array, never null")
+					assert.NotNil(t, card.Assignees, "a card with no assignees publishes an empty array, never null")
 				}
 			}
 		}

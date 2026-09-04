@@ -130,8 +130,8 @@ export type Bar = {
   milestone_id?: number;
   start_unix: number;
   end_unix: number;
-  labels?: string[];
-  assignees?: string[];
+  labels: string[];
+  assignees: string[];
   start_source: StartSource;
   end_source: EndSource;
   end_inferred: boolean;
@@ -153,8 +153,8 @@ export type Unmanaged = {
   url: string;
   reason: string;
   suggested_action: string;
-  labels?: string[];
-  assignees?: string[];
+  labels: string[];
+  assignees: string[];
   type?: string;
   type_id?: number;
   milestone_id?: number;

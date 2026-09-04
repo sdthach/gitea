@@ -41,6 +41,12 @@ export function createPlanningStore(config: PlanningProjectConfig) {
     state.overrides[issueId] = {...state.overrides[issueId], ...partial};
   }
 
+  // setBoard replaces the board outright with a write's own response, so a board write settles
+  // on the server's authoritative result the same way loadBoard's own fetch does.
+  function setBoard(board: Board): void {
+    state.board = board;
+  }
+
   async function loadBoard(): Promise<void> {
     state.loadingBoard = true;
     try {
@@ -167,7 +173,7 @@ export function createPlanningStore(config: PlanningProjectConfig) {
   }
 
   return {
-    state, loadAll, loadViews, saveView, removeView, applyOptimistic, setOverride,
+    state, loadAll, loadViews, saveView, removeView, applyOptimistic, setOverride, setBoard,
     refresh, startAutoRefresh, stopAutoRefresh,
   };
 }

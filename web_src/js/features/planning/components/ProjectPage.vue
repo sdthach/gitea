@@ -9,6 +9,7 @@ import ProjectPicker from './ProjectPicker.vue';
 import FilterBar from './FilterBar.vue';
 import SavedViews from './SavedViews.vue';
 import TableView from './TableView.vue';
+import BoardView from './BoardView.vue';
 
 const props = defineProps<{config: PlanningProjectConfig}>();
 
@@ -27,6 +28,7 @@ const errorBanner = computed(() => store.state.writeError ?? store.state.boardEr
 // failed to mint carries no write scope, so every editor is disabled rather than failing on
 // first use.
 const canWrite = computed(() => props.config.canWrite && !!props.config.token);
+const canEditIssues = computed(() => props.config.canEditIssues && !!props.config.token);
 
 function applySavedQuery(query: string) {
   Object.assign(urlState, parseUrlState(`?${query}`));
@@ -84,7 +86,10 @@ onUnmounted(() => store.stopAutoRefresh());
         v-if="urlState.view === 'table'" :store="store" :group-by="groupBy" :query="urlState.q"
         :collapsed="urlState.collapsed" @toggle-collapse="onToggleCollapse"
       />
-      <p v-else-if="urlState.view === 'board'">Board view is coming.</p>
+      <BoardView
+        v-else-if="urlState.view === 'board'" :store="store" :group-by="groupBy" :query="urlState.q"
+        :can-edit-issues="canEditIssues"
+      />
       <p v-else-if="urlState.view === 'roadmap'">Roadmap view is coming.</p>
       <p v-else>Time view is coming.</p>
     </template>

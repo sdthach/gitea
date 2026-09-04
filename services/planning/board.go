@@ -292,6 +292,14 @@ func BuildGroups(columns []BoardColumn, cards []Card, grouping Grouping) []Group
 			lc := GroupColumn{ColumnID: col.ID, Title: col.Title, Cards: []Card{}}
 			for _, card := range byGroup[key] {
 				if card.ColumnID == col.ID {
+					// A card with no labels or assignees still owns the field: the client
+					// reads an array either way, never a null it has to guard against.
+					if card.Labels == nil {
+						card.Labels = []string{}
+					}
+					if card.Assignees == nil {
+						card.Assignees = []string{}
+					}
 					lc.Cards = append(lc.Cards, card)
 				}
 			}
