@@ -7,8 +7,7 @@ function dateValue(unix: number): string {
   return unix ? new Date(unix * 1000).toISOString().slice(0, 10) : '';
 }
 
-// heading matches templates/repo/issue/sidebar/due_date.tmpl's own divider-plus-label shape,
-// so the fragment reads as one more row of Gitea's own sidebar rather than a foreign block.
+// heading matches templates/repo/issue/sidebar/due_date.tmpl's own divider-plus-label shape.
 function heading(text: string): HTMLElement[] {
   const divider = document.createElement('div');
   divider.className = 'divider';
@@ -22,9 +21,7 @@ function saveButton(label: string): HTMLElement {
   return createElementFromAttrs('button', {class: 'ui icon button tw-mt-1', type: 'submit'}, label);
 }
 
-// issueHref rewrites the current issue page's own URL onto a different number in the same
-// repository — every link this sidebar draws (a parent, a sub-issue) stays in this repository,
-// same as the facets endpoint itself only ever names a same-repository edge.
+// issueHref rewrites the issue page's own URL onto a different issue number in this repository.
 function issueHref(number: number): string {
   return window.location.pathname.replace(/\/issues\/\d+$/, `/issues/${number}`);
 }
@@ -43,12 +40,10 @@ function startSection(facets: IssueFacets, canWrite: boolean, postBase: string):
   return nodes;
 }
 
-// typeSection's read-only badge fetches the single-issue batch endpoint for icon_svg, the same
-// endpoint type-icons.ts calls for a whole list, rather than keeping a second client-side icon
-// registry that would drift from whatever octicon-* names types.tsv currently uses.
+// typeSection's badge fetches the same single-issue batch endpoint type-icons.ts uses for a list.
 async function typeSection(facets: IssueFacets, canWrite: boolean, postBase: string, config: PlanningApiConfig): Promise<HTMLElement[]> {
   const value = document.createElement('div');
-  value.className = 'flex-text-inline';
+  value.className = 'flex-text-block';
   if (facets.type) {
     try {
       const [row] = await getIssueTypeAssignments(config, facets.repo_id, [facets.issue_id]);
@@ -83,7 +78,7 @@ async function typeSection(facets: IssueFacets, canWrite: boolean, postBase: str
 
 function parentSection(facets: IssueFacets, canWrite: boolean, postBase: string): HTMLElement[] {
   const value = document.createElement('div');
-  value.className = 'flex-text-inline';
+  value.className = 'flex-text-block';
   if (facets.parent) {
     const link = document.createElement('a');
     link.href = issueHref(facets.parent.number);
@@ -162,8 +157,7 @@ function estimateSection(facets: IssueFacets, canWrite: boolean, postBase: strin
   return nodes;
 }
 
-// fieldString reads a field's own value: always a string, number or boolean by its kind's
-// contract, never an object whose default stringification would print "[object Object]".
+// fieldString reads a field's value: a string, number or boolean by its kind's own contract.
 function fieldString(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -195,8 +189,7 @@ function fieldRow(field: Field, value: unknown, canWrite: boolean): HTMLElement 
   return createElementFromAttrs('div', {class: 'field'}, label, canWrite ? fieldInput(field, value) : fieldValue(value));
 }
 
-// fieldsSection posts every field in one form to /fields, matching FieldsIssue's own contract:
-// every field_<key> member it finds is applied as one partial update.
+// fieldsSection posts every field_<key> in one form to /fields as one partial update.
 function fieldsSection(facets: IssueFacets, canWrite: boolean, postBase: string): HTMLElement[] {
   if (!facets.fields.length) return [];
   const rows = facets.fields.map((field) => fieldRow(field, facets.values[field.key], canWrite));

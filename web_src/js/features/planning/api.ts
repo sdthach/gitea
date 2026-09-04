@@ -1,6 +1,6 @@
 import {request} from '../../modules/fetch.ts';
 import type {
-  Board, IssueFacets, IssueTypeAssignment, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity, Timesheet,
+  Board, CapacityRow, Field, IssueFacets, IssueType, IssueTypeAssignment, MilestoneSchedule, ProjectsPage, ProjectViewList, Roadmap, RoadmapCapacity, Timesheet,
 } from './types.ts';
 
 export type PlanningApiConfig = {
@@ -39,6 +39,12 @@ export const paths = {
   issueEstimate: '/issues/{issue_id}/estimate',
   issueGroup: '/issues/{issue_id}/group',
   issueParent: '/issues/{issue_id}/parent',
+  issueTypes: '/issue-types',
+  issueTypeById: '/issue-types/{id}',
+  fields: '/fields',
+  field: '/fields/{id}',
+  capacity: '/capacity',
+  capacityUser: '/capacity/{user_id}',
   boardCards: '/board/cards',
   boardCardColumn: '/board/cards/{issue_id}/column',
   boardCardGroup: '/board/cards/{issue_id}/group',
@@ -59,6 +65,7 @@ export const v1Paths = {
   issueTime: '/repos/{owner}/{repo}/issues/{index}/times/{id}',
   stopwatchStart: '/repos/{owner}/{repo}/issues/{index}/stopwatch/start',
   stopwatchStop: '/repos/{owner}/{repo}/issues/{index}/stopwatch/stop',
+  userByLogin: '/users/{login}',
 };
 
 function withParam(template: string, name: string, value: number): string {
@@ -208,6 +215,64 @@ export function getRoadmapCapacity(config: PlanningApiConfig, opts: {repoId: num
   return call<RoadmapCapacity>(config, `${paths.roadmapCapacity}?${qs}`);
 }
 
+// PlanningScope is the settings page's own scope: a repository, an organization, or, both
+// undefined, the instance.
+export type PlanningScope = {repoId?: number; orgId?: number};
+
+function scopeQuery(scope: PlanningScope): string {
+  return query({repo_id: scope.repoId, org_id: scope.orgId});
+}
+
+export function getIssueTypes(config: PlanningApiConfig, scope: PlanningScope): Promise<IssueType[]> {
+  return call<IssueType[]>(config, `${paths.issueTypes}?${scopeQuery(scope)}`);
+}
+
+export type IssueTypeInput = {repo_id?: number; org_id?: number; name: string; color: string; icon: string; rank: number};
+
+export function createIssueType(config: PlanningApiConfig, body: IssueTypeInput): Promise<IssueType> {
+  return call<IssueType>(config, paths.issueTypes, {method: 'POST', body});
+}
+
+export function updateIssueType(config: PlanningApiConfig, id: number, body: IssueTypeInput): Promise<IssueType> {
+  return call<IssueType>(config, withParam(paths.issueTypeById, 'id', id), {method: 'PUT', body});
+}
+
+export function deleteIssueType(config: PlanningApiConfig, id: number, force = false): Promise<IssueType> {
+  return call<IssueType>(config, withParam(paths.issueTypeById, 'id', id), {method: 'DELETE', body: {force}});
+}
+
+export function getFields(config: PlanningApiConfig, scope: PlanningScope): Promise<Field[]> {
+  return call<Field[]>(config, `${paths.fields}?${scopeQuery(scope)}`);
+}
+
+export type FieldInput = {repo_id?: number; org_id?: number; key: string; label: string; kind: string; options?: string[]; required: boolean};
+
+export function createField(config: PlanningApiConfig, body: FieldInput): Promise<Field> {
+  return call<Field>(config, paths.fields, {method: 'POST', body});
+}
+
+export function updateField(config: PlanningApiConfig, id: number, body: FieldInput): Promise<Field> {
+  return call<Field>(config, withParam(paths.field, 'id', id), {method: 'PUT', body});
+}
+
+export function deleteField(config: PlanningApiConfig, id: number): Promise<{deleted_values: number}> {
+  return call(config, withParam(paths.field, 'id', id), {method: 'DELETE'});
+}
+
+export function getCapacity(config: PlanningApiConfig, scope: PlanningScope): Promise<CapacityRow[]> {
+  return call<CapacityRow[]>(config, `${paths.capacity}?${scopeQuery(scope)}`);
+}
+
+export type CapacityInput = {repo_id?: number; org_id?: number; hours_per_day: number; utilization: number; workdays: number};
+
+export function setCapacityUser(config: PlanningApiConfig, userId: number, body: CapacityInput): Promise<CapacityRow> {
+  return call<CapacityRow>(config, withParam(paths.capacityUser, 'user_id', userId), {method: 'PUT', body});
+}
+
+export function clearCapacityUser(config: PlanningApiConfig, userId: number, scope: PlanningScope): Promise<CapacityRow> {
+  return call<CapacityRow>(config, withParam(paths.capacityUser, 'user_id', userId), {method: 'DELETE', body: {repo_id: scope.repoId, org_id: scope.orgId}});
+}
+
 // setIssueGroup is the roadmap's own vertical drag: it edits the grouping field directly through
 // /issues/{issue_id}/group, distinct from the board's own card group move.
 export function setIssueGroup(config: PlanningApiConfig, issueId: number, body: {repo: string; group_by: string; group?: string}): Promise<Roadmap> {
@@ -276,4 +341,11 @@ export function startStopwatch(config: PlanningApiConfig, owner: string, repo: s
 
 export function stopStopwatch(config: PlanningApiConfig, owner: string, repo: string, index: number): Promise<unknown> {
   return v1Call(config, v1Path(v1Paths.stopwatchStop, owner, repo, index), {method: 'POST'});
+}
+
+// getUserIDByLogin resolves a login to the id PUT /capacity/{user_id} takes, so the capacity
+// tab's own create form can name a user by login the way every other field on the page does.
+export async function getUserIDByLogin(config: PlanningApiConfig, login: string): Promise<number> {
+  const user = await v1Call<{id: number}>(config, v1Paths.userByLogin.replace('{login}', encodeURIComponent(login)));
+  return user.id;
 }

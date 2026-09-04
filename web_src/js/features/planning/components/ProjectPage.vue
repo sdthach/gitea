@@ -31,6 +31,7 @@ const errorBanner = computed(() => store.state.writeError ?? store.state.boardEr
 // first use.
 const canWrite = computed(() => props.config.canWrite && !!props.config.token);
 const canEditIssues = computed(() => props.config.canEditIssues && !!props.config.token);
+const settingsHref = computed(() => `${window.config.appSubUrl}/planning/settings/${props.config.repoFullName}`);
 
 function applySavedQuery(query: string) {
   Object.assign(urlState, parseUrlState(`?${query}`));
@@ -57,11 +58,14 @@ onUnmounted(() => store.stopAutoRefresh());
     <template v-else>
       <div class="tw-flex tw-items-center tw-justify-between tw-flex-wrap tw-gap-2">
         <h2 class="ui header">{{ config.repoFullName }}</h2>
-        <div class="ui secondary pointing menu">
-          <a
-            v-for="tab in tabs" :key="tab" class="item" :class="{active: urlState.view === tab}"
-            @click="urlState.view = tab"
-          >{{ tab }}</a>
+        <div class="tw-flex tw-items-center tw-gap-2">
+          <div class="ui secondary pointing menu">
+            <a
+              v-for="tab in tabs" :key="tab" class="item" :class="{active: urlState.view === tab}"
+              @click="urlState.view = tab"
+            >{{ tab }}</a>
+          </div>
+          <a :href="settingsHref">Settings</a>
         </div>
       </div>
 

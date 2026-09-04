@@ -33,6 +33,8 @@ type RouteRegistrar interface {
 func RegisterRoutes(m RouteRegistrar, reqSignIn any) {
 	m.Get("/planning/projects", reqSignIn, hub_web.PlanningPagesEnabled, Projects)
 	m.Get("/planning/projects/{owner}/{repo}/{project_id}", reqSignIn, hub_web.PlanningPagesEnabled, Project)
+	m.Get("/planning/settings/{owner}", reqSignIn, hub_web.PlanningPagesEnabled, Settings)
+	m.Get("/planning/settings/{owner}/{repo}", reqSignIn, hub_web.PlanningPagesEnabled, RepoSettings)
 	m.Get("/planning/board", reqSignIn, hub_web.PlanningPagesEnabled, Board)
 	m.Get("/planning/roadmap", reqSignIn, hub_web.PlanningPagesEnabled, Roadmap)
 	m.Post("/planning/issues/{id}/schedule", reqSignIn, hub_web.PlanningPagesEnabled, ScheduleIssue)

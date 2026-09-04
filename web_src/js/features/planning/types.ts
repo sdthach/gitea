@@ -11,6 +11,16 @@ export type PlanningProjectConfig = {
   canEditIssues: boolean;
 };
 
+export type PlanningSettingsConfig = {
+  apiBase: string;
+  token: string;
+  repoId: number;
+  orgId: number;
+  ownerName: string;
+  repoFullName: string;
+  canWrite: boolean;
+};
+
 export type IssueType = {
   id: number;
   name: string;
@@ -313,6 +323,17 @@ export type RoadmapBarModel = {
   typeColor?: string;
   typeIcon?: string;
   rowKey: string;
+};
+
+export type CapacityRow = {
+  user_id: number;
+  login: string;
+  display_name: string;
+  avatar_url: string;
+  hours_per_day: number;
+  utilization: number;
+  workdays: number;
+  source: string;
 };
 
 export type MilestoneSchedule = {

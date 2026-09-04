@@ -1,14 +1,11 @@
 import {getIssueTypeAssignments, sessionConfig} from './api.ts';
 
-// maxIssueTypeIDs matches GET /issue-type-assignments' own cap; a page with more issues than
-// this on screen already paginates, so no single call here ever needs more.
+// maxIssueTypeIDs matches GET /issue-type-assignments' own cap.
 export const maxIssueTypeIDs = 200;
 
 export type IconTarget = {issueId: number; repoId: number};
 
-// batchByRepo groups every icon mount on the page by repository, then splits each repository's
-// ids into requests of at most maxIssueTypeIDs — a page listing issues across many repositories
-// (a dashboard) still resolves each repository's icons in one call apiece.
+// batchByRepo groups every icon mount by repository, then chunks each repository's own ids.
 export function batchByRepo(targets: IconTarget[]): Map<number, number[][]> {
   const byRepo = new Map<number, number[]>();
   for (const {issueId, repoId} of targets) {
@@ -24,8 +21,7 @@ export function batchByRepo(targets: IconTarget[]): Map<number, number[][]> {
   return chunked;
 }
 
-// started guards the whole page: every span's own data-global-init call would otherwise repeat
-// the same batch, since callGlobalInitFunc only dedupes a single element, not the group.
+// started guards the whole page: callGlobalInitFunc dedupes one element, not the group.
 let started = false;
 
 export async function initPlanningTypeIcon(_el: HTMLElement) {

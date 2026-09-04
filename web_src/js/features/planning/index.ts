@@ -6,6 +6,11 @@ registerGlobalInitFunc('initPlanningProject', async (el: HTMLElement) => {
   await initPlanningProject(el);
 });
 
+registerGlobalInitFunc('initPlanningSettings', async (el: HTMLElement) => {
+  const {initPlanningSettings} = await import('./settings.ts');
+  await initPlanningSettings(el);
+});
+
 registerGlobalInitFunc('initPlanningIssueSidebar', async (el: HTMLElement) => {
   const {initPlanningIssueSidebar} = await import('./issue-sidebar.ts');
   await initPlanningIssueSidebar(el);

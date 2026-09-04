@@ -5,9 +5,7 @@ function dateValue(unix: number): string {
   return unix ? new Date(unix * 1000).toISOString().slice(0, 10) : '';
 }
 
-// milestoneIdFromPath reads the id EditMilestone's own route carries, ".../milestones/{id}/edit"
-// — the fragment gets no milestone id from Go data, since upstream's own EditMilestone keeps
-// only the title/deadline/content strings in its template data, not the row itself.
+// milestoneIdFromPath reads the id EditMilestone's own route carries, ".../milestones/{id}/edit".
 export function milestoneIdFromPath(pathname: string): number | null {
   const match = /\/milestones\/(\d+)\/edit(?:[/?#]|$)/.exec(pathname);
   return match ? Number(match[1]) : null;
@@ -19,8 +17,7 @@ export async function initPlanningMilestoneStart(el: HTMLElement) {
   const repoId = Number(el.getAttribute('data-repo-id'));
   const postBase = el.getAttribute('data-post-base')!;
 
-  // A roadmap that fails to load still leaves the field usable to set a start; only the
-  // prefill is lost, so the write below is never blocked on this read.
+  // A roadmap that fails to load still leaves the field usable; only the prefill is lost.
   let startUnix = 0;
   try {
     const roadmap = await getRoadmap(sessionConfig(), {repoId});

@@ -37,6 +37,15 @@ var planningPages = []forkPage{
 		fetch:  "/board",
 		client: "web_src/js/features/planning/api.ts",
 	},
+	{
+		dir:      "planning",
+		template: "settings.tmpl",
+		endpoints: []string{
+			"/issue-types", "/issue-types/{id}", "/fields", "/fields/{id}", "/capacity", "/capacity/{user_id}",
+		},
+		fetch:  "/issue-types",
+		client: "web_src/js/features/planning/api.ts",
+	},
 }
 
 var planningFragments = map[string]bool{
@@ -51,6 +60,8 @@ var planningGates = map[string]func(*context.Context){
 	"/planning/roadmap":  hub_web.PlanningPagesEnabled,
 	"/planning/projects": hub_web.PlanningPagesEnabled,
 	"/planning/projects/{owner}/{repo}/{project_id}": hub_web.PlanningPagesEnabled,
+	"/planning/settings/{owner}":                     hub_web.PlanningPagesEnabled,
+	"/planning/settings/{owner}/{repo}":              hub_web.PlanningPagesEnabled,
 	"/planning/issues/{id}/schedule":                 hub_web.PlanningPagesEnabled,
 	"/planning/issues/{id}/type":                     hub_web.PlanningPagesEnabled,
 	"/planning/issues/{id}/parent":                   hub_web.PlanningPagesEnabled,
@@ -61,6 +72,7 @@ var planningGates = map[string]func(*context.Context){
 
 var planningPatterns = []string{
 	"/planning/projects", "/planning/projects/{owner}/{repo}/{project_id}",
+	"/planning/settings/{owner}", "/planning/settings/{owner}/{repo}",
 	"/planning/board", "/planning/roadmap",
 	"/planning/issues/{id}/schedule", "/planning/issues/{id}/type", "/planning/issues/{id}/parent",
 	"/planning/issues/{id}/fields", "/planning/issues/{id}/estimate", "/planning/milestones/{id}/schedule",

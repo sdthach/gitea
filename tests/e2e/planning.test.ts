@@ -690,6 +690,32 @@ test('planning milestone form sets a start', async ({page}) => {
   }).toBe(Math.floor(Date.UTC(2030, 4, 1) / 1000));
 });
 
+test('planning settings creates a type and a field', async ({page}) => {
+  const repoName = `e2e-planning-settings-${randomString(8)}`;
+  const owner = env.GITEA_TEST_E2E_USER;
+
+  await login(page);
+  await apiCreateRepo(page.request, {name: repoName});
+  const repoID = await apiRepoID(page.request, owner, repoName);
+
+  await page.goto(`/planning/settings/${owner}/${repoName}`);
+  await page.getByLabel('Name').fill('gadget');
+  await page.getByLabel('Color').fill('#123456');
+  await page.getByLabel('Icon').fill('octicon-gear');
+  await page.getByRole('button', {name: 'Create type'}).click();
+  await expect(page.getByRole('cell', {name: 'gadget'})).toBeVisible();
+
+  await page.locator('.ui.secondary.pointing.menu').getByText('fields', {exact: true}).click();
+  await page.getByLabel('Key').fill('points');
+  await page.getByLabel('Label').fill('Points');
+  await page.getByRole('button', {name: 'Create field'}).click();
+  await expect(page.getByRole('cell', {name: 'points', exact: true})).toBeVisible();
+
+  const response = await page.request.get(`${baseUrl()}/api/planning/v1/issue-types?repo_id=${repoID}`, {headers: apiHeaders()});
+  const types = await response.json() as Array<{name: string}>;
+  expect(types.some((t) => t.name === 'gadget'), 'the created type is readable over the API').toBe(true);
+});
+
 test('planning pages screenshot', async ({page}) => {
   const shotsDir = env.PLANNING_SHOTS_DIR;
   test.skip(!shotsDir, 'PLANNING_SHOTS_DIR not set'); // eslint-disable-line playwright/no-skipped-test -- conditional skip, the reason is in the message
@@ -772,6 +798,10 @@ test('planning pages screenshot', async ({page}) => {
     await page.goto(url);
     await page.screenshot({path: `${shotsDir}/${file}`, fullPage: true});
   }
+
+  await page.goto(`/planning/settings/${owner}/${repoName}`);
+  await expect(page.getByRole('cell', {name: 'story'})).toBeVisible();
+  await page.screenshot({path: `${shotsDir}/settings-types.png`, fullPage: true});
 });
 
 // One browser is enough for a static screenshot; running it on both would just double the
